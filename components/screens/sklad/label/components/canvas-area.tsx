@@ -192,6 +192,10 @@ export interface CanvasAreaProps {
   guidesRef:       React.RefObject<HTMLCanvasElement | null>
   sizeDef:   LabelSizeDef
   rotation?: number
+  backgroundOffsetXmm?: number
+  backgroundOffsetYmm?: number
+  backgroundScaleX?: number
+  backgroundScaleY?: number
   zoom:      number
   pan:       { x: number; y: number }
   offsetX:   number
@@ -218,7 +222,8 @@ export const CanvasArea = memo(function CanvasArea({
   viewportRef, stageLayerRef,
   staticCanvasRef, fabricCanvasRef,
   rulerHRef, rulerVRef, guidesRef,
-  sizeDef, rotation = 0, zoom, pan, offsetX, offsetY,
+  sizeDef, rotation = 0, backgroundOffsetXmm = 0, backgroundOffsetYmm = 0,
+  backgroundScaleX = 1, backgroundScaleY = 1, zoom, pan, offsetX, offsetY,
   totalW, totalH, stageW, stageH,
   isPanMode, onPanStart, onBgClick,
   showCanvasControls = true,
@@ -291,10 +296,12 @@ export const CanvasArea = memo(function CanvasArea({
   // Центр этикетки проходит через ту же матрицу, что и Fabric и guides.
   // Якорим фон по печатной области (корпусу бирки), а не по центру всей
   // высоты SVG: у длинной бирки хвост выходит за пределы области печати.
-  const svgCenterOffsetX = svgLayout.svgW / 2 - (svgLayout.canvasX + sizeDef.w_px / 2)
-  const svgCenterOffsetY = svgLayout.svgH / 2 - (svgLayout.canvasY + sizeDef.h_px / 2)
-  const backgroundDX = offsetX + sizeDef.w_px / 2 + svgCenterOffsetX - stageW / 2
-  const backgroundDY = offsetY + sizeDef.h_px / 2 + svgCenterOffsetY - stageH / 2
+  const svgCenterOffsetX = (svgLayout.svgW / 2 - (svgLayout.canvasX + sizeDef.w_px / 2)) * backgroundScaleX
+  const svgCenterOffsetY = (svgLayout.svgH / 2 - (svgLayout.canvasY + sizeDef.h_px / 2)) * backgroundScaleY
+  const backgroundOffsetX = backgroundOffsetXmm * svgLayout.pxPerMm
+  const backgroundOffsetY = backgroundOffsetYmm * svgLayout.pxPerMm
+  const backgroundDX = offsetX + sizeDef.w_px / 2 + svgCenterOffsetX + backgroundOffsetX - stageW / 2
+  const backgroundDY = offsetY + sizeDef.h_px / 2 + svgCenterOffsetY + backgroundOffsetY - stageH / 2
   const backgroundCenterX = stageCX + (backgroundDX * cos - backgroundDY * sin) * zoom
   const backgroundCenterY = stageCY + (backgroundDX * sin + backgroundDY * cos) * zoom
 
@@ -327,7 +334,7 @@ export const CanvasArea = memo(function CanvasArea({
           zIndex: 1,
         }}
       >
-        <LabelBackground sizeDef={sizeDef} rotation={rotation} />
+        <LabelBackground sizeDef={sizeDef} rotation={rotation} scaleX={backgroundScaleX} scaleY={backgroundScaleY} />
       </div>
 
   {/* ── Слой 2 (z=2): Fabric canvas ── */}
