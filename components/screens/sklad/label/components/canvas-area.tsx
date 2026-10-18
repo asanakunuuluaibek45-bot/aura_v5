@@ -301,6 +301,7 @@ export const CanvasArea = memo(function CanvasArea({
   return (
     <div
       ref={viewportRef}
+      className="dark:bg-zinc-700"
       onPointerDown={handlePointerDown}
       onClick={handleClick}
       style={{
