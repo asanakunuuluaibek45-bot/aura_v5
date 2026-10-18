@@ -2,7 +2,7 @@
 import React, {
   useRef, useState, useMemo, useCallback, useEffect, useLayoutEffect,
 } from "react"
-import { Download, X, ChevronDown, Printer } from "lucide-react"
+import { Download, X, ChevronDown, Printer, SlidersHorizontal } from "lucide-react"
 import { canvasToLabelDataUrl, getLabelSizeDef, DEFAULT_SIZE_KEY, LABEL_SIZES, NIIMBOT_MODEL } from "@/lib/niimbot"
 import type { JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { LabelEditorProps } from "./types"
@@ -28,6 +28,28 @@ import { LabelEditorToolbar } from "./components/toolbar"
 
 const STAGE_PAD    = 32
 const SIZE_STORAGE = "sklad:label-size"
+const BACKGROUND_CALIBRATION_STORAGE = "sklad:label-background-calibration"
+
+type BackgroundCalibration = { offsetXmm: number; offsetYmm: number; widthPercent: number; heightPercent: number }
+const DEFAULT_BACKGROUND_CALIBRATION: BackgroundCalibration = { offsetXmm: 0, offsetYmm: 0, widthPercent: 100, heightPercent: 100 }
+
+function readBackgroundCalibration(storageKey: string): BackgroundCalibration {
+  try {
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return DEFAULT_BACKGROUND_CALIBRATION
+    const value = JSON.parse(raw) as Partial<BackgroundCalibration>
+    const bounded = (n: unknown, min: number, max: number, fallback: number) =>
+      typeof n === "number" && Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback
+    return {
+      offsetXmm: bounded(value.offsetXmm, -20, 20, 0),
+      offsetYmm: bounded(value.offsetYmm, -20, 20, 0),
+      widthPercent: bounded(value.widthPercent, 50, 150, 100),
+      heightPercent: bounded(value.heightPercent, 50, 150, 100),
+    }
+  } catch {
+    return DEFAULT_BACKGROUND_CALIBRATION
+  }
+}
 
 function getStoredSizeKey(fallback: JewelryLabelSizeKey, storageKey: string): JewelryLabelSizeKey {
   try {
@@ -49,6 +71,30 @@ export function LabelEditor({
   // rotation хранит накопленный поворот в градусах (0 | 90 | 180 | 270)
   const [rotation, setRotation] = useState(0)
   const category = product.category ?? "Прочее"
+  const backgroundCalibrationStorageKey = `${BACKGROUND_CALIBRATION_STORAGE}:${sizeKey}`
+  const [backgroundCalibration, setBackgroundCalibration] = useState<BackgroundCalibration>(DEFAULT_BACKGROUND_CALIBRATION)
+  const [backgroundCalibrationLoadedFor, setBackgroundCalibrationLoadedFor] = useState("")
+  const [backgroundCalibrationOpen, setBackgroundCalibrationOpen] = useState(false)
+
+  useEffect(() => {
+    setBackgroundCalibration(readBackgroundCalibration(backgroundCalibrationStorageKey))
+    setBackgroundCalibrationLoadedFor(backgroundCalibrationStorageKey)
+  }, [backgroundCalibrationStorageKey])
+
+  useEffect(() => {
+    if (backgroundCalibrationLoadedFor !== backgroundCalibrationStorageKey) return
+    try {
+      localStorage.setItem(backgroundCalibrationStorageKey, JSON.stringify(backgroundCalibration))
+    } catch { /* ignore */ }
+  }, [backgroundCalibration, backgroundCalibrationLoadedFor, backgroundCalibrationStorageKey])
+
+  const updateBackgroundCalibration = useCallback((key: keyof BackgroundCalibration, value: number) => {
+    if (!Number.isFinite(value)) return
+    const min = key === "offsetXmm" || key === "offsetYmm" ? -20 : 50
+    const max = key === "offsetXmm" || key === "offsetYmm" ? 20 : 150
+    const boundedValue = Math.max(min, Math.min(max, value))
+    setBackgroundCalibration((current) => ({ ...current, [key]: boundedValue }))
+  }, [])
 
   useEffect(() => {
     try { localStorage.setItem(sizeStorageKey, sizeKey) } catch { /* ignore */ }
@@ -589,6 +635,10 @@ export function LabelEditor({
           guidesRef={guidesRef}
           sizeDef={sizeDef}
           rotation={rotation}
+          backgroundOffsetXmm={backgroundCalibration.offsetXmm}
+          backgroundOffsetYmm={backgroundCalibration.offsetYmm}
+          backgroundScaleX={backgroundCalibration.widthPercent / 100}
+          backgroundScaleY={backgroundCalibration.heightPercent / 100}
           zoom={zoom}
           pan={pan}
           offsetX={offsetX}
@@ -610,6 +660,35 @@ export function LabelEditor({
           onRulerPointerMove={handleRulerPointerMove}
           onRulerPointerUp={handleRulerPointerUp}
         />
+        <div className="pointer-events-none absolute right-3 top-3 z-40">
+          <button
+            type="button"
+            onClick={() => setBackgroundCalibrationOpen((open) => !open)}
+            aria-expanded={backgroundCalibrationOpen}
+            className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background/95 px-2.5 text-xs font-medium text-foreground shadow-md backdrop-blur-md hover:bg-muted"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+            Фон
+          </button>
+          {backgroundCalibrationOpen && (
+            <div className="pointer-events-auto absolute right-0 top-full mt-2 w-72 rounded-lg border border-border bg-background/95 p-3 text-foreground shadow-xl backdrop-blur-md">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold">Калибровка фона</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Только предпросмотр; печатный макет не меняется.</p>
+                </div>
+                <button type="button" onClick={() => setBackgroundCalibration(DEFAULT_BACKGROUND_CALIBRATION)} className="shrink-0 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted">Сброс</button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="grid gap-1 text-[11px] text-muted-foreground">Смещение X, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetXmm} onChange={(e) => updateBackgroundCalibration("offsetXmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                <label className="grid gap-1 text-[11px] text-muted-foreground">Смещение Y, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetYmm} onChange={(e) => updateBackgroundCalibration("offsetYmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                <label className="grid gap-1 text-[11px] text-muted-foreground">Ширина, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.widthPercent} onChange={(e) => updateBackgroundCalibration("widthPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                <label className="grid gap-1 text-[11px] text-muted-foreground">Высота, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.heightPercent} onChange={(e) => updateBackgroundCalibration("heightPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+              </div>
+              <p className="mt-2 text-[10px] leading-snug text-muted-foreground">Плюс X — вправо, плюс Y — вниз. Значения сохраняются отдельно для формата {sizeDef.label}.</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── НИЖНЯЯ ПАНЕЛЬ ── */}

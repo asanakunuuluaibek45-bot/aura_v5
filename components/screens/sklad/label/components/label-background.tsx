@@ -85,12 +85,14 @@ function ShapeT30x25() {
 interface LabelBackgroundProps {
   sizeDef: LabelSizeDef
   rotation?: number
+  scaleX?: number
+  scaleY?: number
   className?: string
   style?: React.CSSProperties
 }
 
 export const LabelBackground = memo(function LabelBackground({
-  sizeDef, rotation = 0, className, style,
+  sizeDef, rotation = 0, scaleX = 1, scaleY = 1, className, style,
 }: LabelBackgroundProps) {
   const key = sizeDef.key
   const m = getMeta(key)
@@ -110,7 +112,7 @@ export const LabelBackground = memo(function LabelBackground({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        transform: `rotate(${rotation}deg)`,
+        transform: `rotate(${rotation}deg) scale(${scaleX}, ${scaleY})`,
         transformOrigin: "center center",
         willChange: "transform",
         ...style,
