@@ -64,14 +64,11 @@ function Button({
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       render={resolvedRender}
-<<<<<<< HEAD
       // When a custom render element is provided Base UI must not expect a
       // native <button>; passing nativeButton={false} suppresses the console
       // warning "A component that acts as a button expected a native <button>
       // because the nativeButton prop is true...".
       nativeButton={!resolvedRender}
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
       {...props}
     >
       {resolvedRender ? undefined : children}

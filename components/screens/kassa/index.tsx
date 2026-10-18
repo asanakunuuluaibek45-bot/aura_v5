@@ -1,6 +1,5 @@
 "use client"
 
-<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import dynamic from "next/dynamic"
 import type { MetalRate, Product, Profile, Role, Sale, SaleItem, Customer, SaleReturn } from "@/lib/types"
@@ -9,25 +8,15 @@ import { buildRateMap, scrapRateOf } from "@/lib/rates"
 import { round, toNumber } from "@/hooks/useCalculator"
 import { checkout } from "@/app/actions/sales"
 import type { SalesHistoryProps } from "@/components/sales-history"
-=======
-import { useEffect, useMemo, useRef, useState } from "react"
-import type { Product, Profile, Role, Sale, SaleItem } from "@/lib/types"
-import { formatSom } from "@/lib/format"
-import { checkout } from "@/app/actions/sales"
-import { SalesHistory } from "@/components/sales-history"
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 import { CashPanel } from "@/components/screens/kassa/cash-panel"
 import type { CashData } from "@/app/actions/cash"
 import { Button } from "@/components/ui/button"
 import { ArrowUp } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-<<<<<<< HEAD
 import { PageLoader } from "@/components/ui/page-loader"
 import { filterProducts, isSearchReady } from "@/lib/product-search"
 import { getClientOperationAttempt, type ClientOperationAttempt } from "@/lib/client-operation"
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 import { KassaSearch } from "./kassa-search"
 import { KassaCart } from "./kassa-cart"
@@ -43,7 +32,6 @@ const DEBOUNCE_MS = 350
 const MIN_QUERY = 3
 const LOCAL_STORAGE_KEY = "kassa_cart_state_v2"
 
-<<<<<<< HEAD
 const LazySalesHistory = dynamic(
   () => import("@/components/sales-history").then((mod) => mod.SalesHistory),
   {
@@ -94,30 +82,24 @@ function DeferredSalesHistory(props: SalesHistoryProps) {
   )
 }
 
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 export function KassaScreen({
   products,
   profile,
   viewRole,
   sales,
   cash,
-<<<<<<< HEAD
   rates = [],
   clients = [],
   returns = [],
   onLocalCheckout,
   onlineOnly = false,
   shopId,
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }: {
   products: Product[]
   profile: Profile
   viewRole: Role
   sales: Sale[]
   cash: CashData
-<<<<<<< HEAD
   rates?: MetalRate[]
   clients?: Customer[]
   returns?: SaleReturn[]
@@ -128,26 +110,18 @@ export function KassaScreen({
   const router = useRouter()
   const [, startTransition] = useTransition()
   const refreshAfterReturn = useCallback(() => startTransition(() => router.refresh()), [router, startTransition])
-=======
-}) {
-  const router = useRouter()
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   const [query, setQuery] = useState("")
   const [debounced, setDebounced] = useState("")
   
   const [cart, setCart] = useState<ExtendedSaleItem[]>([])
   const [bonusUsed, setBonusUsed] = useState("")
   const [payment, setPayment] = useState("cash")
-<<<<<<< HEAD
   const [payCash, setPayCash] = useState("")
   const [payElectronic, setPayElectronic] = useState("")
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
   
   const [submitting, setSubmitting] = useState(false)
-<<<<<<< HEAD
   const checkoutAttempt = useRef<ClientOperationAttempt | null>(null)
   const checkoutBusy = useRef(false)
   const [confirmLoss, setConfirmLoss] = useState(false)
@@ -157,24 +131,13 @@ export function KassaScreen({
 
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [isCartOpenMobile, setIsCartOpenMobile] = useState(false)
-=======
-  const [confirmLoss, setConfirmLoss] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  const [showScrollTop, setShowScrollTop] = useState(false)
-  const [isCartOpenMobile, setIsCartOpenMobile] = useState(true)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
   const showBonus = viewRole === "seller"
   const canSeeProfit = viewRole !== "seller"
   const isAdmin = viewRole !== "seller"
 
-<<<<<<< HEAD
   const rateMap = useMemo(() => buildRateMap(rates), [rates])
 
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   const sellers = useMemo(() => {
     const map = new Map<string, string>()
     for (const s of sales) map.set(s.seller_id, s.seller_name || "Без имени")
@@ -182,7 +145,6 @@ export function KassaScreen({
   }, [sales])
 
   useEffect(() => {
-<<<<<<< HEAD
     if (onlineOnly) {
       setCart([])
       setBonusUsed("")
@@ -201,13 +163,6 @@ export function KassaScreen({
               // В ювелирном CRM каждая строка — отдельное уникальное изделие.
               setCart(parsed.cart.map((item: ExtendedSaleItem) => ({ ...item, quantity: 1 })))
             }
-=======
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed.cart)) setCart(parsed.cart)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         if (parsed.bonusUsed !== undefined) setBonusUsed(parsed.bonusUsed)
         if (parsed.payment !== undefined) setPayment(parsed.payment)
         if (parsed.customerName !== undefined) setCustomerName(parsed.customerName)
@@ -218,7 +173,6 @@ export function KassaScreen({
     } finally {
       setIsLoaded(true)
     }
-<<<<<<< HEAD
   }, [cartStorageKey, onlineOnly])
 
   useEffect(() => {
@@ -226,25 +180,12 @@ export function KassaScreen({
     try {
       localStorage.setItem(
         cartStorageKey,
-=======
-  }, [])
-
-  useEffect(() => {
-    if (!isLoaded) return
-    try {
-      localStorage.setItem(
-        LOCAL_STORAGE_KEY,
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         JSON.stringify({ cart, bonusUsed, payment, customerName, customerPhone })
       )
     } catch (e) {
       console.error("[kassa] Error saving to localStorage:", e)
     }
-<<<<<<< HEAD
   }, [cart, bonusUsed, payment, customerName, customerPhone, isLoaded, onlineOnly, cartStorageKey])
-=======
-  }, [cart, bonusUsed, payment, customerName, customerPhone, isLoaded])
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)")
@@ -278,28 +219,12 @@ export function KassaScreen({
     return () => clearTimeout(id)
   }, [query])
 
-<<<<<<< HEAD
   const qtyInCart = (id: string) => cart.filter((i) => i.product_id === id).length
 
   const results = useMemo(() => {
     if (!isSearchReady(debounced, MIN_QUERY)) return []
     return filterProducts(products, debounced).filter(
       (p) => p.status === "in_stock" && !p.is_hidden,
-=======
-  const stockOf = (id: string) => products.find((p) => p.id === id)?.quantity ?? 0
-  const qtyInCart = (id: string) => cart.filter((i) => i.product_id === id).length
-
-  const results = useMemo(() => {
-    if (debounced.length < MIN_QUERY) return []
-    const q = debounced.toLowerCase()
-    return products.filter(
-      (p) =>
-        p.quantity > 0 &&
-        p.status !== "sold" &&
-        (p.name.toLowerCase().includes(q) ||
-          (p.sku ?? "").toLowerCase().includes(q) ||
-          (p.metal ?? "").toLowerCase().includes(q)),
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     )
   }, [products, debounced])
 
@@ -317,13 +242,8 @@ export function KassaScreen({
   const addToCart = (p: Product) => {
     setCart((prev) => {
       const already = prev.filter((i) => i.product_id === p.id).length
-<<<<<<< HEAD
       if (already >= 1) {
         toast.error("Этот товар уже добавлен в чек")
-=======
-      if (already >= p.quantity) {
-        toast.error(`Достигнуто максимальное количество товара в наличии (Остаток: ${p.quantity} шт.)`)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         return prev
       }
       if (p.sale_price < p.purchase_price) {
@@ -335,12 +255,9 @@ export function KassaScreen({
         name: p.name,
         weight: p.weight,
         metal: p.metal,
-<<<<<<< HEAD
         kind: "product",
         price_per_gram:
           p.price_per_gram_sale ?? (p.weight > 0 ? round(p.sale_price / p.weight, 2) : null),
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         quantity: 1,
         price: p.sale_price,
         cost: p.purchase_price,
@@ -353,7 +270,6 @@ export function KassaScreen({
     })
   }
 
-<<<<<<< HEAD
   const removeProductFromCart = (productId: string) => {
     setCart((prev) => prev.filter((i) => i.product_id !== productId))
   }
@@ -403,8 +319,6 @@ export function KassaScreen({
     )
   }
 
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   const changeItemDiscountPercent = (lineId: string, percentVal: number) => {
     const validPct = Math.min(100, Math.max(0, percentVal || 0))
     setCart((prev) =>
@@ -427,38 +341,17 @@ export function KassaScreen({
     )
   }
 
-<<<<<<< HEAD
   const removeItem = (lineId: string) => setCart((prev) => prev.filter((i) => i.lineId !== lineId))
 
   const handleReset = () => {
     checkoutAttempt.current = null
-=======
-  const applyDiscountToAll = (line: ExtendedSaleItem) => {
-    setCart((prev) =>
-      prev.map((i) =>
-        i.product_id === line.product_id
-          ? { ...i, discountSom: line.discountSom ?? 0, discountPercent: line.discountPercent ?? 0 }
-          : i,
-      ),
-    )
-    toast.success("Скидка применена ко всем единицам товара")
-  }
-
-  const removeItem = (lineId: string) => setCart((prev) => prev.filter((i) => i.lineId !== lineId))
-
-  const handleReset = () => {
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     setCart([])
     setBonusUsed("")
     setCustomerName("")
     setCustomerPhone("")
     setPayment("cash")
     setQuery("")
-<<<<<<< HEAD
     if (!onlineOnly) localStorage.removeItem(cartStorageKey)
-=======
-    localStorage.removeItem(LOCAL_STORAGE_KEY)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     toast.info("Чек полностью сброшен")
   }
 
@@ -479,20 +372,14 @@ export function KassaScreen({
   const bonusEarned = Math.round(Math.max(0, total - cartCost) * (Number(profile.bonus_rate ?? 2) / 100))
 
   const lossItems = cart.filter((i) => {
-<<<<<<< HEAD
     if (i.kind === "scrap") return false
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     const disc = i.discountSom ?? ((i.price * (i.discountPercent || 0)) / 100)
     const eff = i.price - disc
     return eff < i.cost
   })
   
   const lossAmount = cart.reduce((s, i) => {
-<<<<<<< HEAD
     if (i.kind === "scrap") return s
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     const disc = i.discountSom ?? ((i.price * (i.discountPercent || 0)) / 100)
     const eff = i.price - disc
     return eff < i.cost ? s + (i.cost - eff) * i.quantity : s
@@ -501,19 +388,12 @@ export function KassaScreen({
   const hasLoss = lossAmount > 0
 
   const doCheckout = async () => {
-<<<<<<< HEAD
     if (checkoutBusy.current) return
     checkoutBusy.current = true
     setConfirmLoss(false)
     setSubmitting(true)
     try {
       const checkoutPayload = {
-=======
-    setConfirmLoss(false)
-    setSubmitting(true)
-    try {
-      const res = await checkout({
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         items: cart.map((item) => {
           const disc = item.discountSom ?? ((item.price * (item.discountPercent || 0)) / 100)
           const { lineId: _lineId, discountPercent: _dp, discountSom: _ds, ...rest } = item
@@ -522,7 +402,6 @@ export function KassaScreen({
         discount: totalDiscountAmount,
         bonus_used: bonusNum,
         payment_method: payment,
-<<<<<<< HEAD
         amount_cash: payment === "mixed" ? Number(payCash) || 0 : undefined,
         amount_electronic: payment === "mixed" ? Number(payElectronic) || 0 : undefined,
         customer_name: customerName,
@@ -546,31 +425,17 @@ export function KassaScreen({
       }
       handleReset()
       startTransition(() => router.refresh())
-=======
-        customer_name: customerName,
-        customer_phone: customerPhone,
-      })
-      toast.success(`Продажа оформлена: ${formatSom(res.total)}`, {
-        description: showBonus ? `Начислено ${res.bonusEarned} бонусов` : undefined,
-      })
-      handleReset()
-      router.refresh()
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     } catch (e) {
       console.error("[kassa] checkout error:", e)
       toast.error(e instanceof Error ? e.message : "Ошибка оформления продажи")
     } finally {
-<<<<<<< HEAD
       checkoutBusy.current = false
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
       setSubmitting(false)
     }
   }
 
   const submit = () => {
     if (cart.length === 0) return
-<<<<<<< HEAD
     // Смешанная оплата: две суммы должны закрывать чек.
     if (payment === "mixed") {
       const paid = (Number(payCash) || 0) + (Number(payElectronic) || 0)
@@ -579,8 +444,6 @@ export function KassaScreen({
         return
       }
     }
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     if (hasLoss) {
       setConfirmLoss(true)
       return
@@ -596,7 +459,6 @@ export function KassaScreen({
 
   return (
     <div className="relative w-full max-w-full overflow-x-hidden pb-12">
-<<<<<<< HEAD
       {/* Лоадер при оформлении продажи */}
       {submitting && <PageLoader />}
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
@@ -610,13 +472,6 @@ export function KassaScreen({
           />
         </div>
         <div className="order-2 min-w-0 w-full lg:col-start-1 lg:row-start-2">
-=======
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px] gap-6 items-start">
-        
-        <div className="flex flex-col gap-6 order-1 min-w-0 w-full">
-          <CashPanel sales={sales} operations={cash.operations} presets={cash.presets} isAdmin={isAdmin} />
-          
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
           <KassaSearch
             query={query}
             setQuery={setQuery}
@@ -629,24 +484,12 @@ export function KassaScreen({
             onTrackScroll={onTrackScroll}
             qtyInCart={qtyInCart}
             addToCart={addToCart}
-<<<<<<< HEAD
             onToggleCart={toggleCartProduct}
             minQuery={MIN_QUERY}
             isAdmin={isAdmin}
           />
         </div>
         <div className="order-3 z-10 w-full min-w-0 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1 lg:row-span-3">
-=======
-            minQuery={MIN_QUERY}
-          />
-          
-          <div className="hidden lg:block">
-             <SalesHistory sales={sales} canSeeProfit={canSeeProfit} sellers={sellers} />
-          </div>
-        </div>
-        
-        <div className="order-2 w-full lg:sticky lg:top-4 z-10 min-w-0">
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
           <KassaCart
             cart={cart}
             isMobile={isMobile}
@@ -655,7 +498,6 @@ export function KassaScreen({
             hasLoss={hasLoss}
             lossAmount={lossAmount}
             lossItems={lossItems}
-<<<<<<< HEAD
             removeItem={removeItem}
             products={products}
             changeItemPricePerGram={changeItemPricePerGram}
@@ -664,15 +506,6 @@ export function KassaScreen({
             changeItemDiscountSom={changeItemDiscountSom}
             changeItemDiscountPercent={changeItemDiscountPercent}
             customers={clients}
-=======
-            stockOf={stockOf}
-            removeItem={removeItem}
-            addToCart={addToCart}
-            products={products}
-            changeItemDiscountSom={changeItemDiscountSom}
-            changeItemDiscountPercent={changeItemDiscountPercent}
-            applyDiscountToAll={applyDiscountToAll}
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
             customerName={customerName}
             setCustomerName={setCustomerName}
             customerPhone={customerPhone}
@@ -681,14 +514,11 @@ export function KassaScreen({
             bonusUsed={bonusUsed}
             setBonusUsed={setBonusUsed}
             payment={payment}
-<<<<<<< HEAD
             payCash={payCash}
             setPayCash={setPayCash}
             payElectronic={payElectronic}
             setPayElectronic={setPayElectronic}
             isAdmin={isAdmin}
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
             setPayment={(v) => setPayment(v ?? "")}
             subtotal={subtotal}
             totalDiscountAmount={totalDiscountAmount}
@@ -701,7 +531,6 @@ export function KassaScreen({
             handleReset={handleReset}
           />
         </div>
-<<<<<<< HEAD
         <div className="order-4 min-w-0 w-full lg:col-start-1 lg:row-start-3">
           <DeferredSalesHistory
             sales={sales}
@@ -713,11 +542,6 @@ export function KassaScreen({
             sellers={sellers}
             onReturned={refreshAfterReturn}
           />
-=======
-
-        <div className="order-3 lg:hidden w-full min-w-0 mt-2">
-           <SalesHistory sales={sales} canSeeProfit={canSeeProfit} sellers={sellers} />
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         </div>
       </div>
 
@@ -740,8 +564,4 @@ export function KassaScreen({
       )}
     </div>
   )
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6

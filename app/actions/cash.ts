@@ -1,6 +1,5 @@
 "use server"
 
-<<<<<<< HEAD
 import { revalidatePath } from "next/cache"
 import type { CashOperation, CashReasonPreset, CashSource } from "@/lib/types"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"
@@ -11,21 +10,6 @@ async function requireProfile() {
   if (!user) throw new Error("Unauthorized")
   if (!profile || profile.status !== "approved") throw new Error("Not approved")
   return { supabase, user, profile, shopId }
-=======
-import { createClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache"
-import type { CashOperation, CashReasonPreset } from "@/lib/types"
-
-async function requireProfile() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Unauthorized")
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-  if (!profile || profile.status !== "approved") throw new Error("Not approved")
-  return { supabase, user, profile }
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 async function requireAdmin() {
@@ -41,18 +25,13 @@ export type CashData = {
 
 /** Операции с кассой и шаблоны причин текущего магазина. */
 export async function getCashData(): Promise<CashData> {
-<<<<<<< HEAD
   const { supabase, shopId } = await requireProfile()
   if (!shopId) return { operations: [], presets: [] }
-=======
-  const { supabase, profile } = await requireProfile()
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
   const [ops, presets] = await Promise.all([
     supabase
       .from("cash_operations")
       .select("*")
-<<<<<<< HEAD
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .range(0, 199),
@@ -60,14 +39,6 @@ export async function getCashData(): Promise<CashData> {
       .from("cash_reason_presets")
       .select("*")
       .eq("shop_id", shopId)
-=======
-      .eq("shop_id", profile.shop_id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("cash_reason_presets")
-      .select("*")
-      .eq("shop_id", profile.shop_id)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
       .order("created_at", { ascending: false }),
   ])
 
@@ -82,7 +53,6 @@ export async function getCashData(): Promise<CashData> {
 export async function createCashOperation(input: {
   type: "income" | "outcome" | "collection"
   amount: number
-<<<<<<< HEAD
   /** Источник средств: наличные, электронные или оба. */
   source?: CashSource
   amount_cash?: number
@@ -103,19 +73,6 @@ export async function createCashOperation(input: {
   }
 
   const amount = Math.round(Number(input.amount) * 100) / 100
-=======
-  reason: string
-  savePreset?: boolean
-}) {
-  const { supabase, user, profile } = await requireAdmin()
-
-  // Проверка на привязку магазина
-  if (!profile.shop_id) {
-    throw new Error("Ваш аккаунт не привязан ни к одному магазину")
-  }
-
-  const amount = Number(input.amount)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   const reason = (input.reason ?? "").trim()
   
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("Укажите сумму больше нуля")
@@ -127,7 +84,6 @@ export async function createCashOperation(input: {
     throw new Error("Неверный тип операции")
   }
 
-<<<<<<< HEAD
   // ------------------------------------------------- источник и его разбивка
   // Инкассация всегда переводит наличные в электронные средства.
   const source: CashSource = input.type === "collection" ? "cash" : (input.source ?? "cash")
@@ -167,32 +123,10 @@ export async function createCashOperation(input: {
 
   revalidatePath("/crm")
   return { ok: true, operationId: result.operation_id, clientOpId, duplicate: result.duplicate === true }
-=======
-  const { error } = await supabase.from("cash_operations").insert({
-    shop_id: profile.shop_id,
-    created_by: user.id,
-    author_name: profile.full_name,
-    type: input.type,
-    amount,
-    reason,
-  })
-  
-  if (error) throw error
-
-  if (input.savePreset) {
-    await supabase
-      .from("cash_reason_presets")
-      .insert({ shop_id: profile.shop_id, created_by: user.id, text: reason })
-  }
-
-  revalidatePath("/")
-  return { ok: true }
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 /** Удалить шаблон причины. Только администратор. */
 export async function deleteCashReasonPreset(id: string) {
-<<<<<<< HEAD
   const { supabase, shopId } = await requireAdmin()
   if (!shopId) throw new Error("Ваш аккаунт не привязан ни к одному магазину")
   const { error } = await supabase.from("cash_reason_presets").delete().eq("id", id).eq("shop_id", shopId)
@@ -200,11 +134,3 @@ export async function deleteCashReasonPreset(id: string) {
   revalidatePath("/crm")
   return { ok: true }
 }
-=======
-  const { supabase } = await requireAdmin()
-  const { error } = await supabase.from("cash_reason_presets").delete().eq("id", id)
-  if (error) throw error
-  revalidatePath("/")
-  return { ok: true }
-}
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6

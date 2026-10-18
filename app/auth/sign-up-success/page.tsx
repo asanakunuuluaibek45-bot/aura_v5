@@ -15,18 +15,9 @@ export default function SignUpSuccessPage() {
           сможете войти в систему.
         </p>
         
-<<<<<<< HEAD
         <Button asChild className="w-full">
           <Link href="/auth/login">Перейти ко входу</Link>
         </Button>
-=======
-        {/* Используем render вместо asChild, а текст кнопки передаем в children */}
-       <Button 
-  nativeButton={false} 
-  render={<Link href="/auth/login">Перейти ко входу</Link>} 
-  className="w-full"
-/>
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
       </div>
     </AuthShell>
   )

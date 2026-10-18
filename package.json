@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
   "name": "@workspace/aura-crm",
   "version": "0.19.0",
   "private": true,
@@ -13,31 +12,17 @@
     "typecheck": "tsc --noEmit",
     "test:atomic": "node --test scripts/test-atomic-actions.mjs",
     "test:atomic:postgres": "node scripts/test-atomic-postgres.mjs"
-=======
-  "name": "my-project",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev -H 0.0.0.0",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint ."
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.2",
-<<<<<<< HEAD
     "@tanstack/react-virtual": "^3.14.13",
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     "@vercel/analytics": "1.6.1",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-<<<<<<< HEAD
     "fabric": "^7.4.0",
     "idb": "^8.0.3",
     "lucide-react": "^1.16.0",
@@ -47,13 +32,6 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-=======
-    "lucide-react": "^1.16.0",
-    "next": "16.3.0",
-    "next-themes": "^0.4.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     "react-is": "^19.2.0",
     "recharts": "^3.10.1",
     "shadcn": "^4.8.0",
@@ -64,26 +42,15 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24",
-<<<<<<< HEAD
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "postcss": "^8.5",
     "supabase": "^2.116.0-beta.11",
-=======
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
-    "postcss": "^8.5",
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     "tailwindcss": "^4.3.3",
     "typescript": "5.7.3"
   },
   "overrides": {
-<<<<<<< HEAD
-    "hono": "4.12.25",
-    "proxy-addr": "2.0.8"
-=======
     "hono": "4.12.25"
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   }
 }
