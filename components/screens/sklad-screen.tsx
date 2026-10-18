@@ -44,13 +44,17 @@ export function SkladScreen({
     [products, query],
   )
 
+  const stockProducts = useMemo(
+    () => products.filter((p) => p.status === "in_stock" || p.status === "reserved"),
+    [products],
+  )
   const totals = useMemo(() => {
-    const count = products.reduce((s, p) => s + p.quantity, 0)
-    const weight = products.reduce((s, p) => s + p.weight * p.quantity, 0)
-    const retail = products.reduce((s, p) => s + p.sale_price * p.quantity, 0)
-    const cost = products.reduce((s, p) => s + p.purchase_price * p.quantity, 0)
+    const count = stockProducts.length
+    const weight = stockProducts.reduce((s, p) => s + p.weight, 0)
+    const retail = stockProducts.reduce((s, p) => s + p.sale_price, 0)
+    const cost = stockProducts.reduce((s, p) => s + p.purchase_price, 0)
     return { count, weight, retail, cost }
-  }, [products])
+  }, [stockProducts])
 
   const onEdit = (p: Product) => {
     setEditing(p)
@@ -105,7 +109,7 @@ export function SkladScreen({
               <TableHead>Товар</TableHead>
               <TableHead className="hidden md:table-cell">Металл</TableHead>
               <TableHead className="hidden sm:table-cell">Вес</TableHead>
-              <TableHead className="text-right">Кол-во</TableHead>
+              <TableHead className="text-right">Статус</TableHead>
               {canSeePurchasePrice && <TableHead className="hidden text-right lg:table-cell">Закуп</TableHead>}
               <TableHead className="text-right">Цена</TableHead>
               <TableHead className="w-[1%]"></TableHead>
@@ -141,16 +145,16 @@ export function SkladScreen({
                   <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{p.metal}</TableCell>
                   <TableCell className="hidden text-sm sm:table-cell">{formatWeight(p.weight)}</TableCell>
                   <TableCell className="text-right">
-                    {p.quantity <= 0 ? (
-                      <Badge variant="destructive" className="text-[10px]">
-                        Нет
-                      </Badge>
-                    ) : p.quantity <= 2 ? (
-                      <Badge variant="secondary" className="text-[10px]">
-                        {p.quantity}
-                      </Badge>
+                    {p.status === "in_stock" ? (
+                      <Badge variant="secondary" className="text-[10px]">В наличии</Badge>
+                    ) : p.status === "reserved" ? (
+                      <Badge variant="outline" className="text-[10px]">Резерв</Badge>
+                    ) : p.status === "sold" ? (
+                      <Badge variant="destructive" className="text-[10px]">Продан</Badge>
+                    ) : p.status === "archived" ? (
+                      <Badge variant="outline" className="text-[10px]">Архив</Badge>
                     ) : (
-                      <span className="tabular-nums">{p.quantity}</span>
+                      <Badge variant="outline" className="text-[10px]">Черновик</Badge>
                     )}
                   </TableCell>
                   {canSeePurchasePrice && (

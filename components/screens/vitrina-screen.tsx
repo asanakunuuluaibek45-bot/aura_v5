@@ -15,8 +15,23 @@ function galleryOf(p: Product): string[] {
   return p.image_url ? [p.image_url] : []
 }
 
+function purityFromMetal(metal: string | null): string | null {
+  return metal?.match(/\b(375|500|585|750|900|916|925|958|999)\b/)?.[1] ?? null
+}
+
+function statusLabel(status: Product["status"]): string {
+  switch (status) {
+    case "in_stock": return "В наличии"
+    case "reserved": return "Зарезервировано"
+    case "sold": return "Продано"
+    case "archived": return "В архиве"
+    case "draft": return "Черновик"
+    default: return "Неизвестно"
+  }
+}
+
 function isActive(p: Product) {
-  return p.quantity > 0 && p.status !== "sold"
+  return p.status === "in_stock" || p.status === "reserved"
 }
 
 export function VitrinaScreen({
@@ -104,7 +119,7 @@ export function VitrinaScreen({
                   )}
                   {!active && (
                     <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm">
-                      <Badge variant="destructive">Продано</Badge>
+                      <Badge variant="destructive">{statusLabel(p.status)}</Badge>
                     </div>
                   )}
                 </div>
@@ -157,6 +172,7 @@ function ProductOverlay({
 }) {
   const photos = galleryOf(product)
   const active = isActive(product)
+  const purity = purityFromMetal(product.metal)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -197,17 +213,17 @@ function ProductOverlay({
               <h2 className="font-serif text-2xl">{product.name}</h2>
               <p className="text-sm text-muted-foreground">
                 {product.category} · {product.metal}
-                {product.purity ? ` · проба ${product.purity}` : ""}
+                {purity ? ` · проба ${purity}` : ""}
               </p>
             </div>
-            <Badge variant={active ? "secondary" : "destructive"}>{active ? "В наличии" : "Продано"}</Badge>
+            <Badge variant={active ? "secondary" : "destructive"}>{statusLabel(product.status)}</Badge>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Info label="Артикул" value={product.sku || "—"} />
             <Info label="Вес" value={formatWeight(product.weight)} />
             <Info label="Размер" value={product.size || "—"} />
-            <Info label="Остаток" value={String(product.quantity)} />
+            <Info label="Остаток" value={active ? "1 шт." : "Нет"} />
             <Info label="Цена" value={formatSom(product.sale_price)} accent />
             {canSeePurchasePrice && <Info label="Закупка" value={formatSom(product.purchase_price)} />}
             {canSeePurchasePrice && (
