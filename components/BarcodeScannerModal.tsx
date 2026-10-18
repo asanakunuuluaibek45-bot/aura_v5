@@ -1,6 +1,5 @@
 "use client"
 
-<<<<<<< HEAD
 import { useCallback, useEffect, useRef, useState } from "react"
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser"
 import { Button } from "@/components/ui/button"
@@ -29,19 +28,19 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
   const [manual, setManual] = useState("")
   const [manualMode, setManualMode] = useState(false)
 
-  // Флаг: действительно ли текущий запущенный трек является селфи-камерой
+  // Ð¤Ð»Ð°Ð³: Ð´ÐµÐ¹ÑÑÐ²Ð¸ÑÐµÐ»ÑÐ½Ð¾ Ð»Ð¸ ÑÐµÐºÑÑÐ¸Ð¹ Ð·Ð°Ð¿ÑÑÐµÐ½Ð½ÑÐ¹ ÑÑÐµÐº ÑÐ²Ð»ÑÐµÑÑÑ ÑÐµÐ»ÑÐ¸-ÐºÐ°Ð¼ÐµÑÐ¾Ð¹
   const [isFrontCamera, setIsFrontCamera] = useState(false)
 
-  // Предупреждение о плохо читаемом / перекрытом коде
+  // ÐÑÐµÐ´ÑÐ¿ÑÐµÐ¶Ð´ÐµÐ½Ð¸Ðµ Ð¾ Ð¿Ð»Ð¾ÑÐ¾ ÑÐ¸ÑÐ°ÐµÐ¼Ð¾Ð¼ / Ð¿ÐµÑÐµÐºÑÑÑÐ¾Ð¼ ÐºÐ¾Ð´Ðµ
   const [isBadQuality, setIsBadQuality] = useState(false)
   const checksumErrorCountRef = useRef(0)
 
-  // Возможности камеры
+  // ÐÐ¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑÐ¸ ÐºÐ°Ð¼ÐµÑÑ
   const [torchAvailable, setTorchAvailable] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null)
 
-  // Подавление системных исключений ZXing в консоли Next.js / Turbopack
+  // ÐÐ¾Ð´Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¸ÑÑÐµÐ¼Ð½ÑÑ Ð¸ÑÐºÐ»ÑÑÐµÐ½Ð¸Ð¹ ZXing Ð² ÐºÐ¾Ð½ÑÐ¾Ð»Ð¸ Next.js / Turbopack
   useEffect(() => {
     const originalError = console.error
     const originalWarn = console.warn
@@ -116,7 +115,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
       if (clean.length < 3 || closedRef.current) return
       closedRef.current = true
 
-      // «Пик» кассового аппарата при успешном распознавании кода.
+      // Â«ÐÐ¸ÐºÂ» ÐºÐ°ÑÑÐ¾Ð²Ð¾Ð³Ð¾ Ð°Ð¿Ð¿Ð°ÑÐ°ÑÐ° Ð¿ÑÐ¸ ÑÑÐ¿ÐµÑÐ½Ð¾Ð¼ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð²Ð°Ð½Ð¸Ð¸ ÐºÐ¾Ð´Ð°.
       playScanBeep()
 
       if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -185,7 +184,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
       setTorchAvailable(false)
 
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-        setError("Браузер не поддерживает камеру или соединение не защищено (HTTPS).")
+        setError("ÐÑÐ°ÑÐ·ÐµÑ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑ ÐºÐ°Ð¼ÐµÑÑ Ð¸Ð»Ð¸ ÑÐ¾ÐµÐ´Ð¸Ð½ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð·Ð°ÑÐ¸ÑÐµÐ½Ð¾ (HTTPS).")
         return
       }
 
@@ -212,10 +211,10 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         const name = (err as DOMException)?.name
         setError(
           name === "NotAllowedError"
-            ? "Доступ к камере запрещён. Разрешите доступ в настройках."
+            ? "ÐÐ¾ÑÑÑÐ¿ Ðº ÐºÐ°Ð¼ÐµÑÐµ Ð·Ð°Ð¿ÑÐµÑÑÐ½. Ð Ð°Ð·ÑÐµÑÐ¸ÑÐµ Ð´Ð¾ÑÑÑÐ¿ Ð² Ð½Ð°ÑÑÑÐ¾Ð¹ÐºÐ°Ñ."
             : name === "NotFoundError"
-              ? "Камера не найдена на устройстве."
-              : "Не удалось запустить камеру.",
+              ? "ÐÐ°Ð¼ÐµÑÐ° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð½Ð° ÑÑÑÑÐ¾Ð¹ÑÑÐ²Ðµ."
+              : "ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ ÐºÐ°Ð¼ÐµÑÑ.",
         )
         return
       }
@@ -233,7 +232,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         return
       }
 
-      // Определяем, является ли текущая активная камера действительно фронтальной
+      // ÐÐ¿ÑÐµÐ´ÐµÐ»ÑÐµÐ¼, ÑÐ²Ð»ÑÐµÑÑÑ Ð»Ð¸ ÑÐµÐºÑÑÐ°Ñ Ð°ÐºÑÐ¸Ð²Ð½Ð°Ñ ÐºÐ°Ð¼ÐµÑÐ° Ð´ÐµÐ¹ÑÑÐ²Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÑÐ¾Ð½ÑÐ°Ð»ÑÐ½Ð¾Ð¹
       const track = stream.getVideoTracks()[0]
       if (track) {
         const settings = track.getSettings?.()
@@ -243,7 +242,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
           settings?.facingMode === "user" ||
           facing === "user" ||
           label.includes("front") ||
-          label.includes("пользователь") ||
+          label.includes("Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ") ||
           label.includes("selfie")
 
         setIsFrontCamera(isUserFacing)
@@ -272,7 +271,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
 
       if (cancelled || closedRef.current) return
 
-      // 1. Нативный BarcodeDetector (Chrome / Android)
+      // 1. ÐÐ°ÑÐ¸Ð²Ð½ÑÐ¹ BarcodeDetector (Chrome / Android)
       if ("BarcodeDetector" in window) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -307,7 +306,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         }
       }
 
-      // 2. Fallback ZXing с трекингом качества изображения
+      // 2. Fallback ZXing Ñ ÑÑÐµÐºÐ¸Ð½Ð³Ð¾Ð¼ ÐºÐ°ÑÐµÑÑÐ²Ð° Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ
       const reader = new BrowserMultiFormatReader()
       try {
         const controls = await reader.decodeFromVideoElement(video, (result, err) => {
@@ -338,7 +337,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         else controlsRef.current = controls
       } catch {
         if (!cancelled && !closedRef.current) {
-          setError("Не удалось запустить распознавание. Загрузите фото.")
+          setError("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð²Ð°Ð½Ð¸Ðµ. ÐÐ°Ð³ÑÑÐ·Ð¸ÑÐµ ÑÐ¾ÑÐ¾.")
         }
       }
     }
@@ -375,151 +374,13 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
       const result = await reader.decodeFromImageUrl(url)
       handleResult(result.getText())
     } catch {
-      setError("QR или штрихкод не найден на фото.")
+      setError("QR Ð¸Ð»Ð¸ ÑÑÑÐ¸ÑÐºÐ¾Ð´ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ Ð½Ð° ÑÐ¾ÑÐ¾.")
     } finally {
       URL.revokeObjectURL(url)
-=======
-import { useEffect, useRef, useState } from "react"
-import { BrowserMultiFormatReader } from "@zxing/browser"
-import { Button } from "@/components/ui/button"
-import { RefreshCw, X } from "lucide-react"
-
-export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; onScan: (code: string) => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
-  const [currentDeviceId, setCurrentDeviceId] = useState<string>("")
-  
-  // Используем useRef для хранения текущего медиапотока, чтобы очистка всегда имела к нему доступ
-  const activeStreamRef = useRef<MediaStream | null>(null)
-  const readerRef = useRef(new BrowserMultiFormatReader())
-
-  // Получаем список доступных камер
-  useEffect(() => {
-    BrowserMultiFormatReader.listVideoInputDevices()
-      .then((devices) => {
-        setCameras(devices)
-      })
-      .catch((err) => console.error("Ошибка получения списка камер:", err))
-  }, [])
-
-  // Основная логика запуска камеры
-  useEffect(() => {
-    let isMounted = true
-
-    const initCamera = async () => {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Браузер не поддерживает доступ к камере или соединение не защищено (HTTPS).")
-        }
-
-        let stream: MediaStream | null = null
-
-        // 1. Пробуем запросить основную (заднюю) камеру
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: "environment" } },
-            audio: false,
-          })
-        } catch (_envErr) {
-          // 2. Если основной нет, пробуем фронтальную или любую доступную
-          console.log("Основная камера недоступна, пробуем фронтальную...")
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "user" } },
-            audio: false,
-          })
-        }
-
-        if (!isMounted) {
-          // Если компонент успел размонтироваться пока запрашивался getUserMedia
-          stream.getTracks().forEach((track) => track.stop())
-          return
-        }
-
-        activeStreamRef.current = stream
-
-        if (videoRef.current && stream) {
-          videoRef.current.srcObject = stream
-          
-          const videoTrack = stream.getVideoTracks()[0]
-          const settings = videoTrack.getSettings()
-          if (settings.deviceId) {
-            setCurrentDeviceId(settings.deviceId)
-          }
-
-          // Запускаем сканирование через ZXing
-          readerRef.current.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
-            if (result) {
-              onScan(result.getText())
-              onClose()
-            }
-          })
-        }
-      } catch (err) {
-        console.error("Не удалось запустить камеру:", err)
-      }
-    }
-
-    initCamera()
-
-    // Функция очистки при закрытии/размонтировании компонента
-    return () => {
-      isMounted = false
-
-      // 1. Останавливаем все треки камеры (индикатор записи погаснет)
-      if (activeStreamRef.current) {
-        activeStreamRef.current.getTracks().forEach((track) => {
-          track.stop()
-        })
-        activeStreamRef.current = null
-      }
-
-      // 2. Сбрасываем источник у видеоэлемента
-      if (videoRef.current) {
-        videoRef.current.srcObject = null
-      }
-
-      // 3. Останавливаем сканирование ZXing (если метод доступен в текущей версии)
-      try {
-        readerRef.current
-      } catch (e) {
-        // Игнорируем, если метод сброса отличается в вашей версии пакета
-      }
-    }
-  }, [onScan, onClose])
-
-  // Ручное переключение между камерами
-  const switchCamera = async () => {
-    if (cameras.length <= 1) return
-    const currentIndex = cameras.findIndex((c) => c.deviceId === currentDeviceId)
-    const nextIndex = (currentIndex + 1) % cameras.length
-    const nextDevice = cameras[nextIndex]
-    
-    setCurrentDeviceId(nextDevice.deviceId)
-
-    try {
-      // Останавливаем старый поток перед запуском нового
-      if (activeStreamRef.current) {
-        activeStreamRef.current.getTracks().forEach((track) => track.stop())
-      }
-
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: nextDevice.deviceId } },
-        audio: false,
-      })
-
-      activeStreamRef.current = newStream
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = newStream
-      }
-    } catch (e) {
-      console.error("Ошибка при переключении камеры:", e)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     }
   }
 
   return (
-<<<<<<< HEAD
     <div
       className="fixed inset-0 z-[100] flex h-screen w-screen flex-col bg-black text-white"
       onClick={close}
@@ -528,23 +389,23 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
         className="relative flex h-full w-full flex-col justify-between overflow-hidden bg-black"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Шапка */}
+        {/* Ð¨Ð°Ð¿ÐºÐ° */}
         <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-md">
           <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-            Сканер кодов
+            Ð¡ÐºÐ°Ð½ÐµÑ ÐºÐ¾Ð´Ð¾Ð²
           </span>
           <Button
             variant="ghost"
             size="icon"
             className="h-9 w-9 rounded-full bg-black/40 hover:bg-white/20 text-white"
             onClick={close}
-            aria-label="Закрыть"
+            aria-label="ÐÐ°ÐºÑÑÑÑ"
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
-        {/* Область камеры */}
+        {/* ÐÐ±Ð»Ð°ÑÑÑ ÐºÐ°Ð¼ÐµÑÑ */}
         <div
           className="relative flex-1 w-full overflow-hidden bg-black select-none cursor-pointer"
           onClick={handleTapToFocus}
@@ -559,7 +420,7 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
             }`}
           />
 
-          {/* Рамка и скан-линия */}
+          {/* Ð Ð°Ð¼ÐºÐ° Ð¸ ÑÐºÐ°Ð½-Ð»Ð¸Ð½Ð¸Ñ */}
           {!error && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="relative h-64 w-64 sm:h-72 sm:w-72 rounded-3xl border-2 border-white/30 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]">
@@ -573,17 +434,17 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
             </div>
           )}
 
-          {/* Плашка предупреждения: Перекрыт или расфокусирован */}
+          {/* ÐÐ»Ð°ÑÐºÐ° Ð¿ÑÐµÐ´ÑÐ¿ÑÐµÐ¶Ð´ÐµÐ½Ð¸Ñ: ÐÐµÑÐµÐºÑÑÑ Ð¸Ð»Ð¸ ÑÐ°ÑÑÐ¾ÐºÑÑÐ¸ÑÐ¾Ð²Ð°Ð½ */}
           {isBadQuality && !error && (
             <div className="pointer-events-none absolute bottom-6 inset-x-0 z-20 flex justify-center px-4 animate-in fade-in slide-in-from-bottom-2">
               <div className="flex items-center gap-2 rounded-full bg-amber-500/90 px-4 py-2 text-xs font-medium text-black shadow-lg backdrop-blur-md">
                 <EyeOff className="h-4 w-4 shrink-0" />
-                <span>Код перекрыт, бликует или не в фокусе</span>
+                <span>ÐÐ¾Ð´ Ð¿ÐµÑÐµÐºÑÑÑ, Ð±Ð»Ð¸ÐºÑÐµÑ Ð¸Ð»Ð¸ Ð½Ðµ Ð² ÑÐ¾ÐºÑÑÐµ</span>
               </div>
             </div>
           )}
 
-          {/* Точка фокусировки */}
+          {/* Ð¢Ð¾ÑÐºÐ° ÑÐ¾ÐºÑÑÐ¸ÑÐ¾Ð²ÐºÐ¸ */}
           {focusPoint && (
             <div
               className="pointer-events-none absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/80 animate-ping"
@@ -591,7 +452,7 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
             />
           )}
 
-          {/* Вспышка */}
+          {/* ÐÑÐ¿ÑÑÐºÐ° */}
           {torchAvailable && (
             <button
               type="button"
@@ -605,7 +466,7 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
             </button>
           )}
 
-          {/* Ошибка */}
+          {/* ÐÑÐ¸Ð±ÐºÐ° */}
           {error && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 px-6 text-center">
               <AlertTriangle className="h-10 w-10 text-destructive" />
@@ -614,7 +475,7 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
           )}
         </div>
 
-        {/* Панель управления */}
+        {/* ÐÐ°Ð½ÐµÐ»Ñ ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð¸Ñ */}
         <div className="z-20 space-y-3 p-4 bg-black/80 backdrop-blur-lg border-t border-white/10 shrink-0">
           <div className="flex gap-2">
             <Button
@@ -624,7 +485,7 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
               onClick={switchCamera}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
-              Сменить камеру
+              Ð¡Ð¼ÐµÐ½Ð¸ÑÑ ÐºÐ°Ð¼ÐµÑÑ
             </Button>
             <Button
               variant="outline"
@@ -633,7 +494,7 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
               onClick={() => fileRef.current?.click()}
             >
               <ImageIcon className="mr-2 h-4 w-4" />
-              Галерея
+              ÐÐ°Ð»ÐµÑÐµÑ
             </Button>
           </div>
 
@@ -662,11 +523,11 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
                 autoFocus
                 value={manual}
                 onChange={(e) => setManual(e.target.value)}
-                placeholder="Код или артикул..."
+                placeholder="ÐÐ¾Ð´ Ð¸Ð»Ð¸ Ð°ÑÑÐ¸ÐºÑÐ»..."
                 className="h-11 text-xs rounded-xl bg-white/5 border-white/10 text-white"
               />
               <Button type="submit" size="lg" className="h-11 text-xs rounded-xl px-5" disabled={!manual.trim()}>
-                ОК
+                ÐÐ
               </Button>
             </form>
           ) : (
@@ -677,40 +538,11 @@ export function BarcodeScannerModal({ onClose, onScan }: { onClose: () => void; 
               onClick={() => setManualMode(true)}
             >
               <Keyboard className="mr-2 h-4 w-4" />
-              Ввести код вручную
-=======
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4">
-      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-black shadow-2xl">
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          className="h-64 w-full object-cover" 
-        />
-        
-        {/* Рамка фокуса */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="h-48 w-48 rounded-lg border-2 border-primary/50 shadow-[0_0_0_999px_rgba(0,0,0,0.5)]"></div>
-        </div>
-
-        <div className="absolute bottom-4 left-4 right-4 flex justify-between gap-2">
-          <Button variant="ghost" className="text-white hover:bg-white/20" onClick={onClose}>
-            <X className="h-5 w-5" />
-          </Button>
-          <span className="text-xs text-white/70 self-center">Наведите на бирку</span>
-          {cameras.length > 1 && (
-            <Button variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20" onClick={switchCamera}>
-              <RefreshCw className="h-4 w-4 mr-1" /> Сменить
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
+              ÐÐ²ÐµÑÑÐ¸ ÐºÐ¾Ð´ Ð²ÑÑÑÐ½ÑÑ
             </Button>
           )}
         </div>
       </div>
     </div>
   )
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6

@@ -1,6 +1,5 @@
 "use client"
 
-<<<<<<< HEAD
 import { useEffect, useMemo, useState } from "react"
 import type { Profile, Role } from "@/lib/types"
 import { roleLabel } from "@/lib/format"
@@ -79,23 +78,23 @@ type NavItem = {
 }
 
 const ITEMS: NavItem[] = [
-  { id: "kassa", label: "Касса", icon: ShoppingCart, group: "work" },
-  { id: "money", label: "Деньги", icon: Wallet, group: "work" },
-  { id: "vitrina", label: "Витрина", icon: LayoutGrid, group: "work" },
-  { id: "sklad", label: "Склад", icon: Warehouse, group: "work" },
-  { id: "clients", label: "Клиенты", icon: Users, group: "work" },
-  { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management" },
-  { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics" },
-  { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system" },
-  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system" },
-  { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system" },
+  { id: "kassa", label: "ÐÐ°ÑÑÐ°", icon: ShoppingCart, group: "work" },
+  { id: "money", label: "ÐÐµÐ½ÑÐ³Ð¸", icon: Wallet, group: "work" },
+  { id: "vitrina", label: "ÐÐ¸ÑÑÐ¸Ð½Ð°", icon: LayoutGrid, group: "work" },
+  { id: "sklad", label: "Ð¡ÐºÐ»Ð°Ð´", icon: Warehouse, group: "work" },
+  { id: "clients", label: "ÐÐ»Ð¸ÐµÐ½ÑÑ", icon: Users, group: "work" },
+  { id: "suppliers", label: "ÐÐ¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ¸", icon: Truck, adminOnly: true, group: "management" },
+  { id: "otchety", label: "ÐÑÑÑÑÑ", icon: BarChart3, adminOnly: true, group: "analytics" },
+  { id: "shops", label: "ÐÐ°Ð³Ð°Ð·Ð¸Ð½Ñ", icon: Store, superAdminOnly: true, group: "system" },
+  { id: "notifications", label: "Ð£Ð²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ", icon: Bell, superAdminOnly: true, group: "system" },
+  { id: "kabinet", label: "ÐÐ°Ð±Ð¸Ð½ÐµÑ", icon: UserRound, group: "system" },
 ]
 
 const GROUPS: { id: NavGroup; label: string }[] = [
-  { id: "work", label: "Работа" },
-  { id: "management", label: "Управление" },
-  { id: "analytics", label: "Аналитика" },
-  { id: "system", label: "Система" },
+  { id: "work", label: "Ð Ð°Ð±Ð¾ÑÐ°" },
+  { id: "management", label: "Ð£Ð¿ÑÐ°Ð²Ð»ÐµÐ½Ð¸Ðµ" },
+  { id: "analytics", label: "ÐÐ½Ð°Ð»Ð¸ÑÐ¸ÐºÐ°" },
+  { id: "system", label: "Ð¡Ð¸ÑÑÐµÐ¼Ð°" },
 ]
 
 interface AppNavProps {
@@ -152,7 +151,7 @@ export function AppNav({
     onClose?.()
   }
 
-  // Блокировка прокрутки body при открытом мобильном меню
+  // ÐÐ»Ð¾ÐºÐ¸ÑÐ¾Ð²ÐºÐ° Ð¿ÑÐ¾ÐºÑÑÑÐºÐ¸ body Ð¿ÑÐ¸ Ð¾ÑÐºÑÑÑÐ¾Ð¼ Ð¼Ð¾Ð±Ð¸Ð»ÑÐ½Ð¾Ð¼ Ð¼ÐµÐ½Ñ
   useEffect(() => {
     if (!mobileOpen) return
 
@@ -182,7 +181,7 @@ export function AppNav({
       )}
 
       <aside
-        aria-label="Основная навигация"
+        aria-label="ÐÑÐ½Ð¾Ð²Ð½Ð°Ñ Ð½Ð°Ð²Ð¸Ð³Ð°ÑÐ¸Ñ"
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex h-svh flex-col border-r border-border bg-background shadow-xl transition-[transform,width] duration-200 ease-out w-[280px]",
           "lg:sticky lg:top-0 lg:z-10 lg:h-screen lg:shrink-0 lg:shadow-none",
@@ -200,7 +199,7 @@ export function AppNav({
           <button
             type="button"
             onClick={() => handleNavigate("kabinet")}
-            aria-label="Открыть кабинет Aura"
+            aria-label="ÐÑÐºÑÑÑÑ ÐºÐ°Ð±Ð¸Ð½ÐµÑ Aura"
             className={cn(
               "flex items-center rounded-lg transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               collapsed ? "p-1.5" : "gap-2 px-1.5 py-1"
@@ -219,7 +218,7 @@ export function AppNav({
           <button
             type="button"
             onClick={onToggleCollapsed}
-            aria-label={collapsed ? "Развернуть боковое меню" : "Свернуть боковое меню"}
+            aria-label={collapsed ? "Ð Ð°Ð·Ð²ÐµÑÐ½ÑÑÑ Ð±Ð¾ÐºÐ¾Ð²Ð¾Ðµ Ð¼ÐµÐ½Ñ" : "Ð¡Ð²ÐµÑÐ½ÑÑÑ Ð±Ð¾ÐºÐ¾Ð²Ð¾Ðµ Ð¼ÐµÐ½Ñ"}
             aria-expanded={!collapsed}
             className={cn(
               "hidden h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:flex",
@@ -233,7 +232,7 @@ export function AppNav({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Закрыть меню"
+            aria-label="ÐÐ°ÐºÑÑÑÑ Ð¼ÐµÐ½Ñ"
             className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
           >
             <X className="h-5 w-5" />
@@ -241,7 +240,7 @@ export function AppNav({
         </div>
 
         {/* Navigation */}
-        <nav aria-label="Разделы CRM" className="min-h-0 flex-1 overflow-y-auto px-2 py-4">
+        <nav aria-label="Ð Ð°Ð·Ð´ÐµÐ»Ñ CRM" className="min-h-0 flex-1 overflow-y-auto px-2 py-4">
           <div className="space-y-5">
             {GROUPS.map((group) => {
               const groupItems = visibleItems.filter((i) => i.group === group.id)
@@ -312,7 +311,7 @@ export function AppNav({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Открыть меню профиля"
+                  aria-label="ÐÑÐºÑÑÑÑ Ð¼ÐµÐ½Ñ Ð¿ÑÐ¾ÑÐ¸Ð»Ñ"
                   className={cn(
                     "flex min-h-12 w-full items-center gap-2 rounded-xl p-2 text-left transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     collapsed && "lg:justify-center lg:px-1"
@@ -326,12 +325,12 @@ export function AppNav({
 
                   <div className={cn("min-w-0 flex-1 leading-tight", collapsed && "lg:hidden")}>
                     <div className="truncate text-sm font-medium">
-                      {profile.full_name ?? "Пользователь"}
+                      {profile.full_name ?? "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ"}
                     </div>
                     <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                       {canSwitchRole && viewRole ? (
                         <>
-                          Как: <strong className="font-medium text-foreground">{roleLabel(viewRole)}</strong>
+                          ÐÐ°Ðº: <strong className="font-medium text-foreground">{roleLabel(viewRole)}</strong>
                         </>
                       ) : (
                         profile.role ? roleLabel(profile.role) : ""
@@ -345,7 +344,7 @@ export function AppNav({
 
               <DropdownMenuContent align="end" side="top" sideOffset={8} className="w-60">
                 <DropdownMenuLabel className="flex flex-col gap-2">
-                  <span className="truncate">{profile.full_name ?? "Пользователь"}</span>
+                  <span className="truncate">{profile.full_name ?? "ÐÐ¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ"}</span>
                   {profile.role && (
                     <Badge variant="secondary" className="w-fit text-[10px]">
                       {roleLabel(profile.role)}
@@ -359,10 +358,10 @@ export function AppNav({
                     <DropdownMenuLabel className="flex flex-col gap-1 font-normal">
                       <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                         <Eye className="h-3.5 w-3.5 text-primary" />
-                        Режим просмотра
+                        Ð ÐµÐ¶Ð¸Ð¼ Ð¿ÑÐ¾ÑÐ¼Ð¾ÑÑÐ°
                       </span>
                       <span className="text-[11px] text-muted-foreground">
-                        Только для просмотра. Роль не изменяется.
+                        Ð¢Ð¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ Ð¿ÑÐ¾ÑÐ¼Ð¾ÑÑÐ°. Ð Ð¾Ð»Ñ Ð½Ðµ Ð¸Ð·Ð¼ÐµÐ½ÑÐµÑÑÑ.
                       </span>
                     </DropdownMenuLabel>
                     <DropdownMenuRadioGroup
@@ -372,10 +371,10 @@ export function AppNav({
                         if (nextRole !== viewRole) onChangeViewRole(nextRole)
                       }}
                     >
-                      <DropdownMenuRadioItem value="seller">Продавец</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="admin">Администратор</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="seller">ÐÑÐ¾Ð´Ð°Ð²ÐµÑ</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="admin">ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ</DropdownMenuRadioItem>
                       {profile?.role === "super_admin" && (
-                        <DropdownMenuRadioItem value="super_admin">Супер-админ</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="super_admin">Ð¡ÑÐ¿ÐµÑ-Ð°Ð´Ð¼Ð¸Ð½</DropdownMenuRadioItem>
                       )}
                     </DropdownMenuRadioGroup>
                   </>
@@ -385,7 +384,7 @@ export function AppNav({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div aria-label="Загрузка профиля" className={cn("flex min-h-12 items-center gap-2 p-2", collapsed && "lg:justify-center lg:px-1")}>
+            <div aria-label="ÐÐ°Ð³ÑÑÐ·ÐºÐ° Ð¿ÑÐ¾ÑÐ¸Ð»Ñ" className={cn("flex min-h-12 items-center gap-2 p-2", collapsed && "lg:justify-center lg:px-1")}>
               <div className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-muted" />
               <div className={cn("min-w-0 flex-1 space-y-1.5", collapsed && "lg:hidden")}>
                 <div className="h-3 w-24 animate-pulse rounded bg-muted" />
@@ -398,53 +397,3 @@ export function AppNav({
     </>
   )
 }
-=======
-import { cn } from "@/lib/utils"
-import { LayoutGrid, ShoppingCart, Warehouse, BarChart3 } from "lucide-react"
-
-export type ScreenId = "kassa" | "vitrina" | "sklad" | "otchety" | "kabinet"
-
-const ITEMS: { id: ScreenId; label: string; icon: typeof ShoppingCart; adminOnly?: boolean }[] = [
-  { id: "kassa", label: "Касса", icon: ShoppingCart },
-  { id: "vitrina", label: "Витрина", icon: LayoutGrid },
-  { id: "sklad", label: "Склад", icon: Warehouse },
-  { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true },
-]
-
-export function AppNav({
-  screen,
-  onChange,
-  isAdmin,
-}: {
-  screen: ScreenId
-  onChange: (id: ScreenId) => void
-  isAdmin: boolean
-}) {
-  const items = ITEMS.filter((i) => !i.adminOnly || isAdmin)
-
-  return (
-    <nav className="sticky top-16 z-10 border-b border-border bg-background/85 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl gap-1 overflow-x-auto px-4 md:px-6">
-        {items.map((item) => {
-          const active = screen === item.id
-          const Icon = item.icon
-          return (
-            <button
-              key={item.id}
-              onClick={() => onChange(item.id)}
-              className={cn(
-                "relative flex shrink-0 items-center gap-2 px-3 py-3 text-sm font-medium transition-colors md:px-4",
-                active ? "text-primary" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-              {active && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary" />}
-            </button>
-          )
-        })}
-      </div>
-    </nav>
-  )
-}
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6

@@ -2,14 +2,11 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
-<<<<<<< HEAD
 @source "../components";
 @source "../app";
 @source "../lib";
 @source "../hooks";
 
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -50,7 +47,6 @@
   --font-sans: var(--font-geist-sans);
   --font-serif: var(--font-playfair);
   --font-mono: var(--font-geist-mono);
-<<<<<<< HEAD
   --text-xs: 0.875rem;
   --text-xs--line-height: 1.4;
   --text-sm: 1rem;
@@ -65,7 +61,7 @@
   --radius-xl: calc(var(--radius) * 1.4);
 }
 
-/* Light theme — стиль Aura Dashboard (violet / indigo) */
+/* Light theme â ÑÑÐ¸Ð»Ñ Aura Dashboard (violet / indigo) */
 :root {
   color-scheme: light;
   --radius: 0.75rem;
@@ -105,7 +101,7 @@
   --sidebar-ring: oklch(0.62 0.18 275);
 }
 
-/* Dark theme — стиль Aura Dashboard */
+/* Dark theme â ÑÑÐ¸Ð»Ñ Aura Dashboard */
 .dark {
   color-scheme: dark;
   --background: oklch(0.16 0.018 270);
@@ -142,89 +138,6 @@
   --sidebar-accent-foreground: oklch(0.84 0.08 275);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.68 0.17 275);
-=======
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-}
-
-/* Light theme (secondary) */
-:root {
-  --radius: 0.625rem;
-  --background: oklch(0.98 0.006 85);
-  --foreground: oklch(0.22 0.01 60);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.01 60);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.01 60);
-  --primary: oklch(0.72 0.13 75);
-  --primary-foreground: oklch(0.2 0.02 60);
-  --secondary: oklch(0.95 0.008 85);
-  --secondary-foreground: oklch(0.28 0.01 60);
-  --muted: oklch(0.95 0.008 85);
-  --muted-foreground: oklch(0.52 0.01 60);
-  --accent: oklch(0.93 0.02 80);
-  --accent-foreground: oklch(0.28 0.02 60);
-  --destructive: oklch(0.58 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --success: oklch(0.6 0.13 150);
-  --success-foreground: oklch(0.98 0 0);
-  --border: oklch(0.9 0.008 80);
-  --input: oklch(0.9 0.008 80);
-  --ring: oklch(0.72 0.13 75);
-  --chart-1: oklch(0.72 0.13 75);
-  --chart-2: oklch(0.55 0.08 240);
-  --chart-3: oklch(0.6 0.13 150);
-  --chart-4: oklch(0.6 0.15 25);
-  --chart-5: oklch(0.55 0.02 60);
-  --sidebar: oklch(0.99 0.004 85);
-  --sidebar-foreground: oklch(0.22 0.01 60);
-  --sidebar-primary: oklch(0.72 0.13 75);
-  --sidebar-primary-foreground: oklch(0.2 0.02 60);
-  --sidebar-accent: oklch(0.95 0.008 85);
-  --sidebar-accent-foreground: oklch(0.28 0.01 60);
-  --sidebar-border: oklch(0.9 0.008 80);
-  --sidebar-ring: oklch(0.72 0.13 75);
-}
-
-/* Dark theme (primary — obsidian + gold) */
-.dark {
-  --background: oklch(0.17 0.008 60);
-  --foreground: oklch(0.94 0.008 80);
-  --card: oklch(0.21 0.009 60);
-  --card-foreground: oklch(0.94 0.008 80);
-  --popover: oklch(0.21 0.009 60);
-  --popover-foreground: oklch(0.94 0.008 80);
-  --primary: oklch(0.78 0.13 78);
-  --primary-foreground: oklch(0.18 0.01 60);
-  --secondary: oklch(0.26 0.01 60);
-  --secondary-foreground: oklch(0.94 0.008 80);
-  --muted: oklch(0.26 0.01 60);
-  --muted-foreground: oklch(0.68 0.01 70);
-  --accent: oklch(0.3 0.02 75);
-  --accent-foreground: oklch(0.94 0.008 80);
-  --destructive: oklch(0.62 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --success: oklch(0.68 0.14 150);
-  --success-foreground: oklch(0.16 0.01 60);
-  --border: oklch(0.29 0.01 60);
-  --input: oklch(0.29 0.01 60);
-  --ring: oklch(0.78 0.13 78);
-  --chart-1: oklch(0.78 0.13 78);
-  --chart-2: oklch(0.65 0.1 240);
-  --chart-3: oklch(0.68 0.14 150);
-  --chart-4: oklch(0.65 0.16 25);
-  --chart-5: oklch(0.7 0.02 70);
-  --sidebar: oklch(0.19 0.008 60);
-  --sidebar-foreground: oklch(0.94 0.008 80);
-  --sidebar-primary: oklch(0.78 0.13 78);
-  --sidebar-primary-foreground: oklch(0.18 0.01 60);
-  --sidebar-accent: oklch(0.26 0.01 60);
-  --sidebar-accent-foreground: oklch(0.94 0.008 80);
-  --sidebar-border: oklch(0.29 0.01 60);
-  --sidebar-ring: oklch(0.78 0.13 78);
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 @layer base {
@@ -233,7 +146,6 @@
   }
   body {
     @apply bg-background text-foreground;
-<<<<<<< HEAD
     font-size: 1rem;
     line-height: 1.5;
   }
@@ -251,7 +163,7 @@
   line-height: 1.4;
 }
 
-/* Скрытие скроллбара — для горизонтальной ленты форматов бирки */
+/* Ð¡ÐºÑÑÑÐ¸Ðµ ÑÐºÑÐ¾Ð»Ð»Ð±Ð°ÑÐ° â Ð´Ð»Ñ Ð³Ð¾ÑÐ¸Ð·Ð¾Ð½ÑÐ°Ð»ÑÐ½Ð¾Ð¹ Ð»ÐµÐ½ÑÑ ÑÐ¾ÑÐ¼Ð°ÑÐ¾Ð² Ð±Ð¸ÑÐºÐ¸ */
 .no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -260,7 +172,7 @@
   display: none;
 }
 
-/* GPU-ускорение для редактора этикеток */
+/* GPU-ÑÑÐºÐ¾ÑÐµÐ½Ð¸Ðµ Ð´Ð»Ñ ÑÐµÐ´Ð°ÐºÑÐ¾ÑÐ° ÑÑÐ¸ÐºÐµÑÐ¾Ðº */
 .label-canvas-gpu {
   transform: translate3d(0, 0, 0);
   will-change: transform;
@@ -278,10 +190,10 @@
   animation: scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 /* ---------------------------------------------------------------------------
- * Тонкие вспомогательные линии на мобильных экранах.
- * На плотных дисплеях 1px выглядит грубо, поэтому базовые границы
- * (утилиты без явной толщины) уменьшаются до hairline 0.5px.
- * Явные border-2 / border-4 и т.п. остаются без изменений.
+ * Ð¢Ð¾Ð½ÐºÐ¸Ðµ Ð²ÑÐ¿Ð¾Ð¼Ð¾Ð³Ð°ÑÐµÐ»ÑÐ½ÑÐµ Ð»Ð¸Ð½Ð¸Ð¸ Ð½Ð° Ð¼Ð¾Ð±Ð¸Ð»ÑÐ½ÑÑ ÑÐºÑÐ°Ð½Ð°Ñ.
+ * ÐÐ° Ð¿Ð»Ð¾ÑÐ½ÑÑ Ð´Ð¸ÑÐ¿Ð»ÐµÑÑ 1px Ð²ÑÐ³Ð»ÑÐ´Ð¸Ñ Ð³ÑÑÐ±Ð¾, Ð¿Ð¾ÑÑÐ¾Ð¼Ñ Ð±Ð°Ð·Ð¾Ð²ÑÐµ Ð³ÑÐ°Ð½Ð¸ÑÑ
+ * (ÑÑÐ¸Ð»Ð¸ÑÑ Ð±ÐµÐ· ÑÐ²Ð½Ð¾Ð¹ ÑÐ¾Ð»ÑÐ¸Ð½Ñ) ÑÐ¼ÐµÐ½ÑÑÐ°ÑÑÑÑ Ð´Ð¾ hairline 0.5px.
+ * Ð¯Ð²Ð½ÑÐµ border-2 / border-4 Ð¸ Ñ.Ð¿. Ð¾ÑÑÐ°ÑÑÑÑ Ð±ÐµÐ· Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ð¹.
  * ------------------------------------------------------------------------- */
 @media (max-width: 767px) {
   @supports (border-width: 0.5px) {
@@ -299,7 +211,7 @@
 
 
 /* ---------------------------------------------------------------------------
- * Aura Dashboard style: акценты, мягкие тени, градиент бренда
+ * Aura Dashboard style: Ð°ÐºÑÐµÐ½ÑÑ, Ð¼ÑÐ³ÐºÐ¸Ðµ ÑÐµÐ½Ð¸, Ð³ÑÐ°Ð´Ð¸ÐµÐ½Ñ Ð±ÑÐµÐ½Ð´Ð°
  * ------------------------------------------------------------------------- */
 @layer base {
   button { cursor: pointer; }
@@ -328,7 +240,3 @@
   font-size: 14px;
   font-weight: 650;
 }
-=======
-  }
-}
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6

@@ -1,11 +1,11 @@
 export function formatSom(value: number): string {
   return new Intl.NumberFormat("ru-RU", {
     maximumFractionDigits: 0,
-  }).format(Math.round(value || 0)) + " с"
+  }).format(Math.round(value || 0)) + " Ñ"
 }
 
 export function formatWeight(value: number): string {
-  return `${(value || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} г`
+  return `${(value || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} Ð³`
 }
 
 export function formatDate(value: string): string {
@@ -24,7 +24,6 @@ export function formatDateTime(value: string): string {
     minute: "2-digit",
   })
 }
-<<<<<<< HEAD
 export function formatDateTimeTotal(value: string): string {
   return new Date(value).toLocaleString('ru-RU', {
     day: '2-digit',
@@ -34,18 +33,16 @@ export function formatDateTimeTotal(value: string): string {
     minute: '2-digit',
   });
 }
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 export function roleLabel(role: string | null): string {
   switch (role) {
     case "super_admin":
-      return "Супер-админ"
+      return "Ð¡ÑÐ¿ÐµÑ-Ð°Ð´Ð¼Ð¸Ð½"
     case "admin":
-      return "Администратор"
+      return "ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ"
     case "seller":
-      return "Продавец"
+      return "ÐÑÐ¾Ð´Ð°Ð²ÐµÑ"
     default:
-      return "—"
+      return "â"
   }
 }

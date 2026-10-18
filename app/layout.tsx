@@ -2,11 +2,8 @@ import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
-<<<<<<< HEAD
 import { PwaProvider } from "@/components/pwa-provider"
 import { Toaster } from "@/components/ui/sonner"
-=======
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 import "./globals.css"
 
 const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
@@ -14,23 +11,14 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" })
 
 export const metadata: Metadata = {
-<<<<<<< HEAD
-  title: "Aura — Управление ювелирным магазином (Local-First)",
-  description: "Aura.gold.kg — касса, витрина, склад и отчёты для ювелирного бизнеса. Полная работа без интернета.",
-=======
-  title: "Aura — Управление ювелирным магазином",
-  description: "Aura.gold.kg — касса, витрина, склад и отчёты для ювелирного бизнеса",
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
+  title: "Aura â Ð£Ð¿ÑÐ°Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ²ÐµÐ»Ð¸ÑÐ½ÑÐ¼ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð¾Ð¼ (Local-First)",
+  description: "Aura.gold.kg â ÐºÐ°ÑÑÐ°, Ð²Ð¸ÑÑÐ¸Ð½Ð°, ÑÐºÐ»Ð°Ð´ Ð¸ Ð¾ÑÑÑÑÑ Ð´Ð»Ñ ÑÐ²ÐµÐ»Ð¸ÑÐ½Ð¾Ð³Ð¾ Ð±Ð¸Ð·Ð½ÐµÑÐ°. ÐÐ¾Ð»Ð½Ð°Ñ ÑÐ°Ð±Ð¾ÑÐ° Ð±ÐµÐ· Ð¸Ð½ÑÐµÑÐ½ÐµÑÐ°.",
   generator: "v0.app",
 }
 
 export const viewport: Viewport = {
   colorScheme: "dark light",
-<<<<<<< HEAD
   themeColor: "#1c1830",
-=======
-  themeColor: "#232019",
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 export default function RootLayout({
@@ -48,13 +36,9 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased bg-background text-foreground">
-<<<<<<< HEAD
         <PwaProvider />
         <Suspense fallback={null}>{children}</Suspense>
         <Toaster position="top-center" richColors />
-=======
-        <Suspense fallback={null}>{children}</Suspense>
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>

@@ -1,18 +1,14 @@
 "use client"
 
 /**
- * Клиентское сжатие изображений в WebP.
- * Каждый файл (загруженный или снятый камерой) ужимается до <= MAX_BYTES
- * перед отправкой в Supabase Storage.
+ * ÐÐ»Ð¸ÐµÐ½ÑÑÐºÐ¾Ðµ ÑÐ¶Ð°ÑÐ¸Ðµ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ð¹ Ð² WebP.
+ * ÐÐ°Ð¶Ð´ÑÐ¹ ÑÐ°Ð¹Ð» (Ð·Ð°Ð³ÑÑÐ¶ÐµÐ½Ð½ÑÐ¹ Ð¸Ð»Ð¸ ÑÐ½ÑÑÑÐ¹ ÐºÐ°Ð¼ÐµÑÐ¾Ð¹) ÑÐ¶Ð¸Ð¼Ð°ÐµÑÑÑ Ð´Ð¾ <= MAX_BYTES
+ * Ð¿ÐµÑÐµÐ´ Ð¾ÑÐ¿ÑÐ°Ð²ÐºÐ¾Ð¹ Ð² Supabase Storage.
  */
 
-export const MAX_BYTES = 250 * 1024 // 250 Кб
-<<<<<<< HEAD
+export const MAX_BYTES = 250 * 1024 // 250 ÐÐ±
 export const MAX_SIDE = 1000 // Compressed to ~1000px WebP for cloud
 export const THUMB_SIDE = 200 // Local preview ~200px
-=======
-const MAX_SIDE = 1600
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 async function loadBitmap(file: Blob): Promise<{ width: number; height: number; draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void }> {
   if (typeof createImageBitmap === "function") {
@@ -28,7 +24,7 @@ async function loadBitmap(file: Blob): Promise<{ width: number; height: number; 
     const img = await new Promise<HTMLImageElement>((resolve, reject) => {
       const el = new Image()
       el.onload = () => resolve(el)
-      el.onerror = () => reject(new Error("Не удалось прочитать изображение"))
+      el.onerror = () => reject(new Error("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¿ÑÐ¾ÑÐ¸ÑÐ°ÑÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ"))
       el.src = url
     })
     return {
@@ -45,7 +41,7 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/webp", quality))
 }
 
-/** Сжимает изображение до webp размером не более MAX_BYTES. */
+/** Ð¡Ð¶Ð¸Ð¼Ð°ÐµÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ Ð´Ð¾ webp ÑÐ°Ð·Ð¼ÐµÑÐ¾Ð¼ Ð½Ðµ Ð±Ð¾Ð»ÐµÐµ MAX_BYTES. */
 export async function compressToWebp(file: Blob, maxBytes = MAX_BYTES): Promise<Blob> {
   const src = await loadBitmap(file)
 
@@ -71,12 +67,12 @@ export async function compressToWebp(file: Blob, maxBytes = MAX_BYTES): Promise<
     else scale *= 0.8
   }
 
-  if (!out) throw new Error("Не удалось сжать изображение")
+  if (!out) throw new Error("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ ÑÐ¶Ð°ÑÑ Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ")
   return out
 }
 
 export function humanSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} Б`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Кб`
-  return `${(bytes / 1024 / 1024).toFixed(1)} Мб`
+  if (bytes < 1024) return `${bytes} Ð`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} ÐÐ±`
+  return `${(bytes / 1024 / 1024).toFixed(1)} ÐÐ±`
 }

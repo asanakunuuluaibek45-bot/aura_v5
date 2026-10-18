@@ -1,6 +1,5 @@
 "use server"
 
-<<<<<<< HEAD
 import { revalidatePath } from "next/cache"
 import type { CashOperation, CashReasonPreset, CashSource } from "@/lib/types"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"
@@ -11,21 +10,6 @@ async function requireProfile() {
   if (!user) throw new Error("Unauthorized")
   if (!profile || profile.status !== "approved") throw new Error("Not approved")
   return { supabase, user, profile, shopId }
-=======
-import { createClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache"
-import type { CashOperation, CashReasonPreset } from "@/lib/types"
-
-async function requireProfile() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) throw new Error("Unauthorized")
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-  if (!profile || profile.status !== "approved") throw new Error("Not approved")
-  return { supabase, user, profile }
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 async function requireAdmin() {
@@ -39,20 +23,15 @@ export type CashData = {
   presets: CashReasonPreset[]
 }
 
-/** Операции с кассой и шаблоны причин текущего магазина. */
+/** ÐÐ¿ÐµÑÐ°ÑÐ¸Ð¸ Ñ ÐºÐ°ÑÑÐ¾Ð¹ Ð¸ ÑÐ°Ð±Ð»Ð¾Ð½Ñ Ð¿ÑÐ¸ÑÐ¸Ð½ ÑÐµÐºÑÑÐµÐ³Ð¾ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð°. */
 export async function getCashData(): Promise<CashData> {
-<<<<<<< HEAD
   const { supabase, shopId } = await requireProfile()
   if (!shopId) return { operations: [], presets: [] }
-=======
-  const { supabase, profile } = await requireProfile()
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
   const [ops, presets] = await Promise.all([
     supabase
       .from("cash_operations")
       .select("*")
-<<<<<<< HEAD
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .range(0, 199),
@@ -60,36 +39,27 @@ export async function getCashData(): Promise<CashData> {
       .from("cash_reason_presets")
       .select("*")
       .eq("shop_id", shopId)
-=======
-      .eq("shop_id", profile.shop_id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("cash_reason_presets")
-      .select("*")
-      .eq("shop_id", profile.shop_id)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
       .order("created_at", { ascending: false }),
   ])
 
-  // Таблиц может ещё не быть, пока не выполнена миграция 003 — не роняем экран.
+  // Ð¢Ð°Ð±Ð»Ð¸Ñ Ð¼Ð¾Ð¶ÐµÑ ÐµÑÑ Ð½Ðµ Ð±ÑÑÑ, Ð¿Ð¾ÐºÐ° Ð½Ðµ Ð²ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð° Ð¼Ð¸Ð³ÑÐ°ÑÐ¸Ñ 003 â Ð½Ðµ ÑÐ¾Ð½ÑÐµÐ¼ ÑÐºÑÐ°Ð½.
   return {
     operations: (ops.data as CashOperation[]) ?? [],
     presets: (presets.data as CashReasonPreset[]) ?? [],
   }
 }
 
-/** Внесение, изъятие или инкассация средств. Причина обязательна. Только администратор. */
+/** ÐÐ½ÐµÑÐµÐ½Ð¸Ðµ, Ð¸Ð·ÑÑÑÐ¸Ðµ Ð¸Ð»Ð¸ Ð¸Ð½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ ÑÑÐµÐ´ÑÑÐ². ÐÑÐ¸ÑÐ¸Ð½Ð° Ð¾Ð±ÑÐ·Ð°ÑÐµÐ»ÑÐ½Ð°. Ð¢Ð¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ. */
 export async function createCashOperation(input: {
   type: "income" | "outcome" | "collection"
   amount: number
-<<<<<<< HEAD
-  /** Источник средств: наличные, электронные или оба. */
+  /** ÐÑÑÐ¾ÑÐ½Ð¸Ðº ÑÑÐµÐ´ÑÑÐ²: Ð½Ð°Ð»Ð¸ÑÐ½ÑÐµ, ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐµ Ð¸Ð»Ð¸ Ð¾Ð±Ð°. */
   source?: CashSource
   amount_cash?: number
   amount_electronic?: number
   reason: string
   savePreset?: boolean
-  /** Списание за лом проводится продавцом, а не только администратором. */
+  /** Ð¡Ð¿Ð¸ÑÐ°Ð½Ð¸Ðµ Ð·Ð° Ð»Ð¾Ð¼ Ð¿ÑÐ¾Ð²Ð¾Ð´Ð¸ÑÑÑ Ð¿ÑÐ¾Ð´Ð°Ð²ÑÐ¾Ð¼, Ð° Ð½Ðµ ÑÐ¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾ÑÐ¾Ð¼. */
   allowSeller?: boolean
   /** Keep this UUID unchanged when retrying after a network failure. */
   client_op_id?: string
@@ -97,42 +67,28 @@ export async function createCashOperation(input: {
   const { supabase, shopId } = input.allowSeller ? await requireProfile() : await requireAdmin()
   const clientOpId = resolveClientOperationId(input.client_op_id)
 
-  // Проверка на привязку магазина
+  // ÐÑÐ¾Ð²ÐµÑÐºÐ° Ð½Ð° Ð¿ÑÐ¸Ð²ÑÐ·ÐºÑ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð°
   if (!shopId) {
-    throw new Error("Ваш аккаунт не привязан ни к одному магазину")
+    throw new Error("ÐÐ°Ñ Ð°ÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿ÑÐ¸Ð²ÑÐ·Ð°Ð½ Ð½Ð¸ Ðº Ð¾Ð´Ð½Ð¾Ð¼Ñ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ñ")
   }
 
   const amount = Math.round(Number(input.amount) * 100) / 100
-=======
-  reason: string
-  savePreset?: boolean
-}) {
-  const { supabase, user, profile } = await requireAdmin()
-
-  // Проверка на привязку магазина
-  if (!profile.shop_id) {
-    throw new Error("Ваш аккаунт не привязан ни к одному магазину")
-  }
-
-  const amount = Number(input.amount)
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   const reason = (input.reason ?? "").trim()
   
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Укажите сумму больше нуля")
-  if (!reason) throw new Error("Причина / цель операции обязательна")
-  if (reason.length > 300) throw new Error("Причина слишком длинная (максимум 300 символов)")
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Ð£ÐºÐ°Ð¶Ð¸ÑÐµ ÑÑÐ¼Ð¼Ñ Ð±Ð¾Ð»ÑÑÐµ Ð½ÑÐ»Ñ")
+  if (!reason) throw new Error("ÐÑÐ¸ÑÐ¸Ð½Ð° / ÑÐµÐ»Ñ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸ Ð¾Ð±ÑÐ·Ð°ÑÐµÐ»ÑÐ½Ð°")
+  if (reason.length > 300) throw new Error("ÐÑÐ¸ÑÐ¸Ð½Ð° ÑÐ»Ð¸ÑÐºÐ¾Ð¼ Ð´Ð»Ð¸Ð½Ð½Ð°Ñ (Ð¼Ð°ÐºÑÐ¸Ð¼ÑÐ¼ 300 ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð²)")
   
-  // Проверяем разрешенные типы операций с учетом инкассации
+  // ÐÑÐ¾Ð²ÐµÑÑÐµÐ¼ ÑÐ°Ð·ÑÐµÑÐµÐ½Ð½ÑÐµ ÑÐ¸Ð¿Ñ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¹ Ñ ÑÑÐµÑÐ¾Ð¼ Ð¸Ð½ÐºÐ°ÑÑÐ°ÑÐ¸Ð¸
   if (input.type !== "income" && input.type !== "outcome" && input.type !== "collection") {
-    throw new Error("Неверный тип операции")
+    throw new Error("ÐÐµÐ²ÐµÑÐ½ÑÐ¹ ÑÐ¸Ð¿ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸")
   }
 
-<<<<<<< HEAD
-  // ------------------------------------------------- источник и его разбивка
-  // Инкассация всегда переводит наличные в электронные средства.
+  // ------------------------------------------------- Ð¸ÑÑÐ¾ÑÐ½Ð¸Ðº Ð¸ ÐµÐ³Ð¾ ÑÐ°Ð·Ð±Ð¸Ð²ÐºÐ°
+  // ÐÐ½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ Ð²ÑÐµÐ³Ð´Ð° Ð¿ÐµÑÐµÐ²Ð¾Ð´Ð¸Ñ Ð½Ð°Ð»Ð¸ÑÐ½ÑÐµ Ð² ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐµ ÑÑÐµÐ´ÑÑÐ²Ð°.
   const source: CashSource = input.type === "collection" ? "cash" : (input.source ?? "cash")
   if (source !== "cash" && source !== "electronic" && source !== "mixed") {
-    throw new Error("Неверный источник средств")
+    throw new Error("ÐÐµÐ²ÐµÑÐ½ÑÐ¹ Ð¸ÑÑÐ¾ÑÐ½Ð¸Ðº ÑÑÐµÐ´ÑÑÐ²")
   }
 
   let fromCash = source === "cash" ? amount : 0
@@ -141,11 +97,11 @@ export async function createCashOperation(input: {
     fromCash = Math.round(Number(input.amount_cash ?? 0) * 100) / 100
     fromElectronic = Math.round(Number(input.amount_electronic ?? 0) * 100) / 100
     if (!Number.isFinite(fromCash) || !Number.isFinite(fromElectronic)) {
-      throw new Error("Укажите корректные суммы оплаты")
+      throw new Error("Ð£ÐºÐ°Ð¶Ð¸ÑÐµ ÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐµ ÑÑÐ¼Ð¼Ñ Ð¾Ð¿Ð»Ð°ÑÑ")
     }
-    if (fromCash < 0 || fromElectronic < 0) throw new Error("Суммы не могут быть отрицательными")
+    if (fromCash < 0 || fromElectronic < 0) throw new Error("Ð¡ÑÐ¼Ð¼Ñ Ð½Ðµ Ð¼Ð¾Ð³ÑÑ Ð±ÑÑÑ Ð¾ÑÑÐ¸ÑÐ°ÑÐµÐ»ÑÐ½ÑÐ¼Ð¸")
     if (Math.round(fromCash * 100) + Math.round(fromElectronic * 100) !== Math.round(amount * 100)) {
-      throw new Error("Сумма наличных и электронных должна совпадать с общей суммой")
+      throw new Error("Ð¡ÑÐ¼Ð¼Ð° Ð½Ð°Ð»Ð¸ÑÐ½ÑÑ Ð¸ ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÑ Ð´Ð¾Ð»Ð¶Ð½Ð° ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÑÑ Ñ Ð¾Ð±ÑÐµÐ¹ ÑÑÐ¼Ð¼Ð¾Ð¹")
     }
   }
 
@@ -160,51 +116,21 @@ export async function createCashOperation(input: {
     _allow_seller: input.allowSeller === true,
     _save_preset: input.savePreset === true,
   })
-  if (error) throw new Error(`Не удалось провести кассовую операцию: ${error.message}`)
+  if (error) throw new Error(`ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¿ÑÐ¾Ð²ÐµÑÑÐ¸ ÐºÐ°ÑÑÐ¾Ð²ÑÑ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ñ: ${error.message}`)
   if (result?.accepted !== true) {
-    throw new Error("Не удалось подтвердить кассовую операцию. Повторите с тем же идентификатором.")
+    throw new Error("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ´Ð¸ÑÑ ÐºÐ°ÑÑÐ¾Ð²ÑÑ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ñ. ÐÐ¾Ð²ÑÐ¾ÑÐ¸ÑÐµ Ñ ÑÐµÐ¼ Ð¶Ðµ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾ÑÐ¾Ð¼.")
   }
 
   revalidatePath("/crm")
   return { ok: true, operationId: result.operation_id, clientOpId, duplicate: result.duplicate === true }
-=======
-  const { error } = await supabase.from("cash_operations").insert({
-    shop_id: profile.shop_id,
-    created_by: user.id,
-    author_name: profile.full_name,
-    type: input.type,
-    amount,
-    reason,
-  })
-  
-  if (error) throw error
-
-  if (input.savePreset) {
-    await supabase
-      .from("cash_reason_presets")
-      .insert({ shop_id: profile.shop_id, created_by: user.id, text: reason })
-  }
-
-  revalidatePath("/")
-  return { ok: true }
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
-/** Удалить шаблон причины. Только администратор. */
+/** Ð£Ð´Ð°Ð»Ð¸ÑÑ ÑÐ°Ð±Ð»Ð¾Ð½ Ð¿ÑÐ¸ÑÐ¸Ð½Ñ. Ð¢Ð¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ. */
 export async function deleteCashReasonPreset(id: string) {
-<<<<<<< HEAD
   const { supabase, shopId } = await requireAdmin()
-  if (!shopId) throw new Error("Ваш аккаунт не привязан ни к одному магазину")
+  if (!shopId) throw new Error("ÐÐ°Ñ Ð°ÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿ÑÐ¸Ð²ÑÐ·Ð°Ð½ Ð½Ð¸ Ðº Ð¾Ð´Ð½Ð¾Ð¼Ñ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ñ")
   const { error } = await supabase.from("cash_reason_presets").delete().eq("id", id).eq("shop_id", shopId)
   if (error) throw error
   revalidatePath("/crm")
   return { ok: true }
 }
-=======
-  const { supabase } = await requireAdmin()
-  const { error } = await supabase.from("cash_reason_presets").delete().eq("id", id)
-  if (error) throw error
-  revalidatePath("/")
-  return { ok: true }
-}
->>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
