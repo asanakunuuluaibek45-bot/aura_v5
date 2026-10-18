@@ -15,8 +15,8 @@ const CashHistory = dynamic(() => import("./cash-history").then((mod) => mod.Cas
 const CashOperationDialog = dynamic(() => import("./cash-operation-dialog").then((mod) => mod.CashOperationDialog))
 
 /**
- * Ð¡Ð²Ð¾Ð´Ð½ÑÐµ Ð¿Ð¾ÐºÐ°Ð·Ð°ÑÐµÐ»Ð¸ ÐºÐ°ÑÑÑ, Ð¸Ð½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ Ð¸ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸ Ð²Ð½ÐµÑÐµÐ½Ð¸Ñ/Ð¸Ð·ÑÑÑÐ¸Ñ.
- * ÐÐ½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ Ð²ÑÐ²Ð¾Ð´Ð¸Ñ ÑÑÐµÐ´ÑÑÐ²Ð° Ð¸Ð· ÐºÐ°ÑÑÑ, Ð¿Ð¾ÑÑÐ¾Ð¼Ñ ÑÐ¼ÐµÐ½ÑÑÐ°ÐµÑ Ð²ÑÐ±ÑÐ°Ð½Ð½ÑÐ¹ Ð¸ÑÑÐ¾ÑÐ½Ð¸Ðº.
+ * Сводные показатели кассы, инкассация и операции внесения/изъятия.
+ * Инкассация выводит средства из кассы, поэтому уменьшает выбранный источник.
  */
 export function CashPanel({
   sales,
@@ -61,7 +61,7 @@ export function CashPanel({
     return { ...b, count: rows.length }
   }, [confirmedSales, confirmedOperations, range])
 
-  // ÐÐ°Ð»Ð°Ð½ÑÑ Ð·Ð° Ð²ÑÑ Ð²ÑÐµÐ¼Ñ â Ð¸Ð¼ÐµÐ½Ð½Ð¾ Ð¸Ð· Ð½Ð¸Ñ Ð²ÐµÐ´ÑÑÑÑ ÑÐ¿Ð¸ÑÐ°Ð½Ð¸Ñ.
+  // Балансы за всё время — именно из них ведутся списания.
   const balances = useMemo(
     () => computeBalances(confirmedSales, confirmedOperations),
     [confirmedSales, confirmedOperations],
@@ -69,19 +69,19 @@ export function CashPanel({
 
   const authors = useMemo(() => {
     const map = new Map<string, string>()
-    for (const o of operations) if (o.created_by) map.set(o.created_by, o.author_name ?? "â")
+    for (const o of operations) if (o.created_by) map.set(o.created_by, o.author_name ?? "—")
     return [...map].map(([id, name]) => ({ id, name }))
   }, [operations])
 
   const handleCollection = () => {
     if (balances.cash <= 0) {
-      toast.error("Ð ÐºÐ°ÑÑÐµ Ð½ÐµÑ Ð½Ð°Ð»Ð¸ÑÐ½ÑÑ Ð´Ð»Ñ Ð¸Ð½ÐºÐ°ÑÑÐ°ÑÐ¸Ð¸")
+      toast.error("В кассе нет наличных для инкассации")
       return
     }
     setDialog({
       type: "collection",
       amount: String(Math.round(balances.cash)),
-      reason: "ÐÐ½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ Ð² Ð±Ð°Ð½Ðº",
+      reason: "Инкассация в банк",
     })
   }
 
@@ -93,20 +93,20 @@ export function CashPanel({
             <Wallet className="h-5 w-5" />
           </span>
           <div>
-            <div className="text-xs text-muted-foreground">ÐÐ°ÑÑÐ¾Ð²ÑÐ¹ Ð±Ð°Ð»Ð°Ð½Ñ</div>
-            {/* ÐÑÐ¾Ð´Ð°Ð²ÐµÑ Ð²Ð¸Ð´Ð¸Ñ ÑÐ¾Ð»ÑÐºÐ¾ Ð½Ð°Ð»Ð¸ÑÐ½ÑÐµ; Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ Ð²Ð¸Ð´Ð¸Ñ Ð¿Ð¾Ð»Ð½ÑÐ¹ Ð±Ð°Ð»Ð°Ð½Ñ */}
+            <div className="text-xs text-muted-foreground">Кассовый баланс</div>
+            {/* Продавец видит только наличные; администратор видит полный баланс */}
             {isAdmin ? (
               <>
                 <div className="font-mono text-2xl font-semibold text-primary">{formatSom(balances.total)}</div>
                 <div className="text-[11px] text-muted-foreground">
-                  Ð½Ð°Ð»Ð¸ÑÐ½ÑÐµ: <span className="font-mono">{formatSom(balances.cash)}</span> Â· ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐµ:{" "}
+                  наличные: <span className="font-mono">{formatSom(balances.cash)}</span> · электронные:{" "}
                   <span className="font-mono">{formatSom(balances.electronic)}</span>
                 </div>
               </>
             ) : (
               <>
                 <div className="font-mono text-2xl font-semibold text-primary">{formatSom(balances.cash)}</div>
-                <div className="text-[11px] text-muted-foreground">Ð½Ð°Ð»Ð¸ÑÐ½ÑÐµ Ð² ÐºÐ°ÑÑÐµ</div>
+                <div className="text-[11px] text-muted-foreground">наличные в кассе</div>
               </>
             )}
           </div>
@@ -117,18 +117,18 @@ export function CashPanel({
               variant="outline"
               className="border-primary/50 bg-transparent text-primary hover:bg-primary/10"
               onClick={handleCollection}
-              title="ÐÐ½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ: Ð¿ÐµÑÐµÐ²Ð¾Ð´ Ð½Ð°Ð»Ð¸ÑÐ½ÑÑ Ð² ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐµ ÑÑÐµÐ´ÑÑÐ²Ð°"
+              title="Инкассация: перевод наличных в электронные средства"
             >
               <ShieldCheck className="mr-1 h-4 w-4" />
-              ÐÐ½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ
+              Инкассация
             </Button>
             <Button variant="outline" className="bg-transparent" onClick={() => setDialog({ type: "outcome" })}>
               <ArrowUpRight className="mr-1 h-4 w-4" />
-              ÐÐ·ÑÑÑÑ
+              Изъять
             </Button>
             <Button onClick={() => setDialog({ type: "income" })}>
               <ArrowDownLeft className="mr-1 h-4 w-4" />
-              ÐÐ½ÐµÑÑÐ¸
+              Внести
             </Button>
           </div>
         )}
@@ -154,11 +154,11 @@ export function CashPanel({
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Metric icon={<Banknote className="h-4 w-4" />} label="ÐÐ°Ð»Ð¸ÑÐ½ÑÐµ" value={stats.cash} />
-            <Metric icon={<CreditCard className="h-4 w-4" />} label="Ð­Ð»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐµ" value={stats.electronic} />
+            <Metric icon={<Banknote className="h-4 w-4" />} label="Наличные" value={stats.cash} />
+            <Metric icon={<CreditCard className="h-4 w-4" />} label="Электронные" value={stats.electronic} />
             <Metric
               icon={<Wallet className="h-4 w-4" />}
-              label={`ÐÐ±Ð¾ÑÐ¾Ñ Â· ${stats.count} ÑÐµÐº.`}
+              label={`Оборот · ${stats.count} чек.`}
               value={stats.total}
               accent
             />

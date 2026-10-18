@@ -57,8 +57,8 @@ export function AppHeader({
 
   const canSwitch = profile.role === "super_admin" || profile.role === "admin"
   const fullShopName = onlineOnly
-    ? currentShopName ?? "ÐÐ°Ð³Ð°Ð·Ð¸Ð½"
-    : currentShopName ?? profile.shop_name ?? "ÐÐ°Ð³Ð°Ð·Ð¸Ð½"
+    ? currentShopName ?? "Магазин"
+    : currentShopName ?? profile.shop_name ?? "Магазин"
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
@@ -67,13 +67,13 @@ export function AppHeader({
           variant="ghost"
           size="icon"
           className="h-10 w-10 shrink-0"
-          aria-label="ÐÑÐºÑÑÑÑ Ð¼ÐµÐ½Ñ"
+          aria-label="Открыть меню"
           onClick={onOpenNav}
         >
           <Menu className="h-5 w-5" />
         </Button>
 
-        {/* ÐÐ½Ð¾Ð¿ÐºÐ° Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð° Ð¸ Ð²ÑÐ¿Ð»ÑÐ²Ð°ÑÑÐµÐµ Ð¾ÐºÐ½Ð¾ Ð±ÐµÐ· ÑÑÐ¾ÑÐ¾Ð½Ð½Ð¸Ñ Ð±Ð¸Ð±Ð»Ð¸Ð¾ÑÐµÐº */}
+        {/* Кнопка магазина и всплывающее окно без сторонних библиотек */}
         <div className="relative">
           <button
             type="button"
@@ -86,7 +86,7 @@ export function AppHeader({
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
           </button>
 
-          {/* ÐÑÐ¿Ð»ÑÐ²Ð°ÑÑÐ¸Ð¹ Ð±Ð»Ð¾Ðº Ñ Ð¿Ð¾Ð»Ð½ÑÐ¼ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸ÐµÐ¼ */}
+          {/* Всплывающий блок с полным названием */}
           {showShopModal && (
             <>
               <div
@@ -98,7 +98,7 @@ export function AppHeader({
                   <div className="flex items-start gap-2.5">
                     <Store className="h-5 w-5 shrink-0 text-primary mt-0.5" />
                     <div className="space-y-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">Ð¢ÐµÐºÑÑÐ¸Ð¹ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½</p>
+                      <p className="text-[11px] font-medium text-muted-foreground">Текущий магазин</p>
                       <p className="text-sm font-semibold leading-snug break-words">
                         {fullShopName}
                       </p>
@@ -122,33 +122,33 @@ export function AppHeader({
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {onlineOnly ? (
             <Badge variant="outline" className="hidden sm:inline-flex text-[10px] text-primary">
-              Ð¢Ð¾Ð»ÑÐºÐ¾ Ð¾Ð½Ð»Ð°Ð¹Ð½
+              Только онлайн
             </Badge>
           ) : (
             <SyncIndicator />
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 bg-transparent" aria-label="ÐÑÑÑÑÐ¾Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ðµ">
+              <Button variant="outline" size="sm" className="gap-1.5 bg-transparent" aria-label="Быстрое создание">
                 <Plus className="h-4 w-4" />
-                <span className="hidden lg:inline">Ð¡Ð¾Ð·Ð´Ð°ÑÑ</span>
+                <span className="hidden lg:inline">Создать</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>ÐÑÑÑÑÐ¾Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ðµ</DropdownMenuLabel>
+              <DropdownMenuLabel>Быстрое создание</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => goTo("kassa")}>
-                <ShoppingCart className="mr-2 h-4 w-4" /> ÐÐ¾Ð²Ð°Ñ Ð¿ÑÐ¾Ð´Ð°Ð¶Ð°
+                <ShoppingCart className="mr-2 h-4 w-4" /> Новая продажа
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => goTo("sklad")}>
-                <PackagePlus className="mr-2 h-4 w-4" /> ÐÐ¾Ð±Ð°Ð²Ð¸ÑÑ ÑÐ¾Ð²Ð°Ñ
+                <PackagePlus className="mr-2 h-4 w-4" /> Добавить товар
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => goTo("clients")}>
-                <Users className="mr-2 h-4 w-4" /> ÐÐ¾Ð±Ð°Ð²Ð¸ÑÑ ÐºÐ»Ð¸ÐµÐ½ÑÐ°
+                <Users className="mr-2 h-4 w-4" /> Добавить клиента
               </DropdownMenuItem>
               {canSwitch && (
                 <DropdownMenuItem onClick={() => goTo("suppliers")}>
-                  <Truck className="mr-2 h-4 w-4" /> ÐÐ¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ¸
+                  <Truck className="mr-2 h-4 w-4" /> Поставщики
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>

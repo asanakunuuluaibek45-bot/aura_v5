@@ -29,15 +29,15 @@ export type Customer = {
   whatsapp: string | null
   instagram: string | null
   email: string | null
-  /** Ð¦ÐµÐ»Ð¾ÑÐ¸ÑÐ»ÐµÐ½Ð½ÑÐµ Ð±Ð¾Ð½ÑÑÐ½ÑÐµ Ð±Ð°Ð»Ð»Ñ (INTEGER Ð² ÐÐ). */
+  /** Целочисленные бонусные баллы (INTEGER в БД). */
   bonus_points: number
-  /** true â ÐºÐ»Ð¸ÐµÐ½Ñ Ð² ÑÑÑÐ½Ð¾Ð¼ ÑÐ¿Ð¸ÑÐºÐµ. */
+  /** true — клиент в чёрном списке. */
   is_blacklisted: boolean
-  /** ÐÐµÐ½Ð¾ÑÐ¼Ð°Ð»Ð¸Ð·Ð¾Ð²Ð°Ð½Ð½ÑÐ¹ ÑÑÑÑÑÐ¸Ðº Ð¿Ð¾ÐºÑÐ¿Ð¾Ðº (ÑÐ¸Ð½ÑÑÐ¾Ð½Ð¸Ð·Ð¸ÑÑÐµÑÑÑ Ð¿ÑÐ¸ checkout). */
+  /** Денормализованный счётчик покупок (синхронизируется при checkout). */
   purchase_count: number
-  /** Ð¡ÑÐ¼Ð¼Ð°ÑÐ½Ð°Ñ Ð²ÑÑÑÑÐºÐ° Ð¿Ð¾ ÐºÐ»Ð¸ÐµÐ½ÑÑ. */
+  /** Суммарная выручка по клиенту. */
   total_spent: number
-  /** ÐÐ°ÑÐ° Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐ¹ Ð¿Ð¾ÐºÑÐ¿ÐºÐ¸. */
+  /** Дата последней покупки. */
   last_purchase_at: string | null
   created_at: string
   updated_at?: string | null
@@ -45,19 +45,19 @@ export type Customer = {
   client_op_id?: string | null
 }
 
-/** Ð¡ÑÐ°ÑÑÑ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð°. */
+/** Статус подписки магазина. */
 export type SubscriptionStatus = "trial" | "active" | "past_due" | "frozen" | "cancelled"
 
-/** Ð§ÐµÐ»Ð¾Ð²ÐµÐºÐ¾ÑÐ¸ÑÐ°ÐµÐ¼ÑÐµ Ð¼ÐµÑÐºÐ¸ ÑÑÐ°ÑÑÑÐ¾Ð² Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸. */
+/** Человекочитаемые метки статусов подписки. */
 export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
-  trial:     "ÐÑÐ¾Ð±Ð½ÑÐ¹",
-  active:    "ÐÐºÑÐ¸Ð²Ð½Ð°",
-  past_due:  "ÐÑÐ¾ÑÑÐ¾ÑÐµÐ½Ð°",
-  frozen:    "ÐÐ°Ð¼Ð¾ÑÐ¾Ð¶ÐµÐ½Ð°",
-  cancelled: "ÐÑÐ¼ÐµÐ½ÐµÐ½Ð°",
+  trial:     "Пробный",
+  active:    "Активна",
+  past_due:  "Просрочена",
+  frozen:    "Заморожена",
+  cancelled: "Отменена",
 }
 
-/** ÐÐ°Ð¿Ð¸ÑÑ Ð½Ð°ÑÑÑÐ¾ÐµÐº Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð° (Ð²ÐºÐ»ÑÑÐ°Ñ Ð±Ð¸Ð»Ð»Ð¸Ð½Ð³). */
+/** Запись настроек магазина (включая биллинг). */
 export type ShopSettings = {
   shop_id: string
   shop_name: string | null
@@ -72,7 +72,7 @@ export type ShopSettings = {
   notes: string | null
 }
 
-/** ÐÑÐ¾ÑÐ¸Ð»Ñ Ñ Ð¿Ð¾Ð»ÐµÐ¼ Ð¸Ð¼Ð¿ÐµÑÑÐ¾Ð½Ð°ÑÐ¸Ð¸ (ÑÐ¾Ð»ÑÐºÐ¾ Ð´Ð»Ñ super_admin). */
+/** Профиль с полем имперсонации (только для super_admin). */
 export type ProfileWithImpersonation = Profile & {
   impersonated_shop_id: string | null
 }
@@ -80,29 +80,29 @@ export type ProfileWithImpersonation = Profile & {
 export type Product = {
   id: string
   shop_id: string
-  /** ÐÐ¾ÑÐ¾ÑÐºÐ¸Ð¹ ÑÐ¸ÑÐ»Ð¾Ð²Ð¾Ð¹ ID Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð° Ð´Ð»Ñ QR-ÑÑÑÐ»Ð¾Ðº (seq_id Ð¸Ð· shop_settings). */
+  /** Короткий числовой ID магазина для QR-ссылок (seq_id из shop_settings). */
   shop_seq_id?: number | null
   created_by: string
   name: string
   category: string | null
   metal: string | null
   metal_color: string | null
-  /** ÐÐ¾Ð»Ð¾Ð½ÐºÐ° purity ÑÐ´Ð°Ð»ÐµÐ½Ð° Ð¸Ð· ÐÐ â Ð¿ÑÐ¾Ð±Ð° Ð²ÑÑÐ¸ÑÐ»ÑÐµÑÑÑ Ð¸Ð· metal (purityFromMetal). */
+  /** Колонка purity удалена из БД — проба вычисляется из metal (purityFromMetal). */
   weight: number
   size: string | null
   sku: string | null
-  /** ÐÐ¾ÑÑÐ´ÐºÐ¾Ð²ÑÐ¹ Ð½Ð¾Ð¼ÐµÑ Ð°ÑÑÐ¸ÐºÑÐ»Ð° Ð²Ð½ÑÑÑÐ¸ Ð¿ÑÐµÑÐ¸ÐºÑÐ° (1â99999). */
+  /** Порядковый номер артикула внутри префикса (1–99999). */
   article_seq?: number | null
   is_hidden: boolean | null
   purchase_price: number
   /**
-   * ÐÐ°ÐºÑÐ¿Ð¾ÑÐ½Ð°Ñ ÑÐµÐ½Ð°, ÐºÐ¾ÑÐ¾ÑÑÑ Ð²Ð¸Ð´Ð¸Ñ Ð¿ÑÐ¾Ð´Ð°Ð²ÐµÑ (Ð¼Ð¾Ð¶ÐµÑ Ð¾ÑÐ»Ð¸ÑÐ°ÑÑÑÑ Ð¾Ñ ÑÐµÐ°Ð»ÑÐ½Ð¾Ð¹).
-   * ÐÐµÑÐµÐ¸Ð¼ÐµÐ½Ð¾Ð²Ð°Ð½Ð¾ Ð¸Ð· purchase_price_seller â purchase_price_visible (v20).
+   * Закупочная цена, которую видит продавец (может отличаться от реальной).
+   * Переименовано из purchase_price_seller → purchase_price_visible (v20).
    */
   purchase_price_visible: number | null
   /**
-   * Ð¦ÐµÐ½Ð° Ð·Ð° Ð³ÑÐ°Ð¼Ð¼ Ð·Ð°ÐºÑÐ¿ÐºÐ¸ Ð´Ð»Ñ Ð¿ÑÐ¾Ð´Ð°Ð²ÑÐ°.
-   * ÐÐµÑÐµÐ¸Ð¼ÐµÐ½Ð¾Ð²Ð°Ð½Ð¾ Ð¸Ð· price_per_gram_purchase_seller â price_per_gram_purchase_visible (v20).
+   * Цена за грамм закупки для продавца.
+   * Переименовано из price_per_gram_purchase_seller → price_per_gram_purchase_visible (v20).
    */
   price_per_gram_purchase_visible: number | null
   price_per_gram_sale: number | null
@@ -127,14 +127,14 @@ export type Product = {
 export type SaleItemKind = "product" | "scrap"
 
 export type SaleItem = {
-  /** null Ð´Ð»Ñ Ð»Ð¾Ð¼Ð° â ÑÐ¾Ð²Ð°ÑÐ° Ð½ÐµÑ Ð½Ð° ÑÐºÐ»Ð°Ð´Ðµ. */
+  /** null для лома — товара нет на складе. */
   product_id: string | null
   id?: string | null
   sku?: string | null
   kind?: SaleItemKind
   /**
-   * ÐÑÑÐ¾ÑÐ¸ÑÐµÑÐºÐ¾Ðµ Ð¿Ð¾Ð»Ðµ ÑÐµÐºÐ¾Ð². ÐÐ¾Ð²ÑÐµ Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¸ Ð²ÑÐµÐ³Ð´Ð° ÑÐ¾ÑÑÐ°Ð½ÑÑÑÑÑ ÑÐ¾Ð²Ð½Ð¾ Ñ
-   * quantity=1, Ð¿Ð¾ÑÐ¾Ð¼Ñ ÑÑÐ¾ ÐºÐ°Ð¶Ð´Ð¾Ðµ ÑÐ²ÐµÐ»Ð¸ÑÐ½Ð¾Ðµ Ð¸Ð·Ð´ÐµÐ»Ð¸Ðµ â Ð¾ÑÐ´ÐµÐ»ÑÐ½Ð°Ñ Ð·Ð°Ð¿Ð¸ÑÑ.
+   * Историческое поле чеков. Новые позиции всегда сохраняются ровно с
+   * quantity=1, потому что каждое ювелирное изделие — отдельная запись.
    */
   quantity: number
   name: string
@@ -154,7 +154,7 @@ export type Sale = {
   customer_name: string | null
   customer_phone: string | null
   payment_method: string
-  /** Ð Ð°Ð·Ð±Ð¸Ð²ÐºÐ° ÑÐ¼ÐµÑÐ°Ð½Ð½Ð¾Ð¹ Ð¾Ð¿Ð»Ð°ÑÑ. */
+  /** Разбивка смешанной оплаты. */
   amount_cash?: number | null
   amount_electronic?: number | null
   subtotal: number
@@ -177,23 +177,23 @@ export type Sale = {
   cash_operation_id?: string | null
 }
 
-/** ÐÐ¾Ð·Ð²ÑÐ°Ñ Ð¾Ð´Ð½Ð¾Ð¹ Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¸ ÑÐµÐºÐ° (ÑÐ°Ð±Ð»Ð¸ÑÐ° sale_returns, Ð¼Ð¸Ð³ÑÐ°ÑÐ¸Ñ v33). */
+/** Возврат одной позиции чека (таблица sale_returns, миграция v33). */
 export type SaleReturn = {
   id: string
   shop_id: string
   sale_id: string
-  /** null Ð´Ð»Ñ Ð»Ð¾Ð¼Ð° â ÑÐ¾Ð²Ð°ÑÐ° Ð½Ð° ÑÐºÐ»Ð°Ð´Ðµ Ð½Ðµ Ð±ÑÐ»Ð¾. */
+  /** null для лома — товара на складе не было. */
   product_id?: string | null
-  /** ÐÐ½Ð´ÐµÐºÑ Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¸ Ð²Ð½ÑÑÑÐ¸ sales.items Ð¸ÑÑÐ¾Ð´Ð½Ð¾Ð³Ð¾ ÑÐµÐºÐ°. */
+  /** Индекс позиции внутри sales.items исходного чека. */
   item_index: number
   item_name?: string
   item_metal?: string | null
   item_weight?: number
-  /** Ð¡ÑÐ¼Ð¼Ð°, ÑÐ°ÐºÑÐ¸ÑÐµÑÐºÐ¸ Ð²ÑÐ¿Ð»Ð°ÑÐµÐ½Ð½Ð°Ñ Ð¿Ð¾ÐºÑÐ¿Ð°ÑÐµÐ»Ñ (Ð¿Ð¾ Ð¾Ð¿Ð»Ð°ÑÐµÐ½Ð½Ð¾Ð¹ ÑÐµÐ½Ðµ). */
+  /** Сумма, фактически выплаченная покупателю (по оплаченной цене). */
   amount?: number
-  /** Ð¡ÐµÐ±ÐµÑÑÐ¾Ð¸Ð¼Ð¾ÑÑÑ Ð²Ð¾Ð·Ð²ÑÐ°ÑÑÐ½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð²Ð°ÑÐ° â ÑÐ½Ð¾Ð²Ð° ÑÑÐ¸ÑÑÐ²Ð°ÐµÑÑÑ Ð½Ð° ÑÐºÐ»Ð°Ð´Ðµ. */
+  /** Себестоимость возвращённого товара — снова учитывается на складе. */
   cost?: number
-  /** Ð Ð°ÑÑÐ¾Ð´Ð½Ð°Ñ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ñ ÐºÐ°ÑÑÑ, ÑÐ¾Ð·Ð´Ð°Ð½Ð½Ð°Ñ Ð°ÑÐ¾Ð¼Ð°ÑÐ½Ð¾ Ð²Ð¼ÐµÑÑÐµ Ñ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ¾Ð¼. */
+  /** Расходная операция кассы, созданная атомарно вместе с возвратом. */
   cash_operation_id?: string | null
   reason: string
   created_by?: string
@@ -217,56 +217,56 @@ export type MetalRate = {
   deleted_at?: string | null
 }
 
-export const CATEGORIES = ["ÐÐ¾Ð»ÑÑÐ°", "Ð¡ÐµÑÑÐ³Ð¸", "Ð¦ÐµÐ¿Ð¸", "ÐÑÐ°ÑÐ»ÐµÑÑ", "ÐÐ¾Ð´Ð²ÐµÑÐºÐ¸", "Ð§Ð°ÑÑ", "ÐÑÐ¾ÑÐµÐµ"] as const
+export const CATEGORIES = ["Кольца", "Серьги", "Цепи", "Браслеты", "Подвески", "Часы", "Прочее"] as const
 
 export const METALS = [
-  "ÐÐ¾Ð»Ð¾ÑÐ¾ 375",
-  "ÐÐ¾Ð»Ð¾ÑÐ¾ 585",
-  "ÐÐ¾Ð»Ð¾ÑÐ¾ 750",
-  "ÐÐ¾Ð»Ð¾ÑÐ¾ 999",
-  "ÐÐµÐ»Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾",
-  "Ð¡ÐµÑÐµÐ±ÑÐ¾ 925",
-  "ÐÐ»Ð°ÑÐ¸Ð½Ð°",
-  "ÐÑÐ¾ÑÐ¸ÑÐ½Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾ 375",
-  "ÐÑÐ¾ÑÐ¸ÑÐ½Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾ 585",
-  "ÐÑÐ¾ÑÐ¸ÑÐ½Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾ 750",
-  "ÐÑÐ¾ÑÐ¸ÑÐ½Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾ 999",
-  "ÐÑÐ¾ÑÐ¸ÑÐ½Ð¾Ðµ ÑÐµÑÐµÐ±ÑÐ¾ 925",
+  "Золото 375",
+  "Золото 585",
+  "Золото 750",
+  "Золото 999",
+  "Белое золото",
+  "Серебро 925",
+  "Платина",
+  "Вторичное золото 375",
+  "Вторичное золото 585",
+  "Вторичное золото 750",
+  "Вторичное золото 999",
+  "Вторичное серебро 925",
 ] as const
 
-/** Ð¦Ð²ÐµÑ Ð¼ÐµÑÐ°Ð»Ð»Ð° â Ð²ÑÐ±Ð¸ÑÐ°ÐµÑÑÑ ÐºÐ½Ð¾Ð¿ÐºÐ°Ð¼Ð¸ Ð² ÐºÐ°ÑÑÐ¾ÑÐºÐµ ÑÐ¾Ð²Ð°ÑÐ°. */
+/** Цвет металла — выбирается кнопками в карточке товара. */
 export const METAL_COLORS = [
-  "ÐÑÐ»ÑÐ¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾",
-  "ÐÐµÐ»Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾",
-  "ÐÑÐ°ÑÐ½Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾",
-  "Ð Ð¾Ð·Ð¾Ð²Ð¾Ðµ Ð·Ð¾Ð»Ð¾ÑÐ¾",
-  "ÐÐ¾Ð¼Ð±Ð¸Ð½Ð¸ÑÐ¾Ð²Ð°Ð½Ð½ÑÐ¹",
-  "Ð¡ÐµÑÐµÐ±ÑÐ¾",
+  "Жёлтое золото",
+  "Белое золото",
+  "Красное золото",
+  "Розовое золото",
+  "Комбинированный",
+  "Серебро",
 ] as const
 
 export const PAYMENT_METHODS = [
-  { value: "cash", label: "ÐÐ°Ð»Ð¸ÑÐ½ÑÐµ" },
-  { value: "transfer", label: "ÐÐµÑÐµÐ²Ð¾Ð´ / ÐºÐ°ÑÑÐ°" },
-  { value: "mixed", label: "Ð¡Ð¼ÐµÑÐ°Ð½Ð½Ð¾" },
+  { value: "cash", label: "Наличные" },
+  { value: "transfer", label: "Перевод / карта" },
+  { value: "mixed", label: "Смешанно" },
 ] as const
 
-/** Ð£ÑÑÐ°ÑÐµÐ²ÑÐ¸Ð¹ ÑÐ¿Ð¾ÑÐ¾Ð± Â«cardÂ» Ð¾ÑÑÐ°ÑÑÑÑ Ð´Ð»Ñ ÑÑÐ°ÑÑÑ ÑÐµÐºÐ¾Ð². */
+/** Устаревший способ «card» остаётся для старых чеков. */
 export const PAYMENT_LABELS: Record<string, string> = {
-  cash: "ÐÐ°Ð»Ð¸ÑÐ½ÑÐµ",
-  card: "ÐÐ°ÑÑÐ°",
-  transfer: "ÐÐµÑÐµÐ²Ð¾Ð´ / ÐºÐ°ÑÑÐ°",
-  mixed: "Ð¡Ð¼ÐµÑÐ°Ð½Ð½Ð¾",
+  cash: "Наличные",
+  card: "Карта",
+  transfer: "Перевод / карта",
+  mixed: "Смешанно",
 }
 
 export type CashOpType = "income" | "outcome" | "collection"
 
-/** ÐÑÑÐ¾ÑÐ½Ð¸Ðº ÑÑÐµÐ´ÑÑÐ² Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸: Ð½Ð°Ð»Ð¸ÑÐ½ÑÐµ, ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐµ Ð¸Ð»Ð¸ Ð¾Ð±Ð° ÑÑÐ°Ð·Ñ. */
+/** Источник средств операции: наличные, электронные или оба сразу. */
 export type CashSource = "cash" | "electronic" | "mixed"
 
 export const CASH_SOURCES: { value: CashSource; label: string }[] = [
-  { value: "cash", label: "ÐÐ°Ð»Ð¸ÑÐ½ÑÐµ" },
-  { value: "electronic", label: "Ð­Ð»ÐµÐºÑÑÐ¾Ð½Ð½ÑÐµ (Ð±ÐµÐ·Ð½Ð°Ð»)" },
-  { value: "mixed", label: "Ð¡Ð¼ÐµÑÐ°Ð½Ð½Ð¾ / Ð¸Ð· Ð¾Ð±Ð¾Ð¸Ñ" },
+  { value: "cash", label: "Наличные" },
+  { value: "electronic", label: "Электронные (безнал)" },
+  { value: "mixed", label: "Смешанно / из обоих" },
 ]
 
 export type CashOperation = {
@@ -332,22 +332,22 @@ export type SupplierDebtSummary = {
   last_operation_at: string
 }
 
-/** ÐÐºÑÐµÐ½ÑÐ½ÑÐ¹ Â«Ð½ÐµÐ¹ÑÑÐ°Ð»ÑÐ½ÑÐ¹Â» ÑÐ²ÐµÑ Ð¸Ð½ÑÐµÑÑÐµÐ¹ÑÐ° (Ð¸Ð½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ, Ð²ÑÐ´ÐµÐ»ÐµÐ½Ð¸Ñ). */
+/** Акцентный «нейтральный» цвет интерфейса (инкассация, выделения). */
 export const GOLD_ACCENT = "#E5AC4C"
 
 // =============================================================================
-// v22: Ð¡Ð¸ÑÑÐµÐ¼Ð° ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ð¹ ÑÑÐ¿ÐµÑÐ°Ð´Ð¼Ð¸Ð½Ð°
+// v22: Система уведомлений суперадмина
 // =============================================================================
 
-/** Ð¢Ð¸Ð¿ ÑÐ¾Ð±ÑÑÐ¸Ñ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ñ. */
+/** Тип события уведомления. */
 export type NotificationKind = "pending_request"
 
-/** Ð§ÐµÐ»Ð¾Ð²ÐµÐºÐ¾ÑÐ¸ÑÐ°ÐµÐ¼ÑÐµ Ð¼ÐµÑÐºÐ¸ ÑÐ¸Ð¿Ð¾Ð² ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ð¹. */
+/** Человекочитаемые метки типов уведомлений. */
 export const NOTIFICATION_KIND_LABELS: Record<NotificationKind, string> = {
-  pending_request: "ÐÐ¶Ð¸Ð´Ð°Ð½Ð¸Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ñ",
+  pending_request: "Ожидание подтверждения",
 }
 
-/** Ð£Ð²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ¿ÐµÑÐ°Ð´Ð¼Ð¸Ð½Ð° (ÑÑÑÐ¾ÐºÐ° Ð¸Ð· superadmin_notifications). */
+/** Уведомление суперадмина (строка из superadmin_notifications). */
 export type SuperadminNotification = {
   id: string
   kind: NotificationKind
@@ -361,7 +361,7 @@ export type SuperadminNotification = {
   created_at: string
 }
 
-/** Ð ÐµÐ·ÑÐ»ÑÑÐ°Ñ ÑÐµÑÐ²ÐµÑ-ÑÐºÑÐ½Ð° (ÐµÐ´Ð¸Ð½ÑÐ¹ ÑÐ¾ÑÐ¼Ð°Ñ ÑÑÐ¿ÐµÑ/Ð¾ÑÐ¸Ð±ÐºÐ°). */
+/** Результат сервер-экшна (единый формат успех/ошибка). */
 export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string }

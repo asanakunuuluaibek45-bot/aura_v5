@@ -28,19 +28,19 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
   const [manual, setManual] = useState("")
   const [manualMode, setManualMode] = useState(false)
 
-  // Ð¤Ð»Ð°Ð³: Ð´ÐµÐ¹ÑÑÐ²Ð¸ÑÐµÐ»ÑÐ½Ð¾ Ð»Ð¸ ÑÐµÐºÑÑÐ¸Ð¹ Ð·Ð°Ð¿ÑÑÐµÐ½Ð½ÑÐ¹ ÑÑÐµÐº ÑÐ²Ð»ÑÐµÑÑÑ ÑÐµÐ»ÑÐ¸-ÐºÐ°Ð¼ÐµÑÐ¾Ð¹
+  // Флаг: действительно ли текущий запущенный трек является селфи-камерой
   const [isFrontCamera, setIsFrontCamera] = useState(false)
 
-  // ÐÑÐµÐ´ÑÐ¿ÑÐµÐ¶Ð´ÐµÐ½Ð¸Ðµ Ð¾ Ð¿Ð»Ð¾ÑÐ¾ ÑÐ¸ÑÐ°ÐµÐ¼Ð¾Ð¼ / Ð¿ÐµÑÐµÐºÑÑÑÐ¾Ð¼ ÐºÐ¾Ð´Ðµ
+  // Предупреждение о плохо читаемом / перекрытом коде
   const [isBadQuality, setIsBadQuality] = useState(false)
   const checksumErrorCountRef = useRef(0)
 
-  // ÐÐ¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑÐ¸ ÐºÐ°Ð¼ÐµÑÑ
+  // Возможности камеры
   const [torchAvailable, setTorchAvailable] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null)
 
-  // ÐÐ¾Ð´Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¸ÑÑÐµÐ¼Ð½ÑÑ Ð¸ÑÐºÐ»ÑÑÐµÐ½Ð¸Ð¹ ZXing Ð² ÐºÐ¾Ð½ÑÐ¾Ð»Ð¸ Next.js / Turbopack
+  // Подавление системных исключений ZXing в консоли Next.js / Turbopack
   useEffect(() => {
     const originalError = console.error
     const originalWarn = console.warn
@@ -115,7 +115,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
       if (clean.length < 3 || closedRef.current) return
       closedRef.current = true
 
-      // Â«ÐÐ¸ÐºÂ» ÐºÐ°ÑÑÐ¾Ð²Ð¾Ð³Ð¾ Ð°Ð¿Ð¿Ð°ÑÐ°ÑÐ° Ð¿ÑÐ¸ ÑÑÐ¿ÐµÑÐ½Ð¾Ð¼ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð²Ð°Ð½Ð¸Ð¸ ÐºÐ¾Ð´Ð°.
+      // «Пик» кассового аппарата при успешном распознавании кода.
       playScanBeep()
 
       if (typeof navigator !== "undefined" && navigator.vibrate) {
@@ -184,7 +184,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
       setTorchAvailable(false)
 
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-        setError("ÐÑÐ°ÑÐ·ÐµÑ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑ ÐºÐ°Ð¼ÐµÑÑ Ð¸Ð»Ð¸ ÑÐ¾ÐµÐ´Ð¸Ð½ÐµÐ½Ð¸Ðµ Ð½Ðµ Ð·Ð°ÑÐ¸ÑÐµÐ½Ð¾ (HTTPS).")
+        setError("Браузер не поддерживает камеру или соединение не защищено (HTTPS).")
         return
       }
 
@@ -211,10 +211,10 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         const name = (err as DOMException)?.name
         setError(
           name === "NotAllowedError"
-            ? "ÐÐ¾ÑÑÑÐ¿ Ðº ÐºÐ°Ð¼ÐµÑÐµ Ð·Ð°Ð¿ÑÐµÑÑÐ½. Ð Ð°Ð·ÑÐµÑÐ¸ÑÐµ Ð´Ð¾ÑÑÑÐ¿ Ð² Ð½Ð°ÑÑÑÐ¾Ð¹ÐºÐ°Ñ."
+            ? "Доступ к камере запрещён. Разрешите доступ в настройках."
             : name === "NotFoundError"
-              ? "ÐÐ°Ð¼ÐµÑÐ° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð½Ð° ÑÑÑÑÐ¾Ð¹ÑÑÐ²Ðµ."
-              : "ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ ÐºÐ°Ð¼ÐµÑÑ.",
+              ? "Камера не найдена на устройстве."
+              : "Не удалось запустить камеру.",
         )
         return
       }
@@ -232,7 +232,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         return
       }
 
-      // ÐÐ¿ÑÐµÐ´ÐµÐ»ÑÐµÐ¼, ÑÐ²Ð»ÑÐµÑÑÑ Ð»Ð¸ ÑÐµÐºÑÑÐ°Ñ Ð°ÐºÑÐ¸Ð²Ð½Ð°Ñ ÐºÐ°Ð¼ÐµÑÐ° Ð´ÐµÐ¹ÑÑÐ²Ð¸ÑÐµÐ»ÑÐ½Ð¾ ÑÑÐ¾Ð½ÑÐ°Ð»ÑÐ½Ð¾Ð¹
+      // Определяем, является ли текущая активная камера действительно фронтальной
       const track = stream.getVideoTracks()[0]
       if (track) {
         const settings = track.getSettings?.()
@@ -242,7 +242,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
           settings?.facingMode === "user" ||
           facing === "user" ||
           label.includes("front") ||
-          label.includes("Ð¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÐµÐ»Ñ") ||
+          label.includes("пользователь") ||
           label.includes("selfie")
 
         setIsFrontCamera(isUserFacing)
@@ -271,7 +271,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
 
       if (cancelled || closedRef.current) return
 
-      // 1. ÐÐ°ÑÐ¸Ð²Ð½ÑÐ¹ BarcodeDetector (Chrome / Android)
+      // 1. Нативный BarcodeDetector (Chrome / Android)
       if ("BarcodeDetector" in window) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -306,7 +306,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         }
       }
 
-      // 2. Fallback ZXing Ñ ÑÑÐµÐºÐ¸Ð½Ð³Ð¾Ð¼ ÐºÐ°ÑÐµÑÑÐ²Ð° Ð¸Ð·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ
+      // 2. Fallback ZXing с трекингом качества изображения
       const reader = new BrowserMultiFormatReader()
       try {
         const controls = await reader.decodeFromVideoElement(video, (result, err) => {
@@ -337,7 +337,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         else controlsRef.current = controls
       } catch {
         if (!cancelled && !closedRef.current) {
-          setError("ÐÐµ ÑÐ´Ð°Ð»Ð¾ÑÑ Ð·Ð°Ð¿ÑÑÑÐ¸ÑÑ ÑÐ°ÑÐ¿Ð¾Ð·Ð½Ð°Ð²Ð°Ð½Ð¸Ðµ. ÐÐ°Ð³ÑÑÐ·Ð¸ÑÐµ ÑÐ¾ÑÐ¾.")
+          setError("Не удалось запустить распознавание. Загрузите фото.")
         }
       }
     }
@@ -374,7 +374,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
       const result = await reader.decodeFromImageUrl(url)
       handleResult(result.getText())
     } catch {
-      setError("QR Ð¸Ð»Ð¸ ÑÑÑÐ¸ÑÐºÐ¾Ð´ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ Ð½Ð° ÑÐ¾ÑÐ¾.")
+      setError("QR или штрихкод не найден на фото.")
     } finally {
       URL.revokeObjectURL(url)
     }
@@ -389,23 +389,23 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         className="relative flex h-full w-full flex-col justify-between overflow-hidden bg-black"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Ð¨Ð°Ð¿ÐºÐ° */}
+        {/* Шапка */}
         <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-md">
           <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-            Ð¡ÐºÐ°Ð½ÐµÑ ÐºÐ¾Ð´Ð¾Ð²
+            Сканер кодов
           </span>
           <Button
             variant="ghost"
             size="icon"
             className="h-9 w-9 rounded-full bg-black/40 hover:bg-white/20 text-white"
             onClick={close}
-            aria-label="ÐÐ°ÐºÑÑÑÑ"
+            aria-label="Закрыть"
           >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
-        {/* ÐÐ±Ð»Ð°ÑÑÑ ÐºÐ°Ð¼ÐµÑÑ */}
+        {/* Область камеры */}
         <div
           className="relative flex-1 w-full overflow-hidden bg-black select-none cursor-pointer"
           onClick={handleTapToFocus}
@@ -420,7 +420,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
             }`}
           />
 
-          {/* Ð Ð°Ð¼ÐºÐ° Ð¸ ÑÐºÐ°Ð½-Ð»Ð¸Ð½Ð¸Ñ */}
+          {/* Рамка и скан-линия */}
           {!error && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="relative h-64 w-64 sm:h-72 sm:w-72 rounded-3xl border-2 border-white/30 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]">
@@ -434,17 +434,17 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
             </div>
           )}
 
-          {/* ÐÐ»Ð°ÑÐºÐ° Ð¿ÑÐµÐ´ÑÐ¿ÑÐµÐ¶Ð´ÐµÐ½Ð¸Ñ: ÐÐµÑÐµÐºÑÑÑ Ð¸Ð»Ð¸ ÑÐ°ÑÑÐ¾ÐºÑÑÐ¸ÑÐ¾Ð²Ð°Ð½ */}
+          {/* Плашка предупреждения: Перекрыт или расфокусирован */}
           {isBadQuality && !error && (
             <div className="pointer-events-none absolute bottom-6 inset-x-0 z-20 flex justify-center px-4 animate-in fade-in slide-in-from-bottom-2">
               <div className="flex items-center gap-2 rounded-full bg-amber-500/90 px-4 py-2 text-xs font-medium text-black shadow-lg backdrop-blur-md">
                 <EyeOff className="h-4 w-4 shrink-0" />
-                <span>ÐÐ¾Ð´ Ð¿ÐµÑÐµÐºÑÑÑ, Ð±Ð»Ð¸ÐºÑÐµÑ Ð¸Ð»Ð¸ Ð½Ðµ Ð² ÑÐ¾ÐºÑÑÐµ</span>
+                <span>Код перекрыт, бликует или не в фокусе</span>
               </div>
             </div>
           )}
 
-          {/* Ð¢Ð¾ÑÐºÐ° ÑÐ¾ÐºÑÑÐ¸ÑÐ¾Ð²ÐºÐ¸ */}
+          {/* Точка фокусировки */}
           {focusPoint && (
             <div
               className="pointer-events-none absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/80 animate-ping"
@@ -452,7 +452,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
             />
           )}
 
-          {/* ÐÑÐ¿ÑÑÐºÐ° */}
+          {/* Вспышка */}
           {torchAvailable && (
             <button
               type="button"
@@ -466,7 +466,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
             </button>
           )}
 
-          {/* ÐÑÐ¸Ð±ÐºÐ° */}
+          {/* Ошибка */}
           {error && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 px-6 text-center">
               <AlertTriangle className="h-10 w-10 text-destructive" />
@@ -475,7 +475,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
           )}
         </div>
 
-        {/* ÐÐ°Ð½ÐµÐ»Ñ ÑÐ¿ÑÐ°Ð²Ð»ÐµÐ½Ð¸Ñ */}
+        {/* Панель управления */}
         <div className="z-20 space-y-3 p-4 bg-black/80 backdrop-blur-lg border-t border-white/10 shrink-0">
           <div className="flex gap-2">
             <Button
@@ -485,7 +485,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
               onClick={switchCamera}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
-              Ð¡Ð¼ÐµÐ½Ð¸ÑÑ ÐºÐ°Ð¼ÐµÑÑ
+              Сменить камеру
             </Button>
             <Button
               variant="outline"
@@ -494,7 +494,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
               onClick={() => fileRef.current?.click()}
             >
               <ImageIcon className="mr-2 h-4 w-4" />
-              ÐÐ°Ð»ÐµÑÐµÑ
+              Галерея
             </Button>
           </div>
 
@@ -523,11 +523,11 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
                 autoFocus
                 value={manual}
                 onChange={(e) => setManual(e.target.value)}
-                placeholder="ÐÐ¾Ð´ Ð¸Ð»Ð¸ Ð°ÑÑÐ¸ÐºÑÐ»..."
+                placeholder="Код или артикул..."
                 className="h-11 text-xs rounded-xl bg-white/5 border-white/10 text-white"
               />
               <Button type="submit" size="lg" className="h-11 text-xs rounded-xl px-5" disabled={!manual.trim()}>
-                ÐÐ
+                ОК
               </Button>
             </form>
           ) : (
@@ -538,7 +538,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
               onClick={() => setManualMode(true)}
             >
               <Keyboard className="mr-2 h-4 w-4" />
-              ÐÐ²ÐµÑÑÐ¸ ÐºÐ¾Ð´ Ð²ÑÑÑÐ½ÑÑ
+              Ввести код вручную
             </Button>
           )}
         </div>

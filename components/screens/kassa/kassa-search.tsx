@@ -25,7 +25,7 @@ interface KassaSearchProps {
   isAdmin: boolean
 }
 
-// ÐÐ¾Ð¼Ð¿Ð°ÐºÑÐ½Ð°Ñ ÐºÐ°ÑÑÐ¾ÑÐºÐ°-ÑÑÑÐ¾ÐºÐ° Ð´Ð»Ñ Ð±ÑÑÑÑÐ¾Ð³Ð¾ Ð¿Ð¾Ð¸ÑÐºÐ° Ð¸ ÑÐ°Ð±Ð¾ÑÑ Ð±ÐµÐ· Ð¿ÐµÑÐµÐ³ÑÑÐ·ÐºÐ¸ ÑÐºÑÐ°Ð½Ð°
+// Компактная карточка-строка для быстрого поиска и работы без перегрузки экрана
 function ProductRow({
   p,
   inCart,
@@ -61,19 +61,19 @@ function ProductRow({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-1.5">
               <span className="font-mono text-xs font-bold text-primary">
-                {p.sku || "ÐÐµÐ· ÐÑÑ."}
+                {p.sku || "Без Арт."}
               </span>
               <span className="font-medium text-[11px] text-muted-foreground">
-                {p.metal || "ÐÐµÑÐ°Ð»Ð» Ð½Ðµ ÑÐºÐ°Ð·Ð°Ð½"}
+                {p.metal || "Металл не указан"}
               </span>
-              <span className="text-[11px] text-muted-foreground">Â·</span>
+              <span className="text-[11px] text-muted-foreground">·</span>
               <span className="font-mono text-[11px] text-muted-foreground">{formatWeight(p.weight)}</span>
             </div>
             <p className="line-clamp-2 text-xs font-semibold leading-snug text-foreground sm:text-sm mt-0.5">{p.name}</p>
           </div>
         </div>
 
-        {/* ÐÐ¾Ð¼Ð¿Ð°ÐºÑÐ½Ð°Ñ Ð¸Ð½ÑÐµÑÐ°ÐºÑÐ¸Ð²Ð½Ð°Ñ ÐºÐ½Ð¾Ð¿ÐºÐ° Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ñ / ÑÐ´Ð°Ð»ÐµÐ½Ð¸Ñ Ð¸Ð· ÑÐµÐºÐ° */}
+        {/* Компактная интерактивная кнопка добавления / удаления из чека */}
         <Button
           type="button"
           size="sm"
@@ -85,20 +85,20 @@ function ProductRow({
               ? "bg-primary text-primary-foreground border-primary hover:bg-destructive hover:text-destructive-foreground hover:border-destructive shadow-sm group/btn"
               : "border-primary/40 text-primary hover:bg-primary hover:text-primary-foreground"
           )}
-          title={isInCart ? "Ð ÑÐµÐºÐµ Â· ÐÐ°Ð¶Ð¼Ð¸ÑÐµ, ÑÑÐ¾Ð±Ñ ÑÐ±ÑÐ°ÑÑ" : "ÐÐ¾Ð±Ð°Ð²Ð¸ÑÑ Ð² ÑÐµÐº"}
-          aria-label={isInCart ? `Ð£Ð±ÑÐ°ÑÑ ${p.name} Ð¸Ð· ÑÐµÐºÐ°` : `ÐÐ¾Ð±Ð°Ð²Ð¸ÑÑ ${p.name} Ð² ÑÐµÐº`}
+          title={isInCart ? "В чеке · Нажмите, чтобы убрать" : "Добавить в чек"}
+          aria-label={isInCart ? `Убрать ${p.name} из чека` : `Добавить ${p.name} в чек`}
         >
           {isInCart ? (
             <span className="flex items-center gap-1 font-mono text-[11px] font-semibold">
               <Check className="h-3.5 w-3.5 group-hover/btn:hidden" />
               <X className="h-3.5 w-3.5 hidden group-hover/btn:inline" />
-              <span className="group-hover/btn:hidden">Ð ÑÐµÐºÐµ</span>
-              <span className="hidden group-hover/btn:inline">Ð£Ð±ÑÐ°ÑÑ</span>
+              <span className="group-hover/btn:hidden">В чеке</span>
+              <span className="hidden group-hover/btn:inline">Убрать</span>
             </span>
           ) : (
             <span className="flex items-center gap-1 text-[11px]">
               <Plus className="h-3.5 w-3.5" />
-              <span>Ð ÑÐµÐº</span>
+              <span>В чек</span>
             </span>
           )}
         </Button>
@@ -106,11 +106,11 @@ function ProductRow({
 
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs border-t border-border/50 pt-2">
         <div className="flex items-baseline gap-1.5">
-          <span className="text-[11px] text-muted-foreground">Ð¦ÐµÐ½Ð°:</span>
+          <span className="text-[11px] text-muted-foreground">Цена:</span>
           <strong className="font-mono text-sm font-bold text-primary">{formatSom(p.sale_price)}</strong>
           {salePerGram != null && (
             <span className="font-mono text-[10px] text-muted-foreground">
-              ({formatSom(salePerGram)}/Ð³)
+              ({formatSom(salePerGram)}/г)
             </span>
           )}
         </div>
@@ -125,15 +125,15 @@ function ProductRow({
   {<div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground bg-muted/30 px-2 py-1 rounded-md">
       {isAdmin && (
           <div>
-            Ð¡ÐµÐ±ÐµÑÑÐ¾Ð¸Ð¼Ð¾ÑÑÑ: <strong className="font-mono text-foreground">{formatSom(p.purchase_price)}</strong>
-            {purchasePerGram != null && <span className="font-mono ml-1">({formatSom(purchasePerGram)}/Ð³)</span>}
+            Себестоимость: <strong className="font-mono text-foreground">{formatSom(p.purchase_price)}</strong>
+            {purchasePerGram != null && <span className="font-mono ml-1">({formatSom(purchasePerGram)}/г)</span>}
           </div>
       )}
                    <div>
           {p.purchase_price_visible != null && (
             <div>
-              Ð¦ÐµÐ½Ð° Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸: <strong className="font-mono text-foreground">{formatSom(p.purchase_price_visible)}</strong>
-              {sellerPerGram != null && <span className="font-mono ml-1">({formatSom(sellerPerGram)}/Ð³)</span>}
+              Цена продажи: <strong className="font-mono text-foreground">{formatSom(p.purchase_price_visible)}</strong>
+              {sellerPerGram != null && <span className="font-mono ml-1">({formatSom(sellerPerGram)}/г)</span>}
             </div>
             
           )}</div>
@@ -165,34 +165,34 @@ export function KassaSearch({
 
   return (
     <div className="w-full space-y-3 min-w-0 max-w-full">
-      {/* ÐÐ¾Ð¸ÑÐºÐ¾Ð²Ð°Ñ Ð¿Ð°Ð½ÐµÐ»Ñ */}
+      {/* Поисковая панель */}
       <ProductSearch
         value={query}
         onChange={setQuery}
-        placeholder="ÐÑÑÐ¸ÐºÑÐ», Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ, 1,25 Ð³, 12300 Ñ, 11.09.2026..."
+        placeholder="Артикул, название, 1,25 г, 12300 с, 11.09.2026..."
         className="w-full"
         inputClassName="h-11 rounded-xl bg-card text-sm shadow-sm"
       />
 
       {isTooShort && (
         <p className="text-center text-xs text-muted-foreground py-1">
-          ÐÐ²ÐµÐ´Ð¸ÑÐµ Ð¾Ñ <span className="font-semibold text-foreground">{minQuery}</span> ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð²
+          Введите от <span className="font-semibold text-foreground">{minQuery}</span> символов
         </p>
       )}
 
-      {/* ÐÑÐ½Ð¾Ð²Ð½Ð¾Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐµÐ·ÑÐ»ÑÑÐ°ÑÐ¾Ð² */}
+      {/* Основной список результатов */}
       <div className="relative w-full">
         {query.trim().length === 0 && (
           <div className="rounded-xl border border-dashed border-border/60 py-8 text-center bg-card/30">
             <PackageSearch className="mx-auto h-7 w-7 text-muted-foreground/40 mb-1.5" />
-            <p className="text-xs text-muted-foreground">ÐÐ²ÐµÐ´Ð¸ÑÐµ Ð°ÑÑÐ¸ÐºÑÐ» Ð¸Ð»Ð¸ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ ÑÐ¾Ð²Ð°ÑÐ°</p>
+            <p className="text-xs text-muted-foreground">Введите артикул или название товара</p>
           </div>
         )}
 
         {isSearching && (
           !isSearchReady(debounced, minQuery) ? null : results.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border/80 py-8 text-center bg-card/30">
-              <p className="text-xs font-medium text-muted-foreground">ÐÐ¸ÑÐµÐ³Ð¾ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾</p>
+              <p className="text-xs font-medium text-muted-foreground">Ничего не найдено</p>
             </div>
           ) : (
             <div
@@ -217,7 +217,7 @@ export function KassaSearch({
                   onClick={() => setVisible((v) => Math.min(v + pageSize, results.length))}
                   className="w-full text-xs text-muted-foreground mt-1"
                 >
-                  ÐÐ¾ÐºÐ°Ð·Ð°ÑÑ ÐµÑÑ
+                  Показать ещё
                 </Button>
               )}
             </div>

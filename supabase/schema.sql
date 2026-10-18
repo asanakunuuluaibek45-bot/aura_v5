@@ -89,10 +89,10 @@ CREATE FUNCTION public.add_bonus_points(_amount numeric) RETURNS numeric
 declare v_total numeric;
 begin
   if not public.is_approved() then
-    raise exception 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' using errcode = '42501';
+    raise exception 'Аккаунт не подтверждён' using errcode = '42501';
   end if;
   if _amount is null or _amount < 0 then
-    raise exception 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½Ð¾Ðµ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð±Ð¾Ð½ÑÑÐ¾Ð²' using errcode = '22023';
+    raise exception 'Некорректное количество бонусов' using errcode = '22023';
   end if;
   update public.profiles
      set bonus_points = coalesce(bonus_points,0) + _amount
@@ -154,10 +154,10 @@ DECLARE
   v_operation public.supplier_debt_operations;
 BEGIN
   IF NOT public.is_shop_admin() THEN
-    RAISE EXCEPTION 'ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ Ð¿ÑÐ°Ð²' USING errcode = '42501';
+    RAISE EXCEPTION 'Недостаточно прав' USING errcode = '42501';
   END IF;
-  IF nullif(v_supplier_name, '') IS NULL THEN RAISE EXCEPTION 'Ð£ÐºÐ°Ð¶Ð¸ÑÐµ Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ°'; END IF;
-  IF _amount IS NULL OR _amount <= 0 THEN RAISE EXCEPTION 'Ð¡ÑÐ¼Ð¼Ð° Ð´Ð¾Ð»Ð¶Ð½Ð° Ð±ÑÑÑ Ð±Ð¾Ð»ÑÑÐµ Ð½ÑÐ»Ñ'; END IF;
+  IF nullif(v_supplier_name, '') IS NULL THEN RAISE EXCEPTION 'Укажите поставщика'; END IF;
+  IF _amount IS NULL OR _amount <= 0 THEN RAISE EXCEPTION 'Сумма должна быть больше нуля'; END IF;
 
   PERFORM pg_advisory_xact_lock(hashtextextended(
     v_shop::text || ':supplier:' || lower(v_supplier_name) || ':' ||
@@ -225,23 +225,23 @@ BEGIN
   IF NEW.shop_id IS NULL THEN RETURN NEW; END IF;
 
   IF v_type = 'product_create' THEN
-    v_description := 'ÐÐ¾Ð±Ð°Ð²Ð»ÐµÐ½ ÑÐ¾Ð²Ð°Ñ Â«' || left(coalesce(v_state ->> 'name', 'ÐÐµÐ· Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ñ'), 180)
-      || 'Â» (' || coalesce(v_state ->> 'sku', 'Ð±ÐµÐ· Ð°ÑÑÐ¸ÐºÑÐ»Ð°') || ')';
+    v_description := 'Добавлен товар «' || left(coalesce(v_state ->> 'name', 'Без названия'), 180)
+      || '» (' || coalesce(v_state ->> 'sku', 'без артикула') || ')';
   ELSIF v_type = 'sale' THEN
-    v_description := 'ÐÑÐ¾Ð´Ð°Ð¶Ð° Ð½Ð° ÑÑÐ¼Ð¼Ñ ' || to_char(coalesce((v_state ->> 'total')::numeric, 0), 'FM999999999990')
-      || ' Ñ Â· Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¹: ' || coalesce(jsonb_array_length(coalesce(v_state -> 'items', '[]'::jsonb)), 0)
+    v_description := 'Продажа на сумму ' || to_char(coalesce((v_state ->> 'total')::numeric, 0), 'FM999999999990')
+      || ' с · позиций: ' || coalesce(jsonb_array_length(coalesce(v_state -> 'items', '[]'::jsonb)), 0)
       || CASE WHEN nullif(btrim(v_state ->> 'customer_name'), '') IS NOT NULL
-              THEN ' Â· ÐºÐ»Ð¸ÐµÐ½Ñ: ' || left(v_state ->> 'customer_name', 80) ELSE '' END;
+              THEN ' · клиент: ' || left(v_state ->> 'customer_name', 80) ELSE '' END;
   ELSIF v_type = 'cash_operation' THEN
     v_op_label := CASE v_state ->> 'type'
-      WHEN 'income' THEN 'ÐÐ½ÐµÑÐµÐ½Ð¸Ðµ'
-      WHEN 'outcome' THEN 'ÐÐ·ÑÑÑÐ¸Ðµ'
-      WHEN 'collection' THEN 'ÐÐ½ÐºÐ°ÑÑÐ°ÑÐ¸Ñ'
-      ELSE 'ÐÐ¿ÐµÑÐ°ÑÐ¸Ñ' END;
-    v_description := 'ÐÐ°ÑÑÐ°: ' || v_op_label || ' '
-      || to_char(coalesce((v_state ->> 'amount')::numeric, 0), 'FM999999999990') || ' Ñ'
+      WHEN 'income' THEN 'Внесение'
+      WHEN 'outcome' THEN 'Изъятие'
+      WHEN 'collection' THEN 'Инкассация'
+      ELSE 'Операция' END;
+    v_description := 'Касса: ' || v_op_label || ' '
+      || to_char(coalesce((v_state ->> 'amount')::numeric, 0), 'FM999999999990') || ' с'
       || CASE WHEN nullif(btrim(v_state ->> 'reason'), '') IS NOT NULL
-              THEN ' â ' || left(v_state ->> 'reason', 120) ELSE '' END;
+              THEN ' — ' || left(v_state ->> 'reason', 120) ELSE '' END;
   ELSE
     RAISE EXCEPTION 'Unsupported action-history insert type: %', v_type;
   END IF;
@@ -250,7 +250,7 @@ BEGIN
 
   SELECT nullif(btrim(p.full_name), '') INTO v_employee_name
     FROM public.profiles p WHERE p.id = v_employee_id;
-  v_employee_name := coalesce(v_employee_name, 'Ð¡Ð¸ÑÑÐµÐ¼Ð°');
+  v_employee_name := coalesce(v_employee_name, 'Система');
 
   INSERT INTO public.action_history (
     shop_id, entity_type, entity_id, prev_state, next_state, changed_fields,
@@ -325,25 +325,25 @@ BEGIN
       IF (v_old_state -> v_field) IS DISTINCT FROM (v_new_state -> v_field) THEN
         v_fields := array_append(v_fields, v_field);
         v_labels := array_append(v_labels, CASE v_field
-          WHEN 'name' THEN 'ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ'
-          WHEN 'category' THEN 'ÐÐ°ÑÐµÐ³Ð¾ÑÐ¸Ñ'
-          WHEN 'metal' THEN 'ÐÐµÑÐ°Ð»Ð»'
-          WHEN 'metal_color' THEN 'Ð¦Ð²ÐµÑ Ð¼ÐµÑÐ°Ð»Ð»Ð°'
-          WHEN 'weight' THEN 'ÐÐµÑ'
-          WHEN 'size' THEN 'Ð Ð°Ð·Ð¼ÐµÑ'
-          WHEN 'purchase_price' THEN 'ÐÐ°ÐºÑÐ¿Ð¾ÑÐ½Ð°Ñ ÑÐµÐ½Ð°'
-          WHEN 'purchase_price_visible' THEN 'ÐÐ¸Ð´Ð¸Ð¼Ð°Ñ Ð·Ð°ÐºÑÐ¿Ð¾ÑÐ½Ð°Ñ ÑÐµÐ½Ð°'
-          WHEN 'price_per_gram_sale' THEN 'ÐÑÑÑ Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸'
-          WHEN 'price_per_gram_purchase' THEN 'ÐÑÑÑ Ð·Ð°ÐºÑÐ¿ÐºÐ¸'
-          WHEN 'price_per_gram_purchase_visible' THEN 'ÐÐ¸Ð´Ð¸Ð¼ÑÐ¹ ÐºÑÑÑ Ð·Ð°ÐºÑÐ¿ÐºÐ¸'
-          WHEN 'stones' THEN 'ÐÑÑÐ°Ð²ÐºÐ¸'
-          WHEN 'description' THEN 'ÐÐ¿Ð¸ÑÐ°Ð½Ð¸Ðµ'
-          WHEN 'sale_price' THEN 'Ð¦ÐµÐ½Ð° Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸'
-          WHEN 'image_url' THEN 'ÐÐ·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ðµ'
-          WHEN 'images' THEN 'ÐÐ·Ð¾Ð±ÑÐ°Ð¶ÐµÐ½Ð¸Ñ'
-          WHEN 'supplier_name' THEN 'ÐÐ¾ÑÑÐ°Ð²ÑÐ¸Ðº'
-          WHEN 'supplier_phone' THEN 'Ð¢ÐµÐ»ÐµÑÐ¾Ð½ Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ°'
-          WHEN 'is_hidden' THEN 'ÐÐ¸Ð´Ð¸Ð¼Ð¾ÑÑÑ ÑÐ¾Ð²Ð°ÑÐ°'
+          WHEN 'name' THEN 'Название'
+          WHEN 'category' THEN 'Категория'
+          WHEN 'metal' THEN 'Металл'
+          WHEN 'metal_color' THEN 'Цвет металла'
+          WHEN 'weight' THEN 'Вес'
+          WHEN 'size' THEN 'Размер'
+          WHEN 'purchase_price' THEN 'Закупочная цена'
+          WHEN 'purchase_price_visible' THEN 'Видимая закупочная цена'
+          WHEN 'price_per_gram_sale' THEN 'Курс продажи'
+          WHEN 'price_per_gram_purchase' THEN 'Курс закупки'
+          WHEN 'price_per_gram_purchase_visible' THEN 'Видимый курс закупки'
+          WHEN 'stones' THEN 'Вставки'
+          WHEN 'description' THEN 'Описание'
+          WHEN 'sale_price' THEN 'Цена продажи'
+          WHEN 'image_url' THEN 'Изображение'
+          WHEN 'images' THEN 'Изображения'
+          WHEN 'supplier_name' THEN 'Поставщик'
+          WHEN 'supplier_phone' THEN 'Телефон поставщика'
+          WHEN 'is_hidden' THEN 'Видимость товара'
         END);
       END IF;
     END LOOP;
@@ -352,8 +352,8 @@ BEGIN
       IF (v_old_state -> v_field) IS DISTINCT FROM (v_new_state -> v_field) THEN
         v_fields := array_append(v_fields, v_field);
         v_labels := array_append(v_labels, CASE v_field
-          WHEN 'price_per_gram' THEN 'ÐÑÑÑ Ð·Ð° Ð³ÑÐ°Ð¼Ð¼'
-          WHEN 'scrap_price_per_gram' THEN 'Ð¦ÐµÐ½Ð° Ð»Ð¾Ð¼Ð° Ð·Ð° Ð³ÑÐ°Ð¼Ð¼'
+          WHEN 'price_per_gram' THEN 'Курс за грамм'
+          WHEN 'scrap_price_per_gram' THEN 'Цена лома за грамм'
         END);
       END IF;
     END LOOP;
@@ -374,11 +374,11 @@ BEGIN
     INTO v_employee_name
     FROM public.profiles p
    WHERE p.id = v_employee_id;
-  v_employee_name := coalesce(v_employee_name, 'Ð¡Ð¸ÑÑÐµÐ¼Ð°');
+  v_employee_name := coalesce(v_employee_name, 'Система');
   v_description := CASE v_entity_type
-    WHEN 'product' THEN 'Ð¢Ð¾Ð²Ð°Ñ Â«' || left(coalesce(v_new_state ->> 'name', v_old_state ->> 'name', 'ÐÐµÐ· Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ñ'), 180)
-      || 'Â» (' || coalesce(v_new_state ->> 'sku', v_old_state ->> 'sku', 'Ð±ÐµÐ· Ð°ÑÑÐ¸ÐºÑÐ»Ð°') || '): '
-    ELSE 'ÐÑÑÑ Â«' || coalesce(v_new_state ->> 'metal', v_old_state ->> 'metal', 'ÐÐµÑÐ°Ð»Ð»') || 'Â»: '
+    WHEN 'product' THEN 'Товар «' || left(coalesce(v_new_state ->> 'name', v_old_state ->> 'name', 'Без названия'), 180)
+      || '» (' || coalesce(v_new_state ->> 'sku', v_old_state ->> 'sku', 'без артикула') || '): '
+    ELSE 'Курс «' || coalesce(v_new_state ->> 'metal', v_old_state ->> 'metal', 'Металл') || '»: '
   END || array_to_string(v_labels, ', ');
 
   INSERT INTO public.action_history (
@@ -508,11 +508,11 @@ DECLARE
   v_created_at timestamptz;
 BEGIN
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'Ð¢ÑÐµÐ±ÑÐµÑÑÑ Ð°Ð²ÑÐ¾ÑÐ¸Ð·Ð°ÑÐ¸Ñ' USING ERRCODE = '42501';
+    RAISE EXCEPTION 'Требуется авторизация' USING ERRCODE = '42501';
   END IF;
 
   IF _client_op_id IS NULL OR btrim(_client_op_id) = '' THEN
-    RAISE EXCEPTION 'ÐÐµ ÑÐºÐ°Ð·Ð°Ð½ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Не указан идентификатор продажи' USING ERRCODE = '22023';
   END IF;
 
   SELECT * INTO v_profile
@@ -523,17 +523,17 @@ BEGIN
   -- Match RLS and the server action's active shop, including impersonation.
   v_shop_id := public.current_shop_id();
   IF NOT FOUND OR v_profile.status::text <> 'approved' OR v_shop_id IS NULL THEN
-    RAISE EXCEPTION 'ÐÐµÑ Ð´Ð¾ÑÑÑÐ¿Ð° Ðº Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ñ' USING ERRCODE = '42501';
+    RAISE EXCEPTION 'Нет доступа к магазину' USING ERRCODE = '42501';
   END IF;
 
   IF _sale IS NULL OR jsonb_typeof(_sale) <> 'object' THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐµ Ð´Ð°Ð½Ð½ÑÐµ Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Некорректные данные продажи' USING ERRCODE = '22023';
   END IF;
   IF coalesce(jsonb_typeof(_sale->'items'), 'null') <> 'array' THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐ¹ ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐ¾Ð²Ð°ÑÐ¾Ð² Ð² ÑÐµÐºÐµ' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Некорректный список товаров в чеке' USING ERRCODE = '22023';
   END IF;
   IF jsonb_array_length(_sale->'items') = 0 OR jsonb_array_length(_sale->'items') > 200 THEN
-    RAISE EXCEPTION 'Ð ÑÐµÐºÐµ Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð±ÑÑÑ Ð¾Ñ 1 Ð´Ð¾ 200 Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¹' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'В чеке должно быть от 1 до 200 позиций' USING ERRCODE = '22023';
   END IF;
 
   -- A retry after a lost response must return the already-committed receipt.
@@ -553,7 +553,7 @@ BEGIN
 
   v_payment_method := coalesce(_sale->>'payment_method', 'cash');
   IF v_payment_method NOT IN ('cash', 'card', 'transfer', 'mixed') THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐ¹ ÑÐ¿Ð¾ÑÐ¾Ð± Ð¾Ð¿Ð»Ð°ÑÑ' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Некорректный способ оплаты' USING ERRCODE = '22023';
   END IF;
 
   -- Validate ids and prevent adding the same unique item twice. Lock every
@@ -563,7 +563,7 @@ BEGIN
   LOOP
     IF coalesce(v_item->>'kind', 'product') <> 'scrap' THEN
       IF coalesce((v_item->>'quantity')::integer, 1) <> 1 THEN
-        RAISE EXCEPTION 'ÐÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð¸Ð·Ð´ÐµÐ»Ð¸Ñ Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð±ÑÑÑ ÑÐ°Ð²Ð½Ð¾ 1' USING ERRCODE = '22023';
+        RAISE EXCEPTION 'Количество изделия должно быть равно 1' USING ERRCODE = '22023';
       END IF;
 
       v_item_id := coalesce(
@@ -571,10 +571,10 @@ BEGIN
         nullif(v_item->>'id', '')::uuid
       );
       IF v_item_id IS NULL THEN
-        RAISE EXCEPTION 'Ð Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¸ Ð½Ðµ ÑÐºÐ°Ð·Ð°Ð½ ÑÐ¾Ð²Ð°Ñ' USING ERRCODE = '22023';
+        RAISE EXCEPTION 'В позиции не указан товар' USING ERRCODE = '22023';
       END IF;
       IF v_item_id = ANY(v_product_ids) THEN
-        RAISE EXCEPTION 'ÐÐ´Ð½Ð¾ Ð¸Ð·Ð´ÐµÐ»Ð¸Ðµ Ð½ÐµÐ»ÑÐ·Ñ Ð´Ð¾Ð±Ð°Ð²Ð¸ÑÑ Ð² ÑÐµÐº Ð´Ð²Ð°Ð¶Ð´Ñ' USING ERRCODE = '22023';
+        RAISE EXCEPTION 'Одно изделие нельзя добавить в чек дважды' USING ERRCODE = '22023';
       END IF;
       v_product_ids := array_append(v_product_ids, v_item_id);
     END IF;
@@ -595,7 +595,7 @@ BEGIN
       v_weight := coalesce(nullif(v_item->>'weight', '')::numeric, 0);
       v_price := coalesce(nullif(v_item->>'price', '')::numeric, -1);
       IF v_weight <= 0 OR v_weight > 100000 OR v_price <= 0 THEN
-        RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐµ Ð´Ð°Ð½Ð½ÑÐµ Ð»Ð¾Ð¼Ð°' USING ERRCODE = '22023';
+        RAISE EXCEPTION 'Некорректные данные лома' USING ERRCODE = '22023';
       END IF;
       v_price := round(v_price);
       v_cost := v_price;
@@ -628,7 +628,7 @@ BEGIN
         'accepted', false,
         'code', 'stock_conflict',
         'product_id', v_item_id,
-        'product_name', coalesce(v_item->>'name', 'Ð¢Ð¾Ð²Ð°Ñ')
+        'product_name', coalesce(v_item->>'name', 'Товар')
       );
     END IF;
 
@@ -643,7 +643,7 @@ BEGIN
 
     v_price := coalesce(nullif(v_item->>'price', '')::numeric, -1);
     IF v_price < 0 OR (v_product.sale_price > 0 AND v_price > v_product.sale_price * 10) THEN
-      RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½Ð°Ñ ÑÐµÐ½Ð° Ð´Ð»Ñ Â«%Â»', v_product.name USING ERRCODE = '22023';
+      RAISE EXCEPTION 'Некорректная цена для «%»', v_product.name USING ERRCODE = '22023';
     END IF;
     v_price := round(v_price);
 
@@ -674,7 +674,7 @@ BEGIN
   IF v_bonus_used < 0
      OR v_bonus_used > v_subtotal
      OR v_bonus_used > coalesce(v_profile.bonus_points, 0) THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½Ð°Ñ ÑÑÐ¼Ð¼Ð° Ð±Ð¾Ð½ÑÑÐ¾Ð²' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Некорректная сумма бонусов' USING ERRCODE = '22023';
   END IF;
   v_total := greatest(0, v_subtotal - v_bonus_used);
 
@@ -696,7 +696,7 @@ BEGIN
     IF v_amount_cash < 0
        OR v_amount_electronic < 0
        OR abs(v_amount_cash + v_amount_electronic - v_total) > 1 THEN
-      RAISE EXCEPTION 'Ð¡ÑÐ¼Ð¼Ð° Ð¾Ð¿Ð»Ð°ÑÑ Ð½Ðµ ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÐµÑ Ñ Ð¸ÑÐ¾Ð³Ð¾Ð¼ ÑÐµÐºÐ°' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'Сумма оплаты не совпадает с итогом чека' USING ERRCODE = '22023';
     END IF;
   END IF;
 
@@ -709,7 +709,7 @@ BEGIN
     SELECT 1 FROM public.customers
      WHERE id = v_customer_id AND shop_id = v_shop_id
   ) THEN
-    RAISE EXCEPTION 'ÐÐ»Ð¸ÐµÐ½Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ Ð² ÑÑÐ¾Ð¼ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ðµ' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Клиент не найден в этом магазине' USING ERRCODE = '22023';
   END IF;
   IF v_customer_id IS NULL AND v_customer_phone IS NOT NULL THEN
     PERFORM pg_advisory_xact_lock(
@@ -775,7 +775,7 @@ BEGIN
       amount_cash, amount_electronic, client_op_id
     ) VALUES (
       v_cash_operation_id, v_shop_id, v_user_id, v_profile.full_name, 'income',
-      v_total, 'ÐÑÐ¾Ð´Ð°Ð¶Ð° ÑÐµÐºÐ° #' || left(v_sale_id::text, 8),
+      v_total, 'Продажа чека #' || left(v_sale_id::text, 8),
       CASE
         WHEN v_amount_cash > 0 AND v_amount_electronic > 0 THEN 'mixed'
         WHEN v_amount_electronic > 0 THEN 'electronic'
@@ -833,42 +833,42 @@ DECLARE
 BEGIN
   SELECT * INTO v_profile FROM public.profiles WHERE id = v_user;
   IF v_user IS NULL OR NOT FOUND OR v_profile.status::text <> 'approved' OR v_shop IS NULL THEN
-    RAISE EXCEPTION 'ÐÐµÑ Ð´Ð¾ÑÑÑÐ¿Ð° Ðº Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ñ' USING ERRCODE = '42501';
+    RAISE EXCEPTION 'Нет доступа к магазину' USING ERRCODE = '42501';
   END IF;
   IF v_profile.role::text NOT IN ('admin', 'super_admin')
      AND NOT (coalesce(_allow_seller, false) AND _type = 'outcome') THEN
-    RAISE EXCEPTION 'ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ Ð¿ÑÐ°Ð² Ð´Ð»Ñ ÐºÐ°ÑÑÐ¾Ð²Ð¾Ð¹ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸' USING ERRCODE = '42501';
+    RAISE EXCEPTION 'Недостаточно прав для кассовой операции' USING ERRCODE = '42501';
   END IF;
   IF _client_op_id IS NULL OR _client_op_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐ¹ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Некорректный идентификатор операции' USING ERRCODE = '22023';
   END IF;
   _client_op_id := lower(_client_op_id);
   IF _type IS NULL OR _type NOT IN ('income', 'outcome', 'collection') THEN
-    RAISE EXCEPTION 'ÐÐµÐ²ÐµÑÐ½ÑÐ¹ ÑÐ¸Ð¿ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Неверный тип операции' USING ERRCODE = '22023';
   END IF;
   IF _amount IS NULL OR _amount::text IN ('NaN', 'Infinity', '-Infinity') OR _amount <= 0 THEN
-    RAISE EXCEPTION 'Ð£ÐºÐ°Ð¶Ð¸ÑÐµ ÑÑÐ¼Ð¼Ñ Ð±Ð¾Ð»ÑÑÐµ Ð½ÑÐ»Ñ' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Укажите сумму больше нуля' USING ERRCODE = '22023';
   END IF;
   v_amount := round(_amount, 2);
   IF v_amount <= 0 THEN
-    RAISE EXCEPTION 'Ð¡ÑÐ¼Ð¼Ð° Ð¿Ð¾ÑÐ»Ðµ Ð¾ÐºÑÑÐ³Ð»ÐµÐ½Ð¸Ñ Ð´Ð¾Ð»Ð¶Ð½Ð° Ð±ÑÑÑ Ð±Ð¾Ð»ÑÑÐµ Ð½ÑÐ»Ñ' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Сумма после округления должна быть больше нуля' USING ERRCODE = '22023';
   END IF;
   IF v_reason IS NULL OR length(v_reason) = 0 OR length(v_reason) > 300 THEN
-    RAISE EXCEPTION 'Ð£ÐºÐ°Ð¶Ð¸ÑÐµ Ð¿ÑÐ¸ÑÐ¸Ð½Ñ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸ (Ð´Ð¾ 300 ÑÐ¸Ð¼Ð²Ð¾Ð»Ð¾Ð²)' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Укажите причину операции (до 300 символов)' USING ERRCODE = '22023';
   END IF;
   v_source := CASE WHEN _type = 'collection' THEN 'cash' ELSE coalesce(_source, 'cash') END;
   IF v_source NOT IN ('cash', 'electronic', 'mixed') THEN
-    RAISE EXCEPTION 'ÐÐµÐ²ÐµÑÐ½ÑÐ¹ Ð¸ÑÑÐ¾ÑÐ½Ð¸Ðº ÑÑÐµÐ´ÑÑÐ²' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Неверный источник средств' USING ERRCODE = '22023';
   END IF;
   IF v_source = 'mixed' THEN
     IF coalesce(_amount_cash, 0)::text IN ('NaN', 'Infinity', '-Infinity')
        OR coalesce(_amount_electronic, 0)::text IN ('NaN', 'Infinity', '-Infinity') THEN
-      RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½Ð°Ñ ÑÐ°Ð·Ð±Ð¸Ð²ÐºÐ° ÑÑÐ¼Ð¼Ñ' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'Некорректная разбивка суммы' USING ERRCODE = '22023';
     END IF;
     v_cash := round(coalesce(_amount_cash, 0), 2);
     v_electronic := round(coalesce(_amount_electronic, 0), 2);
     IF v_cash < 0 OR v_electronic < 0 OR v_cash + v_electronic <> v_amount THEN
-      RAISE EXCEPTION 'Ð¡ÑÐ¼Ð¼Ð° Ð½Ð°Ð»Ð¸ÑÐ½ÑÑ Ð¸ ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÑ Ð´Ð¾Ð»Ð¶Ð½Ð° ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÑÑ Ñ Ð¾Ð±ÑÐµÐ¹ ÑÑÐ¼Ð¼Ð¾Ð¹' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'Сумма наличных и электронных должна совпадать с общей суммой' USING ERRCODE = '22023';
     END IF;
   ELSE
     v_cash := CASE WHEN v_source = 'cash' THEN v_amount ELSE 0 END;
@@ -880,7 +880,7 @@ BEGIN
   SELECT * INTO v_existing FROM public.cash_operations WHERE client_op_id = _client_op_id;
   IF FOUND THEN
     IF v_existing.shop_id <> v_shop OR v_existing.created_by <> v_user THEN
-      RAISE EXCEPTION 'Ð­ÑÐ¾Ñ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ð¾Ð¿ÐµÑÐ°ÑÐ¸Ð¸ ÑÐ¶Ðµ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÑÑÑ' USING ERRCODE = '42501';
+      RAISE EXCEPTION 'Этот идентификатор операции уже используется' USING ERRCODE = '42501';
     END IF;
     IF v_existing.type::text IS DISTINCT FROM _type
        OR v_existing.amount IS DISTINCT FROM v_amount
@@ -889,7 +889,7 @@ BEGIN
        OR v_existing.amount_electronic IS DISTINCT FROM v_electronic
        OR v_existing.reason IS DISTINCT FROM v_reason
        OR (_operation_id IS NOT NULL AND v_existing.id <> _operation_id) THEN
-      RAISE EXCEPTION 'ÐÐµÐ»ÑÐ·Ñ Ð¿Ð¾Ð²ÑÐ¾ÑÐ½Ð¾ Ð¸ÑÐ¿Ð¾Ð»ÑÐ·Ð¾Ð²Ð°ÑÑ Ð¸Ð´ÐµÐ½ÑÐ¸ÑÐ¸ÐºÐ°ÑÐ¾Ñ Ñ Ð´ÑÑÐ³Ð¸Ð¼Ð¸ Ð´Ð°Ð½Ð½ÑÐ¼Ð¸' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'Нельзя повторно использовать идентификатор с другими данными' USING ERRCODE = '22023';
     END IF;
     -- Do not revive deleted operations or create another reason preset.
     RETURN jsonb_build_object('accepted', true, 'duplicate', true, 'operation_id', v_existing.id);
@@ -899,10 +899,10 @@ BEGIN
     FROM public.cash_ledger_balances(v_shop);
   IF _type <> 'income' THEN
     IF v_cash > v_cash_balance THEN
-      RAISE EXCEPTION 'ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ Ð½Ð°Ð»Ð¸ÑÐ½ÑÑ: Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾ % Ñ', v_cash_balance USING ERRCODE = '23514';
+      RAISE EXCEPTION 'Недостаточно наличных: доступно % с', v_cash_balance USING ERRCODE = '23514';
     END IF;
     IF v_electronic > v_electronic_balance THEN
-      RAISE EXCEPTION 'ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÑ ÑÑÐµÐ´ÑÑÐ²: Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾ % Ñ', v_electronic_balance USING ERRCODE = '23514';
+      RAISE EXCEPTION 'Недостаточно электронных средств: доступно % с', v_electronic_balance USING ERRCODE = '23514';
     END IF;
   END IF;
 
@@ -955,22 +955,22 @@ DECLARE
   v_mode text := 'hard';
 BEGIN
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'Ð¢ÑÐµÐ±ÑÐµÑÑÑ Ð²ÑÐ¾Ð´ Ð² ÑÐ¸ÑÑÐµÐ¼Ñ' USING errcode = '42501';
+    RAISE EXCEPTION 'Требуется вход в систему' USING errcode = '42501';
   END IF;
   SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;
   IF NOT FOUND OR v_profile.status IS DISTINCT FROM 'approved'::public.profile_status THEN
-    RAISE EXCEPTION 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' USING errcode = '42501';
+    RAISE EXCEPTION 'Аккаунт не подтверждён' USING errcode = '42501';
   END IF;
   IF v_shop_id IS NULL THEN
-    RAISE EXCEPTION 'ÐÐºÑÐ¸Ð²Ð½ÑÐ¹ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½ Ð½Ðµ Ð²ÑÐ±ÑÐ°Ð½' USING errcode = '42501';
+    RAISE EXCEPTION 'Активный магазин не выбран' USING errcode = '42501';
   END IF;
 
   SELECT * INTO v_product FROM public.products
    WHERE id = _product_id
    FOR UPDATE;
   IF NOT FOUND THEN
-    -- Ð¢Ð¾Ð²Ð°ÑÐ° Ð½ÐµÑ Ð² Ð¾Ð±Ð»Ð°ÐºÐµ (ÑÐ¶Ðµ ÑÐ´Ð°Ð»ÑÐ½ Ð¸Ð»Ð¸ ÑÐ¾Ð·Ð´Ð°Ð½ Ð¾ÑÐ»Ð°Ð¹Ð½ Ð¸ Ð½Ðµ ÑÐ¸Ð½ÑÑÐ¾Ð½Ð¸Ð·Ð¸ÑÐ¾Ð²Ð°Ð½):
-    -- ÑÑÐ¸ÑÐ°ÐµÐ¼ ÑÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ ÑÑÐ¿ÐµÑÐ½ÑÐ¼ Ð¸ Ð¿Ð¸ÑÐµÐ¼ tombstone, ÑÑÐ¾Ð±Ñ Ð¾Ð½ Ð½Ðµ "Ð²Ð¾ÑÐºÑÐµÑ".
+    -- Товара нет в облаке (уже удалён или создан офлайн и не синхронизирован):
+    -- считаем удаление успешным и пишем tombstone, чтобы он не "воскрес".
     INSERT INTO public.product_deletion_tombstones (shop_id, product_id)
     VALUES (v_shop_id, _product_id)
     ON CONFLICT (shop_id, product_id) DO UPDATE SET deleted_at = EXCLUDED.deleted_at;
@@ -978,7 +978,7 @@ BEGIN
   END IF;
   IF v_product.shop_id IS DISTINCT FROM v_shop_id
      AND v_product.shop_id IS DISTINCT FROM v_profile.shop_id THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ Ð¿ÑÐ¸Ð½Ð°Ð´Ð»ÐµÐ¶Ð¸Ñ Ð´ÑÑÐ³Ð¾Ð¼Ñ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ñ' USING errcode = '42501';
+    RAISE EXCEPTION 'Товар принадлежит другому магазину' USING errcode = '42501';
   END IF;
   v_shop_id := v_product.shop_id;
 
@@ -1165,14 +1165,14 @@ DECLARE
   v_reused boolean := false;
 BEGIN
   IF NOT public.is_approved() THEN
-    RAISE EXCEPTION 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' USING errcode = '42501';
+    RAISE EXCEPTION 'Аккаунт не подтверждён' USING errcode = '42501';
   END IF;
   IF v_shop IS NULL THEN
-    RAISE EXCEPTION 'Ð£ Ð¿ÑÐ¾ÑÐ¸Ð»Ñ Ð½Ðµ Ð·Ð°Ð´Ð°Ð½ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½' USING errcode = '42501';
+    RAISE EXCEPTION 'У профиля не задан магазин' USING errcode = '42501';
   END IF;
 
   IF v_prefix !~ '^[A-Z]{2}$' THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐ¹ Ð¿ÑÐµÑÐ¸ÐºÑ Ð°ÑÑÐ¸ÐºÑÐ»Ð°: %. ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ 2 Ð»Ð°ÑÐ¸Ð½ÑÐºÐ¸Ðµ Ð±ÑÐºÐ²Ñ (A-Z).', p_prefix
+    RAISE EXCEPTION 'Некорректный префикс артикула: %. Используйте 2 латинские буквы (A-Z).', p_prefix
       USING errcode = '22023';
   END IF;
 
@@ -1212,7 +1212,7 @@ BEGIN
 
   IF v_seq IS NULL THEN
     RAISE EXCEPTION
-      'Ð¡Ð²Ð¾Ð±Ð¾Ð´Ð½ÑÐµ Ð°ÑÑÐ¸ÐºÑÐ»Ñ Ð´Ð»Ñ Ð¿ÑÐµÑÐ¸ÐºÑÐ° % Ð·Ð°ÐºÐ¾Ð½ÑÐ¸Ð»Ð¸ÑÑ (00001â99999).', v_prefix
+      'Свободные артикулы для префикса % закончились (00001–99999).', v_prefix
       USING errcode = 'P0001';
   END IF;
 
@@ -1230,9 +1230,9 @@ CREATE FUNCTION public.notify_pending_profile() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 BEGIN
-  -- Ð¡ÑÐ°Ð±Ð°ÑÑÐ²Ð°ÐµÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð¿ÑÐ¸ Ð¿ÐµÑÐµÑÐ¾Ð´Ðµ Ð ÑÑÐ°ÑÑÑ pending
+  -- Срабатывает только при переходе В статус pending
   IF NEW.status = 'pending' AND (TG_OP = 'INSERT' OR OLD.status <> 'pending') THEN
-    -- ÐÑÐ¿Ð¾Ð»ÑÐ·ÑÐµÐ¼ INSERT ... ON CONFLICT DO NOTHING (Ð¸Ð´ÐµÐ¼Ð¿Ð¾ÑÐµÐ½ÑÐ½Ð¾ÑÑÑ ÑÐµÑÐµÐ· ÑÐ½Ð¸Ðº. Ð¸Ð½Ð´ÐµÐºÑ)
+    -- Используем INSERT ... ON CONFLICT DO NOTHING (идемпотентность через уник. индекс)
     INSERT INTO public.superadmin_notifications
       (kind, profile_id, shop_id, full_name, shop_name, requested_role)
     VALUES (
@@ -1246,7 +1246,7 @@ BEGIN
     ON CONFLICT (profile_id) WHERE is_processed = false DO NOTHING;
   END IF;
 
-  -- ÐÑÐ¸ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ð¸ Ð¸Ð»Ð¸ Ð¾ÑÐºÐ»Ð¾Ð½ÐµÐ½Ð¸Ð¸ â Ð¿Ð¾Ð¼ÐµÑÐ°ÐµÐ¼ ÑÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ ÐºÐ°Ðº Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐ°Ð½Ð½Ð¾Ðµ
+  -- При подтверждении или отклонении — помечаем уведомление как обработанное
   IF TG_OP = 'UPDATE' AND OLD.status = 'pending'
      AND NEW.status IN ('approved', 'rejected') THEN
     UPDATE public.superadmin_notifications
@@ -1284,21 +1284,21 @@ DECLARE
   v_electronic_balance numeric;
 BEGIN
   IF NOT public.is_shop_admin() OR v_shop IS NULL THEN
-    RAISE EXCEPTION 'ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ Ð¿ÑÐ°Ð²' USING ERRCODE = '42501';
+    RAISE EXCEPTION 'Недостаточно прав' USING ERRCODE = '42501';
   END IF;
   SELECT * INTO v_profile FROM public.profiles WHERE id = auth.uid();
-  IF nullif(v_supplier_name, '') IS NULL THEN RAISE EXCEPTION 'Ð£ÐºÐ°Ð¶Ð¸ÑÐµ Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ°'; END IF;
+  IF nullif(v_supplier_name, '') IS NULL THEN RAISE EXCEPTION 'Укажите поставщика'; END IF;
   IF v_amount IS NULL OR v_amount::text = 'NaN' OR v_amount <= 0 THEN
-    RAISE EXCEPTION 'Ð¡ÑÐ¼Ð¼Ð° Ð´Ð¾Ð»Ð¶Ð½Ð° Ð±ÑÑÑ Ð±Ð¾Ð»ÑÑÐµ Ð½ÑÐ»Ñ';
+    RAISE EXCEPTION 'Сумма должна быть больше нуля';
   END IF;
   IF _source IS NULL OR _source NOT IN ('cash', 'electronic', 'mixed') THEN
-    RAISE EXCEPTION 'ÐÐµÐ²ÐµÑÐ½ÑÐ¹ Ð¸ÑÑÐ¾ÑÐ½Ð¸Ðº Ð²ÑÐ¿Ð»Ð°ÑÑ';
+    RAISE EXCEPTION 'Неверный источник выплаты';
   END IF;
   IF _source = 'cash' THEN v_cash := v_amount; v_electronic := 0; END IF;
   IF _source = 'electronic' THEN v_cash := 0; v_electronic := v_amount; END IF;
   IF v_cash < 0 OR v_electronic < 0 OR v_cash::text = 'NaN' OR v_electronic::text = 'NaN'
      OR abs(v_cash + v_electronic - v_amount) > 0.01 THEN
-    RAISE EXCEPTION 'Ð Ð°Ð·Ð±Ð¸Ð²ÐºÐ° Ð²ÑÐ¿Ð»Ð°ÑÑ Ð½Ðµ ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÐµÑ Ñ ÑÑÐ¼Ð¼Ð¾Ð¹';
+    RAISE EXCEPTION 'Разбивка выплаты не совпадает с суммой';
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtextextended(v_shop::text || ':cash-ledger', 0));
@@ -1317,16 +1317,16 @@ BEGIN
      AND nullif(btrim(supplier_phone), '') IS NOT DISTINCT FROM v_supplier_phone;
 
   IF v_amount > v_before + 0.01 THEN
-    RAISE EXCEPTION 'ÐÑÐ¿Ð»Ð°ÑÐ° Ð±Ð¾Ð»ÑÑÐµ Ð¾ÑÑÐ°ÑÐºÐ° Ð´Ð¾Ð»Ð³Ð°: Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾ %', v_before;
+    RAISE EXCEPTION 'Выплата больше остатка долга: доступно %', v_before;
   END IF;
 
   SELECT cash, electronic INTO v_cash_balance, v_electronic_balance
     FROM public.cash_ledger_balances(v_shop);
   IF v_cash > v_cash_balance THEN
-    RAISE EXCEPTION 'ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ Ð½Ð°Ð»Ð¸ÑÐ½ÑÑ: Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾ %', v_cash_balance;
+    RAISE EXCEPTION 'Недостаточно наличных: доступно %', v_cash_balance;
   END IF;
   IF v_electronic > v_electronic_balance THEN
-    RAISE EXCEPTION 'ÐÐµÐ´Ð¾ÑÑÐ°ÑÐ¾ÑÐ½Ð¾ ÑÐ»ÐµÐºÑÑÐ¾Ð½Ð½ÑÑ ÑÑÐµÐ´ÑÑÐ²: Ð´Ð¾ÑÑÑÐ¿Ð½Ð¾ %', v_electronic_balance;
+    RAISE EXCEPTION 'Недостаточно электронных средств: доступно %', v_electronic_balance;
   END IF;
 
   INSERT INTO public.cash_operations (
@@ -1334,7 +1334,7 @@ BEGIN
     amount_cash, amount_electronic, supplier_name, supplier_phone
   ) VALUES (
     v_shop, auth.uid(), v_profile.full_name, 'outcome', v_amount,
-    coalesce(nullif(btrim(_reason), ''), 'ÐÑÐ¿Ð»Ð°ÑÐ° Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÑ'), _source,
+    coalesce(nullif(btrim(_reason), ''), 'Выплата поставщику'), _source,
     v_cash, v_electronic, v_supplier_name, v_supplier_phone
   ) RETURNING id INTO v_cash_id;
 
@@ -1345,7 +1345,7 @@ BEGIN
   ) VALUES (
     v_shop, v_supplier_name, v_supplier_phone, 'payment', v_amount,
     v_before, v_before - v_amount, v_cash_id, _source, v_cash, v_electronic,
-    coalesce(nullif(btrim(_reason), ''), 'ÐÑÐ¿Ð»Ð°ÑÐ° Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÑ'),
+    coalesce(nullif(btrim(_reason), ''), 'Выплата поставщику'),
     auth.uid(), v_profile.full_name, left(_device_info, 500)
   ) RETURNING * INTO v_operation;
 
@@ -1433,7 +1433,7 @@ declare
   v_cnt  integer;
 begin
   if not public.is_approved() or v_shop is null then
-    raise exception 'ÐÐµÑ Ð´Ð¾ÑÑÑÐ¿Ð°' using errcode = '42501';
+    raise exception 'Нет доступа' using errcode = '42501';
   end if;
   update public.products p
      set status = 'archived',
@@ -1458,7 +1458,7 @@ CREATE FUNCTION public.reset_bonus_points(_user_id uuid) RETURNS numeric
     AS $$
 begin
   if not public.is_shop_admin() then
-    raise exception 'ÐÐ±Ð½ÑÐ»ÑÑÑ Ð±Ð¾Ð½ÑÑÑ Ð¼Ð¾Ð¶ÐµÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ' using errcode = '42501';
+    raise exception 'Обнулять бонусы может только администратор' using errcode = '42501';
   end if;
   update public.profiles set bonus_points = 0
    where id = _user_id and shop_id = public.current_shop_id();
@@ -1522,41 +1522,41 @@ DECLARE
   v_return      public.sale_returns;
 BEGIN
   IF v_user IS NULL OR NOT public.is_approved() THEN
-    RAISE EXCEPTION 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' USING errcode = '42501';
+    RAISE EXCEPTION 'Аккаунт не подтверждён' USING errcode = '42501';
   END IF;
   IF v_shop IS NULL THEN
-    RAISE EXCEPTION 'ÐÑÐ¾ÑÐ¸Ð»Ñ Ð½Ðµ Ð¿ÑÐ¸Ð²ÑÐ·Ð°Ð½ Ðº Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ñ' USING errcode = '42501';
+    RAISE EXCEPTION 'Профиль не привязан к магазину' USING errcode = '42501';
   END IF;
   IF _item_index IS NULL OR _item_index < 0 THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐ¹ Ð½Ð¾Ð¼ÐµÑ Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¸' USING errcode = '22023';
+    RAISE EXCEPTION 'Некорректный номер позиции' USING errcode = '22023';
   END IF;
 
-  -- ÐÐ»Ð¾ÐºÐ¸ÑÑÐµÐ¼ ÑÐµÐº: Ð¿Ð°ÑÐ°Ð»Ð»ÐµÐ»ÑÐ½ÑÐ¹ Ð²Ð¾Ð·Ð²ÑÐ°Ñ ÑÐ¾Ð¹ Ð¶Ðµ Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¸ Ð½ÐµÐ²Ð¾Ð·Ð¼Ð¾Ð¶ÐµÐ½.
+  -- Блокируем чек: параллельный возврат той же позиции невозможен.
   SELECT * INTO v_sale
     FROM public.sales
    WHERE id = _sale_id AND shop_id = v_shop
    FOR UPDATE;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'ÐÑÐ¾Ð´Ð°Ð¶Ð° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°' USING errcode = 'P0002';
+    RAISE EXCEPTION 'Продажа не найдена' USING errcode = 'P0002';
   END IF;
 
   IF EXISTS (
     SELECT 1 FROM public.sale_returns
      WHERE sale_id = _sale_id AND item_index = _item_index
   ) THEN
-    RAISE EXCEPTION 'Ð­ÑÐ° Ð¿Ð¾Ð·Ð¸ÑÐ¸Ñ ÑÐ¶Ðµ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐµÐ½Ð°' USING errcode = 'P0001';
+    RAISE EXCEPTION 'Эта позиция уже возвращена' USING errcode = 'P0001';
   END IF;
 
   v_item := v_sale.items -> _item_index;
   IF v_item IS NULL OR jsonb_typeof(v_item) <> 'object' THEN
-    RAISE EXCEPTION 'ÐÐ¾Ð·Ð¸ÑÐ¸Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð² ÑÐµÐºÐµ' USING errcode = 'P0002';
+    RAISE EXCEPTION 'Позиция не найдена в чеке' USING errcode = 'P0002';
   END IF;
 
   v_kind  := coalesce(nullif(v_item ->> 'kind', ''), 'product');
   v_price := round(coalesce((v_item ->> 'price')::numeric, 0), 2);
   v_cost  := round(coalesce((v_item ->> 'cost')::numeric, 0), 2);
 
-  -- Ð¤Ð°ÐºÑÐ¸ÑÐµÑÐºÐ¸ Ð¾Ð¿Ð»Ð°ÑÐµÐ½Ð½Ð°Ñ Ð´Ð¾Ð»Ñ Ð¿Ð¾Ð·Ð¸ÑÐ¸Ð¸ (ÑÑÐ¸ÑÑÐ²Ð°ÐµÑ ÑÐºÐ¸Ð´ÐºÐ¸ ÑÐµÐºÐ° Ð¸ ÑÐ¿Ð¸ÑÐ°Ð½Ð½ÑÐµ Ð±Ð¾Ð½ÑÑÑ).
+  -- Фактически оплаченная доля позиции (учитывает скидки чека и списанные бонусы).
   v_ratio := CASE
     WHEN coalesce(v_sale.subtotal, 0) > 0
       THEN least(1, greatest(0, v_sale.total / v_sale.subtotal))
@@ -1565,13 +1565,13 @@ BEGIN
   v_amount := round(v_price * v_ratio, 2);
 
   IF v_amount < 0 THEN
-    RAISE EXCEPTION 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½Ð°Ñ ÑÑÐ¼Ð¼Ð° Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°' USING errcode = '22023';
+    RAISE EXCEPTION 'Некорректная сумма возврата' USING errcode = '22023';
   END IF;
 
   v_product_id := nullif(v_item ->> 'product_id', '')::uuid;
 
-  -- ÐÐ»Ð¾ÐºÐ¸ÑÑÐµÐ¼ ÑÐ¾Ð²Ð°Ñ, ÑÑÐ¾Ð±Ñ Ð¿Ð°ÑÐ°Ð»Ð»ÐµÐ»ÑÐ½Ð¾ ÐµÐ³Ð¾ Ð½ÐµÐ»ÑÐ·Ñ Ð±ÑÐ»Ð¾ Ð¿ÑÐ¾Ð´Ð°ÑÑ Ð¿Ð¾Ð²ÑÐ¾ÑÐ½Ð¾.
-  -- ÐÑÐ»Ð¸ ÑÐ¾Ð²Ð°Ñ ÑÐ´Ð°Ð»ÑÐ½ ÑÐ¾ ÑÐºÐ»Ð°Ð´Ð° â Ð´ÐµÐ½ÑÐ³Ð¸ Ð²ÑÑ ÑÐ°Ð²Ð½Ð¾ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°ÐµÐ¼, ÑÐºÐ»Ð°Ð´ Ð½Ðµ ÑÑÐ¾Ð³Ð°ÐµÐ¼.
+  -- Блокируем товар, чтобы параллельно его нельзя было продать повторно.
+  -- Если товар удалён со склада — деньги всё равно возвращаем, склад не трогаем.
   IF v_kind = 'product' AND v_product_id IS NOT NULL THEN
     PERFORM 1 FROM public.products
       WHERE id = v_product_id AND shop_id = v_shop
@@ -1581,15 +1581,15 @@ BEGIN
     END IF;
   END IF;
 
-  v_label := coalesce(nullif(v_item ->> 'name', ''), 'Ð¢Ð¾Ð²Ð°Ñ');
+  v_label := coalesce(nullif(v_item ->> 'name', ''), 'Товар');
   v_reason := nullif(btrim(coalesce(_reason, '')), '');
   IF v_reason IS NULL THEN
-    v_reason := 'ÐÐ¾Ð·Ð²ÑÐ°Ñ ÑÐ¾Ð²Ð°ÑÐ°: ' || v_label;
+    v_reason := 'Возврат товара: ' || v_label;
   ELSE
-    v_reason := left('ÐÐ¾Ð·Ð²ÑÐ°Ñ ÑÐ¾Ð²Ð°ÑÐ°: ' || v_label || ' Â· ' || v_reason, 300);
+    v_reason := left('Возврат товара: ' || v_label || ' · ' || v_reason, 300);
   END IF;
 
-  -- ÐÑÑÐ¾ÑÐ½Ð¸Ðº Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ° Ð¿Ð¾Ð²ÑÐ¾ÑÑÐµÑ Ð¸ÑÑÐ¾ÑÐ½Ð¸Ðº Ð¾Ð¿Ð»Ð°ÑÑ ÑÐµÐºÐ°.
+  -- Источник возврата повторяет источник оплаты чека.
   IF v_sale.payment_method = 'mixed' THEN
     IF coalesce(v_sale.total, 0) > 0 THEN
       v_cash := round(coalesce(v_sale.amount_cash, 0) * (v_amount / v_sale.total), 2);
@@ -1612,7 +1612,7 @@ BEGIN
     ELSE 'cash'
   END;
 
-  -- 1) ÐÐµÐ½ÐµÐ¶Ð½Ð¾Ðµ Ð¸Ð·ÑÑÑÐ¸Ðµ Ð¸Ð· ÐºÐ°ÑÑÑ.
+  -- 1) Денежное изъятие из кассы.
   INSERT INTO public.cash_operations (
     shop_id, created_by, author_name, type, amount, source,
     amount_cash, amount_electronic, reason
@@ -1623,7 +1623,7 @@ BEGIN
    WHERE p.id = v_user
   RETURNING id INTO v_op_id;
 
-  -- 2) ÐÐ°Ð¿Ð¸ÑÑ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°.
+  -- 2) Запись возврата.
   INSERT INTO public.sale_returns (
     shop_id, sale_id, product_id, item_index, item_name, item_metal,
     item_weight, amount, cost, cash_operation_id, reason, created_by, author_name
@@ -1636,14 +1636,14 @@ BEGIN
    WHERE p.id = v_user
   RETURNING * INTO v_return;
 
-  -- 3) Ð¡ÐµÐ±ÐµÑÑÐ¾Ð¸Ð¼Ð¾ÑÑÑ Ð²Ð¾Ð·Ð²ÑÐ°ÑÑÐ½Ð½Ð¾Ð³Ð¾ ÑÐ¾Ð²Ð°ÑÐ° ÑÐ½Ð¾Ð²Ð° ÑÑÐ¸ÑÑÐ²Ð°ÐµÑÑÑ Ð½Ð° ÑÐºÐ»Ð°Ð´Ðµ.
+  -- 3) Себестоимость возвращённого товара снова учитывается на складе.
   IF v_kind = 'product' AND v_product_id IS NOT NULL THEN
     UPDATE public.products
        SET status = 'in_stock'
      WHERE id = v_product_id AND shop_id = v_shop;
   END IF;
 
-  -- 4) ÐÐ¾ÑÑÐµÐºÑÐ¸ÑÑÐµÐ¼ ÑÑÐ°ÑÐ¸ÑÑÐ¸ÐºÑ ÐºÐ»Ð¸ÐµÐ½ÑÐ°.
+  -- 4) Корректируем статистику клиента.
   IF v_sale.customer_id IS NOT NULL THEN
     UPDATE public.customers
        SET total_spent    = greatest(0, coalesce(total_spent, 0) - v_amount),
@@ -1714,7 +1714,7 @@ BEGIN
      AND status = 'in_stock'
   RETURNING * INTO v_product;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÐ¶Ðµ Ð¿ÑÐ¾Ð´Ð°Ð½ Ð¸Ð»Ð¸ Ð½ÐµÐ´Ð¾ÑÑÑÐ¿ÐµÐ½' USING ERRCODE = 'P0001';
+    RAISE EXCEPTION 'Товар уже продан или недоступен' USING ERRCODE = 'P0001';
   END IF;
   RETURN v_product;
 END;
@@ -1732,10 +1732,10 @@ CREATE FUNCTION public.set_bonus_points(_user_id uuid, _points numeric) RETURNS 
 declare v_total numeric;
 begin
   if not public.is_shop_admin() then
-    raise exception 'Ð£Ð¿ÑÐ°Ð²Ð»ÑÑÑ Ð±Ð¾Ð½ÑÑÐ°Ð¼Ð¸ Ð¼Ð¾Ð¶ÐµÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ' using errcode = '42501';
+    raise exception 'Управлять бонусами может только администратор' using errcode = '42501';
   end if;
   if _points is null or _points < 0 then
-    raise exception 'ÐÐµÐºÐ¾ÑÑÐµÐºÑÐ½Ð¾Ðµ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð±Ð°Ð»Ð»Ð¾Ð²' using errcode = '22023';
+    raise exception 'Некорректное количество баллов' using errcode = '22023';
   end if;
   update public.profiles
      set bonus_points = _points
@@ -1743,7 +1743,7 @@ begin
      and shop_id = public.current_shop_id()
   returning bonus_points into v_total;
   if v_total is null then
-    raise exception 'Ð¡Ð¾ÑÑÑÐ´Ð½Ð¸Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½' using errcode = 'P0002';
+    raise exception 'Сотрудник не найден' using errcode = 'P0002';
   end if;
   return v_total;
 end $$;
@@ -1760,10 +1760,10 @@ CREATE FUNCTION public.set_bonus_rate(_user_id uuid, _rate numeric) RETURNS nume
 declare v_rate numeric;
 begin
   if not public.is_shop_admin() then
-    raise exception 'ÐÐµÐ½ÑÑÑ ÑÑÐ°Ð²ÐºÑ Ð±Ð¾Ð½ÑÑÐ¾Ð² Ð¼Ð¾Ð¶ÐµÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ' using errcode = '42501';
+    raise exception 'Менять ставку бонусов может только администратор' using errcode = '42501';
   end if;
   if _rate is null or _rate < 0 or _rate > 100 then
-    raise exception 'Ð¡ÑÐ°Ð²ÐºÐ° Ð´Ð¾Ð»Ð¶Ð½Ð° Ð±ÑÑÑ Ð¾Ñ 0 Ð´Ð¾ 100' using errcode = '22023';
+    raise exception 'Ставка должна быть от 0 до 100' using errcode = '22023';
   end if;
   update public.profiles
      set bonus_rate = _rate
@@ -1771,7 +1771,7 @@ begin
      and shop_id = public.current_shop_id()
   returning bonus_rate into v_rate;
   if v_rate is null then
-    raise exception 'Ð¡Ð¾ÑÑÑÐ´Ð½Ð¸Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½' using errcode = 'P0002';
+    raise exception 'Сотрудник не найден' using errcode = 'P0002';
   end if;
   return v_rate;
 end $$;
@@ -1786,37 +1786,37 @@ CREATE FUNCTION public.superadmin_approve_request(_profile_id uuid, _role text) 
     SET search_path TO 'public'
     AS $$
 BEGIN
-  -- ÐÑÐ¾Ð²ÐµÑÐºÐ° Ð¿ÑÐ°Ð²
+  -- Проверка прав
   IF NOT public.is_super_admin() THEN
     RAISE EXCEPTION 'Forbidden: requires super_admin role'
       USING errcode = '42501';
   END IF;
 
-  -- ÐÐ°Ð»Ð¸Ð´Ð°ÑÐ¸Ñ ÑÐ¾Ð»Ð¸
+  -- Валидация роли
   IF _role NOT IN ('admin', 'seller') THEN
-    RAISE EXCEPTION 'ÐÐµÐ´Ð¾Ð¿ÑÑÑÐ¸Ð¼Ð°Ñ ÑÐ¾Ð»Ñ: %. ÐÐ¾Ð¿ÑÑÑÐ¸Ð¼Ñ: admin, seller', _role
+    RAISE EXCEPTION 'Недопустимая роль: %. Допустимы: admin, seller', _role
       USING errcode = '22023';
   END IF;
 
-  -- ÐÑÐ¾Ð²ÐµÑÐ¸ÑÑ, ÑÑÐ¾ Ð·Ð°ÑÐ²ÐºÐ° ÑÑÑÐµÑÑÐ²ÑÐµÑ Ð¸ Ð½Ð°ÑÐ¾Ð´Ð¸ÑÑÑ Ð² ÑÐ¾ÑÑÐ¾ÑÐ½Ð¸Ð¸ pending
+  -- Проверить, что заявка существует и находится в состоянии pending
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles
     WHERE id = _profile_id AND status = 'pending'
   ) THEN
-    RAISE EXCEPTION 'ÐÐ°ÑÐ²ÐºÐ° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð¸Ð»Ð¸ ÑÐ¶Ðµ Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐ°Ð½Ð° (id: %)', _profile_id
+    RAISE EXCEPTION 'Заявка не найдена или уже обработана (id: %)', _profile_id
       USING errcode = 'P0002';
   END IF;
 
-  -- ÐÐ´Ð¾Ð±ÑÐ¸ÑÑ Ð·Ð°ÑÐ²ÐºÑ â ÐÐÐ Ð¾Ð³ÑÐ°Ð½Ð¸ÑÐµÐ½Ð¸Ñ Ð¿Ð¾ shop_id
+  -- Одобрить заявку — БЕЗ ограничения по shop_id
   UPDATE public.profiles
   SET
     status     = 'approved',
     role       = _role::public.app_role,
-    manager_id = NULL   -- ÑÑÐ¿ÐµÑ-Ð°Ð´Ð¼Ð¸Ð½ Ð½Ðµ Ð¿ÑÐ¸Ð²ÑÐ·ÑÐ²Ð°ÐµÑ Ð¿ÑÐ¾Ð´Ð°Ð²ÑÐ° Ðº ÐºÐ¾Ð½ÐºÑÐµÑÐ½Ð¾Ð¼Ñ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑÑ
+    manager_id = NULL   -- супер-админ не привязывает продавца к конкретному менеджеру
   WHERE id = _profile_id;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'ÐÑÐ¾ÑÐ¸Ð»Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½: %', _profile_id
+    RAISE EXCEPTION 'Профиль не найден: %', _profile_id
       USING errcode = 'P0002';
   END IF;
 END;
@@ -1963,22 +1963,22 @@ CREATE FUNCTION public.superadmin_reject_request(_profile_id uuid) RETURNS void
     SET search_path TO 'public'
     AS $$
 BEGIN
-  -- ÐÑÐ¾Ð²ÐµÑÐºÐ° Ð¿ÑÐ°Ð²
+  -- Проверка прав
   IF NOT public.is_super_admin() THEN
     RAISE EXCEPTION 'Forbidden: requires super_admin role'
       USING errcode = '42501';
   END IF;
 
-  -- ÐÑÐ¾Ð²ÐµÑÐ¸ÑÑ, ÑÑÐ¾ Ð·Ð°ÑÐ²ÐºÐ° ÑÑÑÐµÑÑÐ²ÑÐµÑ Ð¸ Ð½Ð°ÑÐ¾Ð´Ð¸ÑÑÑ Ð² ÑÐ¾ÑÑÐ¾ÑÐ½Ð¸Ð¸ pending
+  -- Проверить, что заявка существует и находится в состоянии pending
   IF NOT EXISTS (
     SELECT 1 FROM public.profiles
     WHERE id = _profile_id AND status = 'pending'
   ) THEN
-    RAISE EXCEPTION 'ÐÐ°ÑÐ²ÐºÐ° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð¸Ð»Ð¸ ÑÐ¶Ðµ Ð¾Ð±ÑÐ°Ð±Ð¾ÑÐ°Ð½Ð° (id: %)', _profile_id
+    RAISE EXCEPTION 'Заявка не найдена или уже обработана (id: %)', _profile_id
       USING errcode = 'P0002';
   END IF;
 
-  -- ÐÑÐºÐ»Ð¾Ð½Ð¸ÑÑ â ÐÐÐ Ð¾Ð³ÑÐ°Ð½Ð¸ÑÐµÐ½Ð¸Ñ Ð¿Ð¾ shop_id
+  -- Отклонить — БЕЗ ограничения по shop_id
   UPDATE public.profiles
   SET
     status = 'rejected',
@@ -1986,7 +1986,7 @@ BEGIN
   WHERE id = _profile_id;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'ÐÑÐ¾ÑÐ¸Ð»Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½: %', _profile_id
+    RAISE EXCEPTION 'Профиль не найден: %', _profile_id
       USING errcode = 'P0002';
   END IF;
 END;
@@ -2041,7 +2041,7 @@ $$;
 -- Name: FUNCTION superadmin_set_shop_frozen(_shop_id uuid, _frozen boolean); Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON FUNCTION public.superadmin_set_shop_frozen(_shop_id uuid, _frozen boolean) IS 'Ð¡ÑÐ¿ÐµÑÐ°Ð´Ð¼Ð¸Ð½: Ð·Ð°Ð¼Ð¾ÑÐ¾Ð·Ð¸ÑÑ (true) Ð¸Ð»Ð¸ ÑÐ°Ð·Ð¼Ð¾ÑÐ¾Ð·Ð¸ÑÑ (false) Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½ Ñ ÐºÐ¾ÑÑÐµÐºÑÐ½ÑÐ¼ Ð²Ð¾ÑÑÑÐ°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸ÐµÐ¼ subscription_status.';
+COMMENT ON FUNCTION public.superadmin_set_shop_frozen(_shop_id uuid, _frozen boolean) IS 'Суперадмин: заморозить (true) или разморозить (false) магазин с корректным восстановлением subscription_status.';
 
 
 --
@@ -2122,22 +2122,22 @@ DECLARE
   v_operation public.supplier_debt_operations;
 BEGIN
   IF NOT public.is_approved() THEN
-    RAISE EXCEPTION 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' USING errcode = '42501';
+    RAISE EXCEPTION 'Аккаунт не подтверждён' USING errcode = '42501';
   END IF;
 
   SELECT * INTO v_product
     FROM public.products
    WHERE id = _product_id AND shop_id = v_shop
    FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Товар не найден'; END IF;
 
   v_supplier_name := NULLIF(btrim(v_product.supplier_name), '');
   IF v_supplier_name IS NULL THEN
-    SELECT COALESCE(NULLIF(btrim(p.full_name), ''), 'ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ')
+    SELECT COALESCE(NULLIF(btrim(p.full_name), ''), 'Администратор')
       INTO v_supplier_name
       FROM public.profiles p
      WHERE p.id = auth.uid();
-    v_supplier_name := COALESCE(v_supplier_name, 'ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ');
+    v_supplier_name := COALESCE(v_supplier_name, 'Администратор');
     UPDATE public.products
        SET supplier_name = v_supplier_name
      WHERE id = v_product.id;
@@ -2145,7 +2145,7 @@ BEGIN
   v_supplier_phone := nullif(btrim(v_product.supplier_phone), '');
 
   IF v_product.consignment_operation_id IS NOT NULL THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÐ¶Ðµ Ð²Ð·ÑÑ Ð½Ð° ÑÐµÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ñ';
+    RAISE EXCEPTION 'Товар уже взят на реализацию';
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtextextended(
@@ -2155,7 +2155,7 @@ BEGIN
 
   v_amount := round(coalesce(v_product.purchase_price, 0), 2);
   IF v_amount <= 0 THEN
-    RAISE EXCEPTION 'ÐÐ°ÐºÑÐ¿Ð¾ÑÐ½Ð°Ñ ÑÑÐ¾Ð¸Ð¼Ð¾ÑÑÑ ÑÐ¾Ð²Ð°ÑÐ° Ð´Ð¾Ð»Ð¶Ð½Ð° Ð±ÑÑÑ Ð±Ð¾Ð»ÑÑÐµ Ð½ÑÐ»Ñ';
+    RAISE EXCEPTION 'Закупочная стоимость товара должна быть больше нуля';
   END IF;
 
   SELECT coalesce(sum(
@@ -2174,7 +2174,7 @@ BEGIN
   )
   SELECT v_shop, v_supplier_name, v_supplier_phone,
          'consignment', v_amount, v_before, v_before + v_amount, v_product.id,
-         'Ð¢Ð¾Ð²Ð°Ñ Ð²Ð·ÑÑ Ð½Ð° ÑÐµÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ñ', p.id, p.full_name, left(_device_info, 500)
+         'Товар взят на реализацию', p.id, p.full_name, left(_device_info, 500)
     FROM public.profiles p
    WHERE p.id = auth.uid()
   RETURNING * INTO v_operation;
@@ -2221,20 +2221,20 @@ DECLARE
   v_product public.products;
 BEGIN
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'Ð¢ÑÐµÐ±ÑÐµÑÑÑ Ð²ÑÐ¾Ð´ Ð² ÑÐ¸ÑÑÐµÐ¼Ñ' USING errcode = '42501';
+    RAISE EXCEPTION 'Требуется вход в систему' USING errcode = '42501';
   END IF;
   SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;
   IF NOT FOUND OR v_profile.status IS DISTINCT FROM 'approved'::public.profile_status THEN
-    RAISE EXCEPTION 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' USING errcode = '42501';
+    RAISE EXCEPTION 'Аккаунт не подтверждён' USING errcode = '42501';
   END IF;
   IF v_shop_id IS NULL THEN
-    RAISE EXCEPTION 'ÐÐºÑÐ¸Ð²Ð½ÑÐ¹ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½ Ð½Ðµ Ð²ÑÐ±ÑÐ°Ð½' USING errcode = '42501';
+    RAISE EXCEPTION 'Активный магазин не выбран' USING errcode = '42501';
   END IF;
 
   SELECT * INTO v_action FROM public.action_history
    WHERE id = _action_id AND shop_id = v_shop_id;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'ÐÐ°Ð¿Ð¸ÑÑ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°';
+    RAISE EXCEPTION 'Запись истории не найдена';
   END IF;
 
   -- All undo behavior other than product creation stays in the tested v40 RPC.
@@ -2246,20 +2246,20 @@ BEGIN
    WHERE id = v_action.entity_id AND shop_id = v_shop_id
    FOR UPDATE;
   IF NOT FOUND OR v_product.deleted_at IS NOT NULL THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÐ¶Ðµ ÑÐ´Ð°Ð»ÑÐ½';
+    RAISE EXCEPTION 'Товар уже удалён';
   END IF;
   IF v_product.status IS DISTINCT FROM 'in_stock' THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÐ¶Ðµ Ð¿ÑÐ¾Ð´Ð°Ð½ Ð¸Ð»Ð¸ ÑÐ¿Ð¸ÑÐ°Ð½ â ÑÐ½Ð°ÑÐ°Ð»Ð° Ð¾ÑÐ¼ÐµÐ½Ð¸ÑÐµ Ð¿ÑÐ¾Ð´Ð°Ð¶Ñ';
+    RAISE EXCEPTION 'Товар уже продан или списан — сначала отмените продажу';
   END IF;
   IF v_product.consignment_operation_id IS NOT NULL THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ Ð²Ð·ÑÑ Ð½Ð° ÑÐµÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ñ â Ð´Ð¾Ð»Ð³ Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÑ ÑÐ¶Ðµ Ð½Ð°ÑÐ¸ÑÐ»ÐµÐ½. Ð¡ÐºÐ¾ÑÑÐµÐºÑÐ¸ÑÑÐ¹ÑÐµ ÐµÐ³Ð¾ Ð² ÑÐ°Ð·Ð´ÐµÐ»Ðµ Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ¾Ð²';
+    RAISE EXCEPTION 'Товар взят на реализацию — долг поставщику уже начислен. Скорректируйте его в разделе поставщиков';
   END IF;
   IF EXISTS (
     SELECT 1 FROM public.sales s
      WHERE s.shop_id = v_shop_id AND s.deleted_at IS NULL
        AND s.items @> jsonb_build_array(jsonb_build_object('product_id', v_product.id::text))
   ) THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÑÐ°ÑÑÐ²Ð¾Ð²Ð°Ð» Ð² Ð¿ÑÐ¾Ð´Ð°Ð¶Ðµ â Ð¾ÑÐ¼ÐµÐ½Ð° Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ð½ÐµÐ²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð°';
+    RAISE EXCEPTION 'Товар участвовал в продаже — отмена добавления невозможна';
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtextextended(v_shop_id::text || ':action_history', 0));
@@ -2267,10 +2267,10 @@ BEGIN
    WHERE id = _action_id AND shop_id = v_shop_id
    FOR UPDATE;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'ÐÐ°Ð¿Ð¸ÑÑ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð±Ð¾Ð»ÑÑÐµ Ð½Ðµ Ð´Ð¾ÑÑÑÐ¿Ð½Ð°';
+    RAISE EXCEPTION 'Запись истории больше не доступна';
   END IF;
   IF v_action.status <> 'active' THEN
-    RAISE EXCEPTION 'Ð­ÑÐ¾ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ðµ ÑÐ¶Ðµ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð¾';
+    RAISE EXCEPTION 'Это действие уже отменено';
   END IF;
 
   -- The journal row and hard delete commit atomically. Devices consume this
@@ -2284,7 +2284,7 @@ BEGIN
    WHERE id = v_product.id AND shop_id = v_shop_id
    RETURNING * INTO v_product;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½';
+    RAISE EXCEPTION 'Товар не найден';
   END IF;
 
   UPDATE public.action_history
@@ -2334,87 +2334,87 @@ DECLARE
   v_cash_row public.cash_operations;
 BEGIN
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'Ð¢ÑÐµÐ±ÑÐµÑÑÑ Ð²ÑÐ¾Ð´ Ð² ÑÐ¸ÑÑÐµÐ¼Ñ' USING errcode = '42501';
+    RAISE EXCEPTION 'Требуется вход в систему' USING errcode = '42501';
   END IF;
   SELECT * INTO v_profile FROM public.profiles WHERE id = v_user_id;
   IF NOT FOUND OR v_profile.status IS DISTINCT FROM 'approved'::public.profile_status THEN
-    RAISE EXCEPTION 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' USING errcode = '42501';
+    RAISE EXCEPTION 'Аккаунт не подтверждён' USING errcode = '42501';
   END IF;
   IF v_shop_id IS NULL THEN
-    RAISE EXCEPTION 'ÐÐºÑÐ¸Ð²Ð½ÑÐ¹ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½ Ð½Ðµ Ð²ÑÐ±ÑÐ°Ð½' USING errcode = '42501';
+    RAISE EXCEPTION 'Активный магазин не выбран' USING errcode = '42501';
   END IF;
 
   SELECT * INTO v_action FROM public.action_history
    WHERE id = _action_id AND shop_id = v_shop_id;
-  IF NOT FOUND THEN RAISE EXCEPTION 'ÐÐ°Ð¿Ð¸ÑÑ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Запись истории не найдена'; END IF;
 
-  -- ÐÑÐ°Ð²ÐºÐ¸ ÐºÐ°ÑÑÐ¾ÑÐµÐº Ð¸ ÐºÑÑÑÐ¾Ð² â Ð¿ÑÐµÐ¶Ð½ÑÑ Ð»Ð¾Ð³Ð¸ÐºÐ° v39 Ð±ÐµÐ· Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ð¹.
+  -- Правки карточек и курсов — прежняя логика v39 без изменений.
   IF v_action.entity_type IN ('product', 'metal_rate') THEN
     RETURN public.undo_edit_action(_action_id);
   END IF;
 
   IF v_action.entity_type IN ('sale', 'cash_operation') AND NOT public.is_shop_admin() THEN
-    RAISE EXCEPTION 'ÐÑÐ¾Ð´Ð°Ð¶Ð¸ Ð¸ Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ Ð´ÐµÐ½ÐµÐ³ Ð¼Ð¾Ð¶ÐµÑ Ð¾ÑÐ¼ÐµÐ½ÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ'
+    RAISE EXCEPTION 'Продажи и движение денег может отменять только администратор'
       USING errcode = '42501';
   END IF;
 
-  -- ---------------------------------------------------- Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ ÑÐ¾Ð²Ð°ÑÐ°
+  -- ---------------------------------------------------- добавление товара
   IF v_action.entity_type = 'product_create' THEN
     SELECT * INTO v_product FROM public.products
      WHERE id = v_action.entity_id AND shop_id = v_shop_id FOR UPDATE;
     IF NOT FOUND OR v_product.deleted_at IS NOT NULL THEN
-      RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÐ¶Ðµ ÑÐ´Ð°Ð»ÑÐ½';
+      RAISE EXCEPTION 'Товар уже удалён';
     END IF;
     IF v_product.status IS DISTINCT FROM 'in_stock' THEN
-      RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÐ¶Ðµ Ð¿ÑÐ¾Ð´Ð°Ð½ Ð¸Ð»Ð¸ ÑÐ¿Ð¸ÑÐ°Ð½ â ÑÐ½Ð°ÑÐ°Ð»Ð° Ð¾ÑÐ¼ÐµÐ½Ð¸ÑÐµ Ð¿ÑÐ¾Ð´Ð°Ð¶Ñ';
+      RAISE EXCEPTION 'Товар уже продан или списан — сначала отмените продажу';
     END IF;
     IF v_product.consignment_operation_id IS NOT NULL THEN
-      RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ Ð²Ð·ÑÑ Ð½Ð° ÑÐµÐ°Ð»Ð¸Ð·Ð°ÑÐ¸Ñ â Ð´Ð¾Ð»Ð³ Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÑ ÑÐ¶Ðµ Ð½Ð°ÑÐ¸ÑÐ»ÐµÐ½. Ð¡ÐºÐ¾ÑÑÐµÐºÑÐ¸ÑÑÐ¹ÑÐµ ÐµÐ³Ð¾ Ð² ÑÐ°Ð·Ð´ÐµÐ»Ðµ Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ¾Ð²';
+      RAISE EXCEPTION 'Товар взят на реализацию — долг поставщику уже начислен. Скорректируйте его в разделе поставщиков';
     END IF;
     IF EXISTS (
       SELECT 1 FROM public.sales s
        WHERE s.shop_id = v_shop_id AND s.deleted_at IS NULL
          AND s.items @> jsonb_build_array(jsonb_build_object('product_id', v_product.id::text))
     ) THEN
-      RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ ÑÑÐ°ÑÑÐ²Ð¾Ð²Ð°Ð» Ð² Ð¿ÑÐ¾Ð´Ð°Ð¶Ðµ â Ð¾ÑÐ¼ÐµÐ½Ð° Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ð½ÐµÐ²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð°';
+      RAISE EXCEPTION 'Товар участвовал в продаже — отмена добавления невозможна';
     END IF;
   END IF;
 
-  -- ---------------------------------------------------- Ð¿ÑÐ¾Ð´Ð°Ð¶Ð°
+  -- ---------------------------------------------------- продажа
   IF v_action.entity_type = 'sale' THEN
     SELECT * INTO v_sale FROM public.sales
      WHERE id = v_action.entity_id AND shop_id = v_shop_id FOR UPDATE;
     IF NOT FOUND OR v_sale.deleted_at IS NOT NULL THEN
-      RAISE EXCEPTION 'ÐÑÐ¾Ð´Ð°Ð¶Ð° ÑÐ¶Ðµ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð° Ð¸Ð»Ð¸ ÑÐ´Ð°Ð»ÐµÐ½Ð°';
+      RAISE EXCEPTION 'Продажа уже отменена или удалена';
     END IF;
     IF EXISTS (
       SELECT 1 FROM public.sale_returns r
        WHERE r.sale_id = v_sale.id AND r.deleted_at IS NULL
     ) THEN
-      RAISE EXCEPTION 'ÐÐ¾ ÑÑÐ¾Ð¼Ñ ÑÐµÐºÑ ÑÐ¶Ðµ Ð¾ÑÐ¾ÑÐ¼Ð»ÐµÐ½ Ð²Ð¾Ð·Ð²ÑÐ°Ñ â Ð¾ÑÐ¼ÐµÐ½Ð° Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸ Ð½ÐµÐ²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð°';
+      RAISE EXCEPTION 'По этому чеку уже оформлен возврат — отмена продажи невозможна';
     END IF;
   END IF;
 
-  -- ---------------------------------------------------- ÐºÐ°ÑÑÐ°
+  -- ---------------------------------------------------- касса
   IF v_action.entity_type = 'cash_operation' THEN
     SELECT * INTO v_cash FROM public.cash_operations
      WHERE id = v_action.entity_id AND shop_id = v_shop_id FOR UPDATE;
     IF NOT FOUND OR v_cash.deleted_at IS NOT NULL THEN
-      RAISE EXCEPTION 'ÐÐ¿ÐµÑÐ°ÑÐ¸Ñ ÑÐ¶Ðµ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð° Ð¸Ð»Ð¸ ÑÐ´Ð°Ð»ÐµÐ½Ð°';
+      RAISE EXCEPTION 'Операция уже отменена или удалена';
     END IF;
     IF v_cash.supplier_debt_operation_id IS NOT NULL THEN
-      RAISE EXCEPTION 'Ð­ÑÐ¾ Ð²ÑÐ¿Ð»Ð°ÑÐ° Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÑ â ÐµÑ Ð½ÐµÐ»ÑÐ·Ñ Ð¾ÑÐ¼ÐµÐ½Ð¸ÑÑ Ð¸Ð· Ð¸ÑÑÐ¾ÑÐ¸Ð¸, Ð¸ÑÐ¿Ð¾Ð»ÑÐ·ÑÐ¹ÑÐµ ÑÐ°Ð·Ð´ÐµÐ» Ð¿Ð¾ÑÑÐ°Ð²ÑÐ¸ÐºÐ¾Ð²';
+      RAISE EXCEPTION 'Это выплата поставщику — её нельзя отменить из истории, используйте раздел поставщиков';
     END IF;
     IF EXISTS (SELECT 1 FROM public.sale_returns r WHERE r.cash_operation_id = v_cash.id) THEN
-      RAISE EXCEPTION 'Ð­ÑÐ¾ Ð²ÑÐ´Ð°ÑÐ° Ð´ÐµÐ½ÐµÐ³ Ð¿Ð¾ Ð²Ð¾Ð·Ð²ÑÐ°ÑÑ â ÐµÑ Ð½ÐµÐ»ÑÐ·Ñ Ð¾ÑÐ¼ÐµÐ½Ð¸ÑÑ Ð¾ÑÐ´ÐµÐ»ÑÐ½Ð¾ Ð¾Ñ Ð²Ð¾Ð·Ð²ÑÐ°ÑÐ°';
+      RAISE EXCEPTION 'Это выдача денег по возврату — её нельзя отменить отдельно от возврата';
     END IF;
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtextextended(v_shop_id::text || ':action_history', 0));
   SELECT * INTO v_action FROM public.action_history
    WHERE id = _action_id AND shop_id = v_shop_id FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'ÐÐ°Ð¿Ð¸ÑÑ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð±Ð¾Ð»ÑÑÐµ Ð½Ðµ Ð´Ð¾ÑÑÑÐ¿Ð½Ð°'; END IF;
-  IF v_action.status <> 'active' THEN RAISE EXCEPTION 'Ð­ÑÐ¾ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ðµ ÑÐ¶Ðµ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð¾'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Запись истории больше не доступна'; END IF;
+  IF v_action.status <> 'active' THEN RAISE EXCEPTION 'Это действие уже отменено'; END IF;
 
   IF v_action.entity_type = 'product_create' THEN
     UPDATE public.products
@@ -2423,7 +2423,7 @@ BEGIN
     RETURNING * INTO v_product;
 
   ELSIF v_action.entity_type = 'sale' THEN
-    -- ÐÐ¾Ð·Ð²ÑÐ°ÑÐ°ÐµÐ¼ Ð¸Ð·Ð´ÐµÐ»Ð¸Ñ Ð½Ð° ÑÐºÐ»Ð°Ð´.
+    -- Возвращаем изделия на склад.
     FOR v_item IN SELECT * FROM jsonb_array_elements(coalesce(v_sale.items, '[]'::jsonb)) LOOP
       IF coalesce(v_item ->> 'kind', 'product') = 'product'
          AND nullif(v_item ->> 'product_id', '') IS NOT NULL THEN
@@ -2436,7 +2436,7 @@ BEGIN
       END IF;
     END LOOP;
 
-    -- Ð¡ÑÐ°ÑÐ¸ÑÑÐ¸ÐºÐ° ÐºÐ»Ð¸ÐµÐ½ÑÐ°.
+    -- Статистика клиента.
     IF v_sale.customer_id IS NOT NULL THEN
       UPDATE public.customers
          SET purchase_count = greatest(0, purchase_count - 1),
@@ -2445,7 +2445,7 @@ BEGIN
        WHERE id = v_sale.customer_id;
     END IF;
 
-    -- ÐÐ¾Ð½ÑÑÑ Ð¿ÑÐ¾Ð´Ð°Ð²ÑÐ°: ÑÐ±ÑÐ°ÑÑ Ð½Ð°ÑÐ¸ÑÐ»ÐµÐ½Ð½ÑÐµ, Ð²ÐµÑÐ½ÑÑÑ Ð¿Ð¾ÑÑÐ°ÑÐµÐ½Ð½ÑÐµ.
+    -- Бонусы продавца: убрать начисленные, вернуть потраченные.
     IF v_sale.seller_id IS NOT NULL THEN
       UPDATE public.profiles
          SET bonus_points = greatest(0, coalesce(bonus_points, 0)
@@ -2454,7 +2454,7 @@ BEGIN
        WHERE id = v_sale.seller_id;
     END IF;
 
-    -- ÐÐ°ÑÑÐ¾Ð²ÑÐµ Ð·Ð°Ð¿Ð¸ÑÐ¸, ÑÐ¾Ð·Ð´Ð°Ð½Ð½ÑÐµ Ð²Ð¼ÐµÑÑÐµ Ñ ÑÐµÐºÐ¾Ð¼ (Ð¾ÑÐ»Ð°Ð¹Ð½-Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸, Ð»Ð¾Ð¼ Ð¸ Ñ.Ð¿.).
+    -- Кассовые записи, созданные вместе с чеком (офлайн-продажи, лом и т.п.).
     IF v_sale.client_op_id IS NOT NULL THEN
       FOR v_cash_row IN
         UPDATE public.cash_operations
@@ -2478,7 +2478,7 @@ BEGIN
      WHERE id = v_cash.id
     RETURNING * INTO v_cash;
   ELSE
-    RAISE EXCEPTION 'Ð¢Ð¸Ð¿ Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ';
+    RAISE EXCEPTION 'Тип записи истории не поддерживается';
   END IF;
 
   UPDATE public.action_history
@@ -2533,16 +2533,16 @@ DECLARE
   v_result jsonb;
 BEGIN
   IF v_user_id IS NULL THEN
-    RAISE EXCEPTION 'Ð¢ÑÐµÐ±ÑÐµÑÑÑ Ð²ÑÐ¾Ð´ Ð² ÑÐ¸ÑÑÐµÐ¼Ñ' USING errcode = '42501';
+    RAISE EXCEPTION 'Требуется вход в систему' USING errcode = '42501';
   END IF;
   SELECT * INTO v_profile
     FROM public.profiles
    WHERE id = v_user_id;
   IF NOT FOUND OR v_profile.status IS DISTINCT FROM 'approved'::public.profile_status THEN
-    RAISE EXCEPTION 'ÐÐºÐºÐ°ÑÐ½Ñ Ð½Ðµ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÑÐ½' USING errcode = '42501';
+    RAISE EXCEPTION 'Аккаунт не подтверждён' USING errcode = '42501';
   END IF;
   IF v_shop_id IS NULL THEN
-    RAISE EXCEPTION 'ÐÐºÑÐ¸Ð²Ð½ÑÐ¹ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½ Ð½Ðµ Ð²ÑÐ±ÑÐ°Ð½' USING errcode = '42501';
+    RAISE EXCEPTION 'Активный магазин не выбран' USING errcode = '42501';
   END IF;
 
   -- This unlocked read locates the entity. The event is re-read FOR UPDATE only
@@ -2551,12 +2551,12 @@ BEGIN
     FROM public.action_history
    WHERE id = _action_id AND shop_id = v_shop_id;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'ÐÐ°Ð¿Ð¸ÑÑ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°';
+    RAISE EXCEPTION 'Запись истории не найдена';
   END IF;
   -- Match the existing administrator-only metal_rates write policy; a
   -- SECURITY DEFINER undo must not grant sellers a new way to change rates.
   IF v_initial.entity_type = 'metal_rate' AND NOT public.is_shop_admin() THEN
-    RAISE EXCEPTION 'ÐÑÑÑÑ Ð¼ÐµÑÐ°Ð»Ð»Ð¾Ð² Ð¼Ð¾Ð¶ÐµÑ Ð¾ÑÐ¼ÐµÐ½ÑÑÑ ÑÐ¾Ð»ÑÐºÐ¾ Ð°Ð´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ'
+    RAISE EXCEPTION 'Курсы металлов может отменять только администратор'
       USING errcode = '42501';
   END IF;
 
@@ -2565,15 +2565,15 @@ BEGIN
       FROM public.products
      WHERE id = v_initial.entity_id AND shop_id = v_shop_id
      FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'Ð¢Ð¾Ð²Ð°Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½'; END IF;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Товар не найден'; END IF;
   ELSIF v_initial.entity_type = 'metal_rate' THEN
     SELECT * INTO v_metal_rate
       FROM public.metal_rates
      WHERE id = v_initial.entity_id AND shop_id = v_shop_id
      FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'ÐÑÑÑ Ð¼ÐµÑÐ°Ð»Ð»Ð° Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½'; END IF;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Курс металла не найден'; END IF;
   ELSE
-    RAISE EXCEPTION 'Ð¢Ð¸Ð¿ Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑÐ¶Ð¸Ð²Ð°ÐµÑÑÑ';
+    RAISE EXCEPTION 'Тип записи истории не поддерживается';
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtextextended(v_shop_id::text || ':action_history', 0));
@@ -2582,13 +2582,13 @@ BEGIN
     FROM public.action_history
    WHERE id = _action_id AND shop_id = v_shop_id
    FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'ÐÐ°Ð¿Ð¸ÑÑ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð±Ð¾Ð»ÑÑÐµ Ð½Ðµ Ð´Ð¾ÑÑÑÐ¿Ð½Ð°'; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Запись истории больше не доступна'; END IF;
   IF v_action.status <> 'active' THEN
-    RAISE EXCEPTION 'Ð­ÑÐ¾ Ð´ÐµÐ¹ÑÑÐ²Ð¸Ðµ ÑÐ¶Ðµ Ð¾ÑÐ¼ÐµÐ½ÐµÐ½Ð¾';
+    RAISE EXCEPTION 'Это действие уже отменено';
   END IF;
   IF v_action.entity_type <> v_initial.entity_type
      OR v_action.entity_id <> v_initial.entity_id THEN
-    RAISE EXCEPTION 'ÐÐ°Ð¿Ð¸ÑÑ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð¸Ð·Ð¼ÐµÐ½Ð¸Ð»Ð°ÑÑ, Ð¾Ð±Ð½Ð¾Ð²Ð¸ÑÐµ ÑÑÑÐ°Ð½Ð¸ÑÑ';
+    RAISE EXCEPTION 'Запись истории изменилась, обновите страницу';
   END IF;
 
   IF v_action.entity_type = 'product' THEN
@@ -2607,15 +2607,15 @@ BEGIN
 
   v_fields := v_action.changed_fields;
   IF cardinality(v_fields) = 0 THEN
-    RAISE EXCEPTION 'Ð Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ Ð½ÐµÑ Ð²Ð¾ÑÑÑÐ°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ÑÑ Ð¿Ð¾Ð»ÐµÐ¹';
+    RAISE EXCEPTION 'В записи истории нет восстанавливаемых полей';
   END IF;
 
   FOREACH v_field IN ARRAY v_fields LOOP
     IF NOT (v_field = ANY(v_allowed)) THEN
-      RAISE EXCEPTION 'Ð Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð¸ÑÑÐ¾ÑÐ¸Ð¸ ÑÐ¾Ð´ÐµÑÐ¶Ð¸ÑÑÑ Ð½ÐµÐ´Ð¾Ð¿ÑÑÑÐ¸Ð¼Ð¾Ðµ Ð¿Ð¾Ð»Ðµ';
+      RAISE EXCEPTION 'В записи истории содержится недопустимое поле';
     END IF;
     IF (v_current_state -> v_field) IS DISTINCT FROM (v_action.next_state -> v_field) THEN
-      RAISE EXCEPTION 'ÐÐ¾Ð»Ðµ "%" Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾ Ð¿Ð¾Ð·Ð¶Ðµ; Ð¾ÑÐ¼ÐµÐ½Ð° Ð½ÐµÐ²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð°', v_field;
+      RAISE EXCEPTION 'Поле "%" изменено позже; отмена невозможна', v_field;
     END IF;
     v_patch := v_patch || jsonb_build_object(v_field, v_action.prev_state -> v_field);
   END LOOP;
@@ -2740,7 +2740,7 @@ CREATE TABLE public.action_history (
     changed_fields text[] NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     employee_id uuid,
-    employee_name text DEFAULT 'Ð¡Ð¸ÑÑÐµÐ¼Ð°'::text NOT NULL,
+    employee_name text DEFAULT 'Система'::text NOT NULL,
     description text NOT NULL,
     status text DEFAULT 'active'::text NOT NULL,
     undone_at timestamp with time zone,
@@ -2889,7 +2889,7 @@ CREATE TABLE public.label_templates (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     shop_id uuid,
     scope_key text NOT NULL,
-    category text DEFAULT 'ÐÑÐ¾ÑÐµÐµ'::text NOT NULL,
+    category text DEFAULT 'Прочее'::text NOT NULL,
     size_key text NOT NULL,
     template_json text NOT NULL,
     created_by uuid,

@@ -8,12 +8,12 @@ import { ArrowRight, Gem, ShieldCheck, Store } from "lucide-react"
 export const revalidate = 300
 
 export const metadata: Metadata = {
-  title: "Aura â Ð¼Ð°ÑÐºÐµÑÐ¿Ð»ÐµÐ¹Ñ ÑÐ²ÐµÐ»Ð¸ÑÐ½ÑÑ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð¾Ð² Ð¸ CRM",
+  title: "Aura — маркетплейс ювелирных магазинов и CRM",
   description:
-    "Aura Ð¾Ð±ÑÐµÐ´Ð¸Ð½ÑÐµÑ Ð²Ð¸ÑÑÐ¸Ð½Ñ ÑÐ²ÐµÐ»Ð¸ÑÐ½ÑÑ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð¾Ð² Ð¸ CRM Ð´Ð»Ñ ÑÑÑÑÐ°: ÑÐºÐ»Ð°Ð´, ÐºÐ°ÑÑÐ°, ÑÑÐ¸ÐºÐµÑÐºÐ¸ Ð¸ Ð±Ð¾Ð½ÑÑÑ Ð¿ÑÐ¾Ð´Ð°Ð²ÑÐ¾Ð².",
+    "Aura объединяет витрины ювелирных магазинов и CRM для учёта: склад, касса, этикетки и бонусы продавцов.",
   openGraph: {
-    title: "Aura â Ð¼Ð°ÑÐºÐµÑÐ¿Ð»ÐµÐ¹Ñ ÑÐ²ÐµÐ»Ð¸ÑÐ½ÑÑ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð¾Ð² Ð¸ CRM",
-    description: "ÐÐ¸ÑÑÐ¸Ð½Ñ ÑÐ²ÐµÐ»Ð¸ÑÐ½ÑÑ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð¾Ð² Ð¸ CRM Ð´Ð»Ñ ÑÑÑÑÐ°: ÑÐºÐ»Ð°Ð´, ÐºÐ°ÑÑÐ°, ÑÑÐ¸ÐºÐµÑÐºÐ¸, Ð±Ð¾Ð½ÑÑÑ.",
+    title: "Aura — маркетплейс ювелирных магазинов и CRM",
+    description: "Витрины ювелирных магазинов и CRM для учёта: склад, касса, этикетки, бонусы.",
     type: "website",
   },
   twitter: { card: "summary_large_image" },
@@ -31,56 +31,56 @@ export default async function LandingPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
-            <Link href="/auth/login">ÐÑÐ¾Ð´</Link>
+            <Link href="/auth/login">Вход</Link>
           </Button>
           <Button asChild size="sm">
-            <Link href="/auth/sign-up">Ð ÐµÐ³Ð¸ÑÑÑÐ°ÑÐ¸Ñ</Link>
+            <Link href="/auth/sign-up">Регистрация</Link>
           </Button>
         </div>
       </header>
 
       <section className="mx-auto max-w-4xl px-5 py-16 text-center">
         <h1 className="font-serif text-4xl leading-tight sm:text-5xl">
-          Ð®Ð²ÐµÐ»Ð¸ÑÐ½ÑÐµ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ñ Ð¸ ÑÑÑÑ Ð² Ð¾Ð´Ð½Ð¾Ð¼ Ð¼ÐµÑÑÐµ
+          Ювелирные магазины и учёт в одном месте
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
-          App â Ð¿ÑÐ±Ð»Ð¸ÑÐ½ÑÐµ Ð²Ð¸ÑÑÐ¸Ð½Ñ Ð¸Ð·Ð´ÐµÐ»Ð¸Ð¹ Ð´Ð»Ñ Ð¿Ð¾ÐºÑÐ¿Ð°ÑÐµÐ»ÐµÐ¹. CRM â ÑÐºÐ»Ð°Ð´, ÐºÐ°ÑÑÐ°, ÑÑÐ¸ÐºÐµÑÐºÐ¸ Ð¸ Ð±Ð¾Ð½ÑÑÑ
-          Ð´Ð»Ñ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð°.
+          App — публичные витрины изделий для покупателей. CRM — склад, касса, этикетки и бонусы
+          для команды магазина.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Button asChild size="lg" className="gap-2">
             <Link href="/auth/sign-up">
-              Ð ÐµÐ³Ð¸ÑÑÑÐ°ÑÐ¸Ñ
+              Регистрация
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="bg-transparent">
-            <Link href="/crm">ÐÐ¾Ð¹ÑÐ¸ Ð² CRM</Link>
+            <Link href="/crm">Войти в CRM</Link>
           </Button>
         </div>
       </section>
 
       <section className="mx-auto max-w-5xl px-5 pb-16">
         <div className="grid gap-4 sm:grid-cols-3">
-          <Feature icon={<Store className="h-5 w-5 text-primary" />} title="App â Ð²Ð¸ÑÑÐ¸Ð½Ñ">
-            ÐÐ°ÑÐ°Ð»Ð¾Ð³ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð¾Ð², ÐºÐ°ÑÑÐ¾ÑÐºÐ¸ Ð¸Ð·Ð´ÐµÐ»Ð¸Ð¹ Ð¿Ð¾ QR-ÐºÐ¾Ð´Ñ Ñ ÑÑÐ¸ÐºÐµÑÐºÐ¸.
+          <Feature icon={<Store className="h-5 w-5 text-primary" />} title="App — витрины">
+            Каталог магазинов, карточки изделий по QR-коду с этикетки.
           </Feature>
-          <Feature icon={<Gem className="h-5 w-5 text-primary" />} title="CRM â ÑÑÑÑ">
-            Ð¡ÐºÐ»Ð°Ð´, ÐºÐ°ÑÑÐ°, Ð¾ÑÑÑÑÑ, Ð¿ÐµÑÐ°ÑÑ ÑÑÐ¸ÐºÐµÑÐ¾Ðº Niimbot Ð¸ Ð°ÑÑÐ¸ÐºÑÐ»Ñ.
+          <Feature icon={<Gem className="h-5 w-5 text-primary" />} title="CRM — учёт">
+            Склад, касса, отчёты, печать этикеток Niimbot и артикулы.
           </Feature>
-          <Feature icon={<ShieldCheck className="h-5 w-5 text-primary" />} title="Ð Ð¾Ð»Ð¸ Ð¸ Ð±Ð¾Ð½ÑÑÑ">
-            Ð¡ÑÐ¿ÐµÑ Ð°Ð´Ð¼Ð¸Ð½, Ð°Ð´Ð¼Ð¸Ð½ Ð¸ Ð¿ÑÐ¾Ð´Ð°Ð²ÑÑ Ñ Ð±Ð¾Ð½ÑÑÐ°Ð¼Ð¸ Ð¾Ñ Ð¿ÑÐ¸Ð±ÑÐ»Ð¸.
+          <Feature icon={<ShieldCheck className="h-5 w-5 text-primary" />} title="Роли и бонусы">
+            Супер админ, админ и продавцы с бонусами от прибыли.
           </Feature>
         </div>
       </section>
 
       <section className="mx-auto max-w-5xl px-5 pb-20">
-        <h2 className="font-serif text-2xl">ÐÐ°Ð³Ð°Ð·Ð¸Ð½Ñ</h2>
-        <p className="mt-1 text-sm text-muted-foreground">ÐÑÐ±Ð»Ð¸ÑÐ½ÑÐµ Ð²Ð¸ÑÑÐ¸Ð½Ñ ÑÑÐ°ÑÑÐ½Ð¸ÐºÐ¾Ð² Aura</p>
+        <h2 className="font-serif text-2xl">Магазины</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Публичные витрины участников Aura</p>
 
         {shops.length === 0 ? (
           <p className="mt-8 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            ÐÐ¾ÐºÐ° Ð½ÐµÑ Ð¾ÑÐºÑÑÑÑÑ Ð²Ð¸ÑÑÐ¸Ð½. ÐÐ°ÑÐµÐ³Ð¸ÑÑÑÐ¸ÑÑÐ¹ÑÐµ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½ â Ð¸ Ð¾Ð½ Ð¿Ð¾ÑÐ²Ð¸ÑÑÑ Ð·Ð´ÐµÑÑ.
+            Пока нет открытых витрин. Зарегистрируйте магазин — и он появится здесь.
           </p>
         ) : (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -93,9 +93,9 @@ export default async function LandingPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                   <Store className="h-5 w-5 text-primary" />
                 </div>
-                <div className="mt-3 font-medium">{s.shop_name ?? "Ð®Ð²ÐµÐ»Ð¸ÑÐ½ÑÐ¹ Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½"}</div>
+                <div className="mt-3 font-medium">{s.shop_name ?? "Ювелирный магазин"}</div>
                 <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                  Ð¡Ð¼Ð¾ÑÑÐµÑÑ Ð²Ð¸ÑÑÐ¸Ð½Ñ
+                  Смотреть витрину
                   <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
                 </div>
               </Link>
@@ -105,7 +105,7 @@ export default async function LandingPage() {
       </section>
 
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
-        Â© {new Date().getFullYear()} Aura Â· app + crm
+        © {new Date().getFullYear()} Aura · app + crm
       </footer>
     </main>
   )

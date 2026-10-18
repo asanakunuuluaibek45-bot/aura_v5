@@ -38,7 +38,7 @@ const LazySalesHistory = dynamic(
     ssr: false,
     loading: () => (
       <div className="min-h-48 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground" role="status">
-        ÐÐ¾Ð´Ð³Ð¾ÑÐ°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ Ð¸ÑÑÐ¾ÑÐ¸Ñ Ð¿ÑÐ¾Ð´Ð°Ð¶â¦
+        Подготавливаем историю продаж…
       </div>
     ),
   },
@@ -75,7 +75,7 @@ function DeferredSalesHistory(props: SalesHistoryProps) {
         <LazySalesHistory {...props} />
       ) : (
         <div className="min-h-48 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-          ÐÑÑÐ¾ÑÐ¸Ñ Ð·Ð°Ð³ÑÑÐ·Ð¸ÑÑÑ Ð¿ÑÐ¸ Ð¿ÑÐ¾ÐºÑÑÑÐºÐµ Ðº ÑÑÐ¾Ð¼Ñ ÑÐ°Ð·Ð´ÐµÐ»Ñ
+          История загрузится при прокрутке к этому разделу
         </div>
       )}
     </div>
@@ -140,7 +140,7 @@ export function KassaScreen({
 
   const sellers = useMemo(() => {
     const map = new Map<string, string>()
-    for (const s of sales) map.set(s.seller_id, s.seller_name || "ÐÐµÐ· Ð¸Ð¼ÐµÐ½Ð¸")
+    for (const s of sales) map.set(s.seller_id, s.seller_name || "Без имени")
     return [...map.entries()].map(([id, name]) => ({ id, name }))
   }, [sales])
 
@@ -159,8 +159,8 @@ export function KassaScreen({
       if (saved) {
         const parsed = JSON.parse(saved)
             if (Array.isArray(parsed.cart)) {
-              // Ð¡ÑÐ°ÑÑÐµ ÑÐµÑÐ½Ð¾Ð²Ð¸ÐºÐ¸ Ð¼Ð¾Ð³Ð»Ð¸ ÑÐ¾Ð´ÐµÑÐ¶Ð°ÑÑ ÐºÐ¾Ð»Ð¸ÑÐµÑÑÐ²Ð¾ Ð±Ð¾Ð»ÑÑÐµ ÐµÐ´Ð¸Ð½Ð¸ÑÑ.
-              // Ð ÑÐ²ÐµÐ»Ð¸ÑÐ½Ð¾Ð¼ CRM ÐºÐ°Ð¶Ð´Ð°Ñ ÑÑÑÐ¾ÐºÐ° â Ð¾ÑÐ´ÐµÐ»ÑÐ½Ð¾Ðµ ÑÐ½Ð¸ÐºÐ°Ð»ÑÐ½Ð¾Ðµ Ð¸Ð·Ð´ÐµÐ»Ð¸Ðµ.
+              // Старые черновики могли содержать количество больше единицы.
+              // В ювелирном CRM каждая строка — отдельное уникальное изделие.
               setCart(parsed.cart.map((item: ExtendedSaleItem) => ({ ...item, quantity: 1 })))
             }
         if (parsed.bonusUsed !== undefined) setBonusUsed(parsed.bonusUsed)
@@ -243,11 +243,11 @@ export function KassaScreen({
     setCart((prev) => {
       const already = prev.filter((i) => i.product_id === p.id).length
       if (already >= 1) {
-        toast.error("Ð­ÑÐ¾Ñ ÑÐ¾Ð²Ð°Ñ ÑÐ¶Ðµ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÑÐµÐº")
+        toast.error("Этот товар уже добавлен в чек")
         return prev
       }
       if (p.sale_price < p.purchase_price) {
-        toast.warning(`Â«${p.name}Â» Ð¿ÑÐ¾Ð´Ð°ÑÑÑÑ Ð½Ð¸Ð¶Ðµ Ð·Ð°ÐºÑÐ¿Ð¾ÑÐ½Ð¾Ð¹ ÑÐµÐ½Ñ`)
+        toast.warning(`«${p.name}» продаётся ниже закупочной цены`)
       }
       const line: ExtendedSaleItem = {
         lineId: `${p.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -278,13 +278,13 @@ export function KassaScreen({
     const inCart = cart.some((i) => i.product_id === p.id)
     if (inCart) {
       removeProductFromCart(p.id)
-      toast.info(`Â«${p.name}Â» ÑÐ±ÑÐ°Ð½ Ð¸Ð· ÑÐµÐºÐ°`)
+      toast.info(`«${p.name}» убран из чека`)
     } else {
       addToCart(p)
     }
   }
 
-  /** ÐÐµÑÐµÑÑÑÑ ÑÑÑÐ¾ÐºÐ¸ ÑÐµÐºÐ° Ð¿Ð¾ ÑÐµÐ½Ðµ Ð·Ð° Ð³ÑÐ°Ð¼Ð¼. */
+  /** Пересчёт строки чека по цене за грамм. */
   const changeItemPricePerGram = (lineId: string, value: number) => {
     const perGram = Math.max(0, toNumber(value))
     setCart((prev) =>
@@ -297,7 +297,7 @@ export function KassaScreen({
           price_per_gram: perGram,
           price,
           cost: isScrap ? price : i.cost,
-          // ÑÐµÐ½Ð° Ð¿ÐµÑÐµÑÑÐ¸ÑÐ°Ð½Ð° Ð·Ð°Ð½Ð¾Ð²Ð¾ â Ð¿ÑÐµÐ¶Ð½ÑÑ ÑÐºÐ¸Ð´ÐºÐ° Ðº Ð½ÐµÐ¹ ÑÐ¶Ðµ Ð½Ðµ Ð¾ÑÐ½Ð¾ÑÐ¸ÑÑÑ
+          // цена пересчитана заново — прежняя скидка к ней уже не относится
           discountSom: 0,
           discountPercent: 0,
         }
@@ -305,7 +305,7 @@ export function KassaScreen({
     )
   }
 
-  /** ÐÐ·Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ Ð²ÐµÑÐ° ÑÑÑÐ¾ÐºÐ¸: Ð¸Ð¼ÐµÐµÑ ÑÐ¼ÑÑÐ» Ð´Ð»Ñ Ð»Ð¾Ð¼Ð°. */
+  /** Изменение веса строки: имеет смысл для лома. */
   const changeItemWeight = (lineId: string, value: number) => {
     const weight = Math.max(0, toNumber(value))
     setCart((prev) =>
@@ -352,7 +352,7 @@ export function KassaScreen({
     setPayment("cash")
     setQuery("")
     if (!onlineOnly) localStorage.removeItem(cartStorageKey)
-    toast.info("Ð§ÐµÐº Ð¿Ð¾Ð»Ð½Ð¾ÑÑÑÑ ÑÐ±ÑÐ¾ÑÐµÐ½")
+    toast.info("Чек полностью сброшен")
   }
 
   const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0)
@@ -410,8 +410,8 @@ export function KassaScreen({
 
       if (onLocalCheckout) {
         const res = await onLocalCheckout(checkoutPayload)
-        toast.success(`ÐÑÐ¾Ð´Ð°Ð¶Ð° Ð·Ð°Ð¿Ð¸ÑÐ°Ð½Ð° Ð»Ð¾ÐºÐ°Ð»ÑÐ½Ð¾: ${formatSom(res.sale?.final_price || total)}`, {
-          description: "ÐÐ¶Ð¸Ð´Ð°ÐµÑ Ð¿Ð¾Ð´ÑÐ²ÐµÑÐ¶Ð´ÐµÐ½Ð¸Ñ ÑÐµÑÐ²ÐµÑÐ°. ÐÑÐ¸ ÐºÐ¾Ð½ÑÐ»Ð¸ÐºÑÐµ Ñ Ð´ÑÑÐ³Ð¾Ð¹ Ð¿ÑÐ¾Ð´Ð°Ð¶ÐµÐ¹ Ð¿ÑÐ¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ ÑÐ¾Ð¾Ð±ÑÐ¸Ñ Ð¾Ð± ÑÑÐ¾Ð¼.",
+        toast.success(`Продажа записана локально: ${formatSom(res.sale?.final_price || total)}`, {
+          description: "Ожидает подтверждения сервера. При конфликте с другой продажей приложение сообщит об этом.",
         })
       } else {
         checkoutAttempt.current = getClientOperationAttempt(checkoutAttempt.current, checkoutPayload)
@@ -419,15 +419,15 @@ export function KassaScreen({
           ...checkoutPayload,
           client_op_id: checkoutAttempt.current.clientOpId,
         })
-        toast.success(`ÐÑÐ¾Ð´Ð°Ð¶Ð° Ð¾ÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð°: ${formatSom(res.total)}`, {
-          description: showBonus ? `ÐÐ°ÑÐ¸ÑÐ»ÐµÐ½Ð¾ ${res.bonusEarned} Ð±Ð¾Ð½ÑÑÐ¾Ð²` : undefined,
+        toast.success(`Продажа оформлена: ${formatSom(res.total)}`, {
+          description: showBonus ? `Начислено ${res.bonusEarned} бонусов` : undefined,
         })
       }
       handleReset()
       startTransition(() => router.refresh())
     } catch (e) {
       console.error("[kassa] checkout error:", e)
-      toast.error(e instanceof Error ? e.message : "ÐÑÐ¸Ð±ÐºÐ° Ð¾ÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð¸Ñ Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸")
+      toast.error(e instanceof Error ? e.message : "Ошибка оформления продажи")
     } finally {
       checkoutBusy.current = false
       setSubmitting(false)
@@ -436,11 +436,11 @@ export function KassaScreen({
 
   const submit = () => {
     if (cart.length === 0) return
-    // Ð¡Ð¼ÐµÑÐ°Ð½Ð½Ð°Ñ Ð¾Ð¿Ð»Ð°ÑÐ°: Ð´Ð²Ðµ ÑÑÐ¼Ð¼Ñ Ð´Ð¾Ð»Ð¶Ð½Ñ Ð·Ð°ÐºÑÑÐ²Ð°ÑÑ ÑÐµÐº.
+    // Смешанная оплата: две суммы должны закрывать чек.
     if (payment === "mixed") {
       const paid = (Number(payCash) || 0) + (Number(payElectronic) || 0)
       if (Math.abs(paid - total) > 1) {
-        toast.error(`Ð¡ÑÐ¼Ð¼Ñ Ð¾Ð¿Ð»Ð°ÑÑ Ð´Ð¾Ð»Ð¶Ð½Ñ Ð´Ð°Ð²Ð°ÑÑ ${formatSom(total)}`)
+        toast.error(`Суммы оплаты должны давать ${formatSom(total)}`)
         return
       }
     }
@@ -459,7 +459,7 @@ export function KassaScreen({
 
   return (
     <div className="relative w-full max-w-full overflow-x-hidden pb-12">
-      {/* ÐÐ¾Ð°Ð´ÐµÑ Ð¿ÑÐ¸ Ð¾ÑÐ¾ÑÐ¼Ð»ÐµÐ½Ð¸Ð¸ Ð¿ÑÐ¾Ð´Ð°Ð¶Ð¸ */}
+      {/* Лоадер при оформлении продажи */}
       {submitting && <PageLoader />}
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
         <div className="order-1 min-w-0 w-full lg:col-start-1 lg:row-start-1">
@@ -557,7 +557,7 @@ export function KassaScreen({
           onClick={scrollToTop}
           size="icon"
           className="fixed bottom-6 right-6 z-[50] h-10 w-10 rounded-full shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-75 active:scale-90"
-          aria-label="ÐÐ°Ð²ÐµÑÑ"
+          aria-label="Наверх"
         >
           <ArrowUp className="h-5 w-5" />
         </Button>

@@ -14,10 +14,10 @@ import { WifiOff, UserCheck } from "lucide-react"
 
 function loginErrorMessage(error: unknown): string {
   const { code, status } = (error ?? {}) as { code?: string; status?: number }
-  if (code === "email_not_confirmed") return "ÐÐ¾Ð´ÑÐ²ÐµÑÐ´Ð¸ÑÐµ email â Ð¿ÑÐ¾Ð²ÐµÑÑÑÐµ Ð¿Ð¾ÑÑÑ Ð¸ Ð¿ÐµÑÐµÐ¹Ð´Ð¸ÑÐµ Ð¿Ð¾ ÑÑÑÐ»ÐºÐµ."
-  if (code === "over_request_rate_limit" || status === 429) return "Ð¡Ð»Ð¸ÑÐºÐ¾Ð¼ Ð¼Ð½Ð¾Ð³Ð¾ Ð¿Ð¾Ð¿ÑÑÐ¾Ðº. ÐÐ¾Ð´Ð¾Ð¶Ð´Ð¸ÑÐµ Ð½ÐµÐ¼Ð½Ð¾Ð³Ð¾."
-  if (code === "invalid_credentials") return "ÐÐµÐ²ÐµÑÐ½ÑÐ¹ email Ð¸Ð»Ð¸ Ð¿Ð°ÑÐ¾Ð»Ñ."
-  return "Ð§ÑÐ¾-ÑÐ¾ Ð¿Ð¾ÑÐ»Ð¾ Ð½Ðµ ÑÐ°Ðº. ÐÐ¾Ð¿ÑÐ¾Ð±ÑÐ¹ÑÐµ ÐµÑÑ ÑÐ°Ð·."
+  if (code === "email_not_confirmed") return "Подтвердите email — проверьте почту и перейдите по ссылке."
+  if (code === "over_request_rate_limit" || status === 429) return "Слишком много попыток. Подождите немного."
+  if (code === "invalid_credentials") return "Неверный email или пароль."
+  return "Что-то пошло не так. Попробуйте ещё раз."
 }
 
 export default function LoginPage() {
@@ -92,11 +92,11 @@ export default function LoginPage() {
 
   const [isResuming, setIsResuming] = useState(false)
 
-  // ÐÑÐ¾Ð´ Ð¿Ð¾ ÑÐ¾ÑÑÐ°Ð½ÑÐ½Ð½Ð¾Ð¹ ÑÐµÑÑÐ¸Ð¸: ÑÐ°Ð±Ð¾ÑÐ°ÐµÑ Ð¸ Ð±ÐµÐ· ÑÐµÑÐ¸, Ð¸ Ñ ÑÐµÑÑÑ.
+  // Вход по сохранённой сессии: работает и без сети, и с сетью.
   const handleContinueOffline = async () => {
     setError(null)
     if (!navigator.onLine) {
-      // ÐÐ¾Ð»Ð½Ð°Ñ Ð½Ð°Ð²Ð¸Ð³Ð°ÑÐ¸Ñ â service worker Ð¾ÑÐ´Ð°ÑÑ Ð·Ð°ÐºÑÑÐ¸ÑÐ¾Ð²Ð°Ð½Ð½ÑÑ Ð¾Ð±Ð¾Ð»Ð¾ÑÐºÑ CRM.
+      // Полная навигация — service worker отдаст закэшированную оболочку CRM.
       window.location.assign("/crm/pos")
       return
     }
@@ -124,29 +124,29 @@ export default function LoginPage() {
       }
       window.location.assign("/crm/pos")
     } catch (err) {
-      // Ð¡ÐµÑÑ Â«ÐµÑÑÑÂ», Ð½Ð¾ Ð¾Ð±Ð»Ð°ÐºÐ¾ Ð½ÐµÐ´Ð¾ÑÑÑÐ¿Ð½Ð¾ â Ð¿ÑÐ¾Ð±ÑÐµÐ¼ Ð¾ÑÐºÑÑÑÑ Ð»Ð¾ÐºÐ°Ð»ÑÐ½ÑÑ ÐºÐ¾Ð¿Ð¸Ñ.
+      // Сеть «есть», но облако недоступно — пробуем открыть локальную копию.
       const msg = String((err as Error)?.message || "")
       if (/fetch|network|Failed/i.test(msg)) {
         window.location.assign("/crm/pos")
         return
       }
-      setError("Ð¡Ð¾ÑÑÐ°Ð½ÑÐ½Ð½Ð°Ñ ÑÐµÑÑÐ¸Ñ Ð¸ÑÑÐµÐºÐ»Ð°. ÐÐ¾Ð¹Ð´Ð¸ÑÐµ Ð¿Ð¾ email Ð¸ Ð¿Ð°ÑÐ¾Ð»Ñ.")
+      setError("Сохранённая сессия истекла. Войдите по email и паролю.")
     } finally {
       setIsResuming(false)
     }
   }
 
   return (
-    <AuthShell title="ÐÑÐ¾Ð´ Ð² ÑÐ¸ÑÑÐµÐ¼Ñ" subtitle="ÐÐ²ÐµÐ´Ð¸ÑÐµ Ð´Ð°Ð½Ð½ÑÐµ, ÑÑÐ¾Ð±Ñ Ð²Ð¾Ð¹ÑÐ¸ Ð² Ð»Ð¸ÑÐ½ÑÐ¹ ÐºÐ°Ð±Ð¸Ð½ÐµÑ Aura">
+    <AuthShell title="Вход в систему" subtitle="Введите данные, чтобы войти в личный кабинет Aura">
       {savedSession && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-sm dark:border-amber-800/80 dark:bg-amber-950/40 shadow-xs">
           <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
             {isOffline ? <WifiOff className="w-4 h-4 text-amber-600" /> : <UserCheck className="w-4 h-4 text-amber-600" />}
-            <span>{isOffline ? "ÐÑÐ»Ð°Ð¹Ð½-ÑÐµÐ¶Ð¸Ð¼ Ð°ÐºÑÐ¸Ð²ÐµÐ½" : "Ð¡Ð¾ÑÑÐ°Ð½ÑÐ½Ð½Ð°Ñ Ð»Ð¾ÐºÐ°Ð»ÑÐ½Ð°Ñ ÑÐµÑÑÐ¸Ñ"}</span>
+            <span>{isOffline ? "Офлайн-режим активен" : "Сохранённая локальная сессия"}</span>
           </div>
           <p className="mt-1.5 text-xs text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
-            Ð¡Ð¾ÑÑÑÐ´Ð½Ð¸Ðº: <strong className="font-semibold">{savedSession.profile?.full_name || savedSession.email}</strong>{" "}
-            ({savedSession.profile?.role === "admin" ? "ÐÐ´Ð¼Ð¸Ð½Ð¸ÑÑÑÐ°ÑÐ¾Ñ" : savedSession.profile?.role === "super_admin" ? "Ð¡ÑÐ¿ÐµÑÐ°Ð´Ð¼Ð¸Ð½" : "ÐÑÐ¾Ð´Ð°Ð²ÐµÑ"})
+            Сотрудник: <strong className="font-semibold">{savedSession.profile?.full_name || savedSession.email}</strong>{" "}
+            ({savedSession.profile?.role === "admin" ? "Администратор" : savedSession.profile?.role === "super_admin" ? "Суперадмин" : "Продавец"})
           </p>
           <Button
             type="button"
@@ -156,7 +156,7 @@ export default function LoginPage() {
             disabled={isResuming}
             className="mt-3 w-full border-amber-400 bg-amber-100/70 text-amber-950 hover:bg-amber-200/80 dark:border-amber-700 dark:bg-amber-900/50 dark:text-amber-100 font-medium"
           >
-            {isResuming ? "ÐÑÐ¾Ð´..." : isOffline ? "ÐÐ¾Ð¹ÑÐ¸ Ð² CRM Ð±ÐµÐ· ÑÐµÑÐ¸" : "ÐÑÐ¾Ð´Ð¾Ð»Ð¶Ð¸ÑÑ ÐºÐ°Ðº ÑÐ¾ÑÑÐ°Ð½ÑÐ½Ð½ÑÐ¹ ÑÐ¾ÑÑÑÐ´Ð½Ð¸Ðº"}
+            {isResuming ? "Вход..." : isOffline ? "Войти в CRM без сети" : "Продолжить как сохранённый сотрудник"}
           </Button>
         </div>
       )}
@@ -174,7 +174,7 @@ export default function LoginPage() {
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="password">ÐÐ°ÑÐ¾Ð»Ñ</Label>
+          <Label htmlFor="password">Пароль</Label>
           <Input
             id="password"
             type="password"
@@ -188,16 +188,16 @@ export default function LoginPage() {
           {isLoading ? (
             <span className="flex items-center gap-2">
               <InlineLoader />
-              ÐÑÐ¾Ð´...
+              Вход...
             </span>
           ) : (
-            "ÐÐ¾Ð¹ÑÐ¸"
+            "Войти"
           )}
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          ÐÐµÑ Ð°ÐºÐºÐ°ÑÐ½ÑÐ°?{" "}
+          Нет аккаунта?{" "}
           <Link href="/auth/sign-up" className="text-primary underline-offset-4 hover:underline">
-            ÐÐ°ÑÐµÐ³Ð¸ÑÑÑÐ¸ÑÐ¾Ð²Ð°ÑÑÑÑ
+            Зарегистрироваться
           </Link>
         </p>
       </form>
