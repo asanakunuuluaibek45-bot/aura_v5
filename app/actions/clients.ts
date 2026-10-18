@@ -1,0 +1,130 @@
+"use server"
+
+import { revalidatePath } from "next/cache"
+import type { Customer } from "@/lib/types"
+import { getRequestCrmContext } from "@/lib/supabase/request-context"
+
+async function requireProfile() {
+  const { supabase, user, profile, shopId } = await getRequestCrmContext()
+  if (!user) throw new Error("Требуется вход в систему")
+  if (!profile || profile.status !== "approved") throw new Error("Аккаунт не подтверждён")
+  return { supabase, user, profile, shopId }
+}
+
+export async function getClients(): Promise<Customer[]> {
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) return []
+
+  // 1. Загружаем клиентов магазина
+  const { data: clients, error: clientsError } = await supabase
+    .from("customers")
+    .select("id, shop_id, name, phone, gender, whatsapp, instagram, email, bonus_points, is_blacklisted, purchase_count, total_spent, last_purchase_at, created_at, updated_at, deleted_at")
+    .eq("shop_id", shopId)
+    .order("created_at", { ascending: false })
+    .range(0, 49)
+
+  if (clientsError) throw clientsError
+  if (!clients || clients.length === 0) return []
+
+  // v18: purchase_count is denormalized on customers; no sales JOIN is needed.
+  return clients as Customer[]
+}
+
+export type ClientPurchase = {
+  id: string
+  created_at: string
+  total: number
+  items: Array<{ sku?: string; name: string; quantity: number; price: number }>
+  payment_method: string
+}
+
+/** История покупок конкретного клиента (по customer_id или совпадению имени+телефона). */
+export async function getClientPurchases(customerId: string): Promise<ClientPurchase[]> {
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) return []
+  const { data, error } = await supabase
+    .from("sales")
+    .select("id, created_at, total, items, payment_method")
+    .eq("shop_id", shopId)
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false })
+    .limit(100)
+  if (error) throw new Error(`Ошибка загрузки истории: ${error.message}`)
+  return (data ?? []) as ClientPurchase[]
+}
+
+/** Добавить/убрать клиента из чёрного списка. */
+export async function setClientBlacklist(id: string, blacklisted: boolean): Promise<void> {
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) throw new Error("Ваш аккаунт не привязан к магазину")
+  const { error } = await supabase
+    .from("customers")
+    .update({ is_blacklisted: blacklisted })
+    .eq("id", id)
+    .eq("shop_id", shopId)
+  if (error) throw new Error(`Не удалось обновить статус: ${error.message}`)
+  revalidatePath("/crm")
+}
+
+export type ClientInput = {
+  name: string
+  phone?: string | null
+  gender?: string | null
+  whatsapp?: string | null
+  instagram?: string | null
+  email?: string | null
+}
+
+function validateClient(input: Partial<ClientInput>) {
+  if (input.name !== undefined && !String(input.name).trim()) {
+    throw new Error("Укажите имя клиента")
+  }
+  if (input.phone) {
+    const cleaned = input.phone.trim()
+    if (cleaned && !/^[\d+()\s-]{5,20}$/.test(cleaned)) {
+      throw new Error("Некорректный номер телефона")
+    }
+  }
+}
+
+export async function createClient_(input: ClientInput): Promise<void> {
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) throw new Error("Сначала выберите магазин")
+  validateClient(input)
+  const { error } = await supabase.from("customers").insert({
+    shop_id: shopId,
+    name: input.name.trim(),
+    phone: input.phone?.trim() || null,
+    gender: input.gender || null,
+    whatsapp: input.whatsapp?.trim() || null,
+    instagram: input.instagram?.trim() || null,
+    email: input.email?.trim() || null,
+    bonus_points: 0,
+  })
+  if (error) throw new Error(`Не удалось создать клиента: ${error.message}`)
+  revalidatePath("/crm")
+}
+
+export async function updateClient(id: string, input: Partial<ClientInput>): Promise<void> {
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) throw new Error("Ваш аккаунт не привязан к магазину")
+  validateClient(input)
+  const patch: Record<string, unknown> = {}
+  if (input.name !== undefined) patch.name = input.name.trim()
+  if (input.phone !== undefined) patch.phone = input.phone?.trim() || null
+  if (input.gender !== undefined) patch.gender = input.gender || null
+  if (input.whatsapp !== undefined) patch.whatsapp = input.whatsapp?.trim() || null
+  if (input.instagram !== undefined) patch.instagram = input.instagram?.trim() || null
+  if (input.email !== undefined) patch.email = input.email?.trim() || null
+  const { error } = await supabase.from("customers").update(patch).eq("id", id).eq("shop_id", shopId)
+  if (error) throw new Error(`Не удалось обновить клиента: ${error.message}`)
+  revalidatePath("/crm")
+}
+
+export async function deleteClient(id: string): Promise<void> {
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) throw new Error("Ваш аккаунт не привязан к магазину")
+  const { error } = await supabase.from("customers").delete().eq("id", id).eq("shop_id", shopId)
+  if (error) throw new Error(`Не удалось удалить клиента: ${error.message}`)
+  revalidatePath("/crm")
+}

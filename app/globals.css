@@ -1,0 +1,242 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@source "../components";
+@source "../app";
+@source "../lib";
+@source "../hooks";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans: var(--font-geist-sans);
+  --font-serif: var(--font-playfair);
+  --font-mono: var(--font-geist-mono);
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.4;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.45;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.5;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.5;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+/* Light theme — стиль Aura Dashboard (violet / indigo) */
+:root {
+  color-scheme: light;
+  --radius: 0.75rem;
+  --background: oklch(0.985 0.004 270);
+  --foreground: oklch(0.22 0.025 270);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.025 270);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.025 270);
+  --primary: oklch(0.52 0.19 275);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.012 270);
+  --secondary-foreground: oklch(0.3 0.035 270);
+  --muted: oklch(0.955 0.008 270);
+  --muted-foreground: oklch(0.55 0.025 270);
+  --accent: oklch(0.94 0.035 275);
+  --accent-foreground: oklch(0.4 0.12 275);
+  --destructive: oklch(0.6 0.19 20);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.62 0.13 150);
+  --success-foreground: oklch(0.99 0 0);
+  --border: oklch(0.91 0.012 270);
+  --input: oklch(0.91 0.012 270);
+  --ring: oklch(0.62 0.18 275);
+  --chart-1: oklch(0.52 0.19 275);
+  --chart-2: oklch(0.6 0.13 240);
+  --chart-3: oklch(0.62 0.13 150);
+  --chart-4: oklch(0.7 0.15 65);
+  --chart-5: oklch(0.6 0.14 330);
+  --sidebar: oklch(0.972 0.01 272);
+  --sidebar-foreground: oklch(0.22 0.025 270);
+  --sidebar-primary: oklch(0.52 0.19 275);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.94 0.035 275);
+  --sidebar-accent-foreground: oklch(0.4 0.12 275);
+  --sidebar-border: oklch(0.91 0.012 270);
+  --sidebar-ring: oklch(0.62 0.18 275);
+}
+
+/* Dark theme — стиль Aura Dashboard */
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.16 0.018 270);
+  --foreground: oklch(0.95 0.01 270);
+  --card: oklch(0.205 0.022 270);
+  --card-foreground: oklch(0.95 0.01 270);
+  --popover: oklch(0.23 0.025 270);
+  --popover-foreground: oklch(0.95 0.01 270);
+  --primary: oklch(0.68 0.17 275);
+  --primary-foreground: oklch(0.15 0.02 270);
+  --secondary: oklch(0.25 0.025 270);
+  --secondary-foreground: oklch(0.9 0.01 270);
+  --muted: oklch(0.25 0.025 270);
+  --muted-foreground: oklch(0.68 0.025 270);
+  --accent: oklch(0.29 0.05 275);
+  --accent-foreground: oklch(0.84 0.08 275);
+  --destructive: oklch(0.65 0.19 20);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.7 0.14 150);
+  --success-foreground: oklch(0.16 0.02 270);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.68 0.17 275);
+  --chart-1: oklch(0.68 0.17 275);
+  --chart-2: oklch(0.68 0.12 240);
+  --chart-3: oklch(0.7 0.14 150);
+  --chart-4: oklch(0.75 0.14 65);
+  --chart-5: oklch(0.68 0.14 330);
+  --sidebar: oklch(0.185 0.02 270);
+  --sidebar-foreground: oklch(0.95 0.01 270);
+  --sidebar-primary: oklch(0.68 0.17 275);
+  --sidebar-primary-foreground: oklch(0.15 0.02 270);
+  --sidebar-accent: oklch(0.29 0.05 275);
+  --sidebar-accent-foreground: oklch(0.84 0.08 275);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.68 0.17 275);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+}
+
+/* Keep labels and helper text readable without changing the whole layout. */
+:where(
+  [class~="text-[9px]"],
+  [class~="text-[10px]"],
+  [class~="text-[11px]"],
+  [class~="text-[12px]"],
+  [class~="text-[13px]"]
+) {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Скрытие скроллбара — для горизонтальной ленты форматов бирки */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* GPU-ускорение для редактора этикеток */
+.label-canvas-gpu {
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+@keyframes scan {
+  0% { top: 0%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.animate-scan-line {
+  animation: scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+/* ---------------------------------------------------------------------------
+ * Тонкие вспомогательные линии на мобильных экранах.
+ * На плотных дисплеях 1px выглядит грубо, поэтому базовые границы
+ * (утилиты без явной толщины) уменьшаются до hairline 0.5px.
+ * Явные border-2 / border-4 и т.п. остаются без изменений.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  @supports (border-width: 0.5px) {
+    .border { border-width: 0.5px; }
+    .border-t { border-top-width: 0.5px; }
+    .border-b { border-bottom-width: 0.5px; }
+    .border-l { border-left-width: 0.5px; }
+    .border-r { border-right-width: 0.5px; }
+    .border-x { border-inline-width: 0.5px; }
+    .border-y { border-block-width: 0.5px; }
+    .divide-y > :not([hidden]) ~ :not([hidden]) { border-top-width: 0.5px; }
+    .divide-x > :not([hidden]) ~ :not([hidden]) { border-inline-start-width: 0.5px; }
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Aura Dashboard style: акценты, мягкие тени, градиент бренда
+ * ------------------------------------------------------------------------- */
+@layer base {
+  button { cursor: pointer; }
+}
+
+.logo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  color: #fff;
+  background: linear-gradient(135deg, #7866f5, #4b55dc);
+  box-shadow: 0 5px 12px #625be633;
+}
+
+.aura-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 8px 28px #27205208;
+}
+
+.aura-panel-title {
+  font-size: 14px;
+  font-weight: 650;
+}
