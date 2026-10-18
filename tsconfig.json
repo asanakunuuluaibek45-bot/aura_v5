@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+<<<<<<< HEAD
     "target": "ES2017",
     "lib": [
       "dom",
@@ -7,6 +8,11 @@
       "esnext"
     ],
     "allowJs": true,
+=======
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "target": "ES6",
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
@@ -23,6 +29,7 @@
       }
     ],
     "paths": {
+<<<<<<< HEAD
       "@/*": [
         "./*"
       ]
@@ -30,12 +37,17 @@
     "typeRoots": [
       "./node_modules/@types"
     ]
+=======
+      "@/*": ["./*"]
+    }
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
+<<<<<<< HEAD
     ".next/dev/types/**/*.ts",
     ".next/dev/dev/types/**/*.ts"
   ],
@@ -43,4 +55,9 @@
     "node_modules",
     "vitest.config.ts"
   ]
+=======
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }

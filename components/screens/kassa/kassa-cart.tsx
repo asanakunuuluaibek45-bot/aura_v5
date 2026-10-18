@@ -1,20 +1,36 @@
 "use client"
 
+<<<<<<< HEAD
 import { useEffect, useRef, useState, useMemo } from "react"
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+<<<<<<< HEAD
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { 
   AlertTriangle, 
   RefreshCw, 
   ShoppingCart, 
   Recycle,
+=======
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { 
+  AlertTriangle, 
+  ChevronDown, 
+  ChevronUp, 
+  Minus, 
+  Plus, 
+  RefreshCw, 
+  ShoppingCart, 
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   Trash2,
   User,
   Phone,
   Gift,
+<<<<<<< HEAD
   CreditCard,
   Tag,
   ChevronDown
@@ -23,6 +39,14 @@ import { PAYMENT_METHODS, type Customer, type Product } from "@/lib/types"
 import { formatSom, formatWeight } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { ExtendedSaleItem } from "./index"
+=======
+  CreditCard
+} from "lucide-react"
+import { PAYMENT_METHODS, type Product } from "@/lib/types"
+import { formatSom } from "@/lib/format"
+import { cn } from "@/lib/utils"
+import type { ExtendedSaleItem } from "./index" // или ваш файл типов
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 interface KassaCartProps {
   cart: ExtendedSaleItem[]
@@ -32,6 +56,7 @@ interface KassaCartProps {
   hasLoss: boolean
   lossAmount: number
   lossItems: ExtendedSaleItem[]
+<<<<<<< HEAD
   removeItem: (lineId: string) => void
   products: Product[]
   changeItemPricePerGram: (lineId: string, val: number) => void
@@ -39,21 +64,36 @@ interface KassaCartProps {
   scrapRateOf: (metal: string) => number
   changeItemDiscountSom: (lineId: string, val: number) => void
   changeItemDiscountPercent: (lineId: string, val: number) => void
+=======
+  stockOf: (id: string) => number
+  removeItem: (lineId: string) => void
+  addToCart: (p: Product) => void
+  products: Product[]
+  changeItemDiscountSom: (lineId: string, val: number) => void
+  changeItemDiscountPercent: (lineId: string, val: number) => void
+  applyDiscountToAll: (item: ExtendedSaleItem) => void
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   customerName: string
   setCustomerName: (name: string) => void
   customerPhone: string
   setCustomerPhone: (phone: string) => void
+<<<<<<< HEAD
   customers?: Customer[]
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   showBonus: boolean
   bonusUsed: string
   setBonusUsed: (bonus: string) => void
   payment: string
   setPayment: (payment: string | null) => void
+<<<<<<< HEAD
   payCash: string
   setPayCash: (v: string) => void
   payElectronic: string
   setPayElectronic: (v: string) => void
   isAdmin: boolean
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   subtotal: number
   totalDiscountAmount: number
   overallDiscountPercent: number
@@ -73,6 +113,7 @@ export function KassaCart({
   hasLoss,
   lossAmount,
   lossItems,
+<<<<<<< HEAD
   removeItem,
   products,
   changeItemPricePerGram,
@@ -80,21 +121,36 @@ export function KassaCart({
   scrapRateOf,
   changeItemDiscountSom,
   changeItemDiscountPercent,
+=======
+  stockOf,
+  removeItem,
+  addToCart,
+  products,
+  changeItemDiscountSom,
+  changeItemDiscountPercent,
+  applyDiscountToAll,
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   customerName,
   setCustomerName,
   customerPhone,
   setCustomerPhone,
+<<<<<<< HEAD
   customers = [],
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   showBonus,
   bonusUsed,
   setBonusUsed,
   payment,
   setPayment,
+<<<<<<< HEAD
   payCash,
   setPayCash,
   payElectronic,
   setPayElectronic,
   isAdmin,
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   subtotal,
   totalDiscountAmount,
   overallDiscountPercent,
@@ -105,6 +161,7 @@ export function KassaCart({
   submit,
   handleReset,
 }: KassaCartProps) {
+<<<<<<< HEAD
   const [showSuggestions, setShowSuggestions] = useState(false)
   const autocompleteRef = useRef<HTMLDivElement>(null)
   // Блок клиента по умолчанию свёрнут при первом открытии
@@ -190,6 +247,19 @@ export function KassaCart({
             <ShoppingCart className="h-4 w-4" />
           </div>
           <h2 className="truncate text-sm font-semibold">Чек / Корзина</h2>
+=======
+  return (
+    <div className="flex flex-col rounded-2xl border border-border/80 bg-card/90 backdrop-blur shadow-xl overflow-hidden">
+      <div 
+        className="flex items-center justify-between border-b border-border/80 px-4 py-3.5 bg-muted/20 cursor-pointer lg:cursor-default"
+        onClick={() => isMobile && setIsCartOpenMobile(!isCartOpenMobile)}
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+            <ShoppingCart className="h-4 w-4" />
+          </div>
+          <h2 className="font-semibold text-sm tracking-tight">Чек / Корзина</h2>
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
           {cart.length > 0 && (
             <Badge variant="secondary" className="px-2 py-0.5 text-xs font-mono font-bold bg-primary/15 text-primary border-primary/20">
               {cart.length}
@@ -210,21 +280,41 @@ export function KassaCart({
               Сброс
             </Button>
           )}
+<<<<<<< HEAD
         </div>
       </div>
 
       <div className="flex min-h-0 flex-col">
+=======
+          {isMobile && (
+            <Button variant="ghost" size="icon" className="h-7 w-7">
+              {isCartOpenMobile ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className={cn("flex-col", isMobile && !isCartOpenMobile ? "hidden" : "flex")}>
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         {hasLoss && (
           <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
               <span>⚠️ Товар продаётся в убыток! Убыток: −{formatSom(lossAmount)}</span>
+<<<<<<< HEAD
               <span className="mt-0.5 block text-[10px] font-normal opacity-90">{lossItems.map((i) => i.id).join(", ")}</span>
+=======
+              <span className="mt-0.5 block text-[10px] font-normal opacity-90">{lossItems.map((i) => i.name).join(", ")}</span>
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
             </div>
           </div>
         )}
 
+<<<<<<< HEAD
         <div className="max-h-[34vh] overflow-y-auto px-4 py-2 scrollbar-thin lg:max-h-[40vh]">
+=======
+        <div className="max-h-[35vh] lg:max-h-[40vh] overflow-y-auto px-4 py-2 scrollbar-thin">
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
           {cart.length === 0 ? (
             <div className="py-12 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2">
               <ShoppingCart className="h-8 w-8 stroke-1 text-muted-foreground/30" />
@@ -232,6 +322,7 @@ export function KassaCart({
             </div>
           ) : (
             cart.map((i) => {
+<<<<<<< HEAD
               const isScrap = i.kind === "scrap"
               const discountVal = i.discountSom ?? ((i.price * (i.discountPercent || 0)) / 100)
               const effectiveUnitPrice = Math.max(0, i.price - discountVal)
@@ -250,14 +341,33 @@ export function KassaCart({
               const customPriceInputValue = customPriceInputs[i.lineId] !== undefined 
                 ? customPriceInputs[i.lineId] 
                 : (discountVal > 0 ? String(effectiveUnitPrice) : "")
+=======
+              const stock = stockOf(i.product_id)
+              const sameProduct = cart.filter((c) => c.product_id === i.product_id)
+              const unitNo = sameProduct.findIndex((c) => c.lineId === i.lineId) + 1
+              const canAddMore = sameProduct.length < stock
+              const discountVal = i.discountSom ?? ((i.price * (i.discountPercent || 0)) / 100)
+              const effectiveUnitPrice = Math.max(0, i.price - discountVal)
+              const itemLoss = effectiveUnitPrice < i.cost
+              const product = products.find((p) => p.id === i.product_id)
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
               return (
                 <div key={i.lineId} className="flex flex-col border-b border-border/50 py-3 last:border-0 gap-2">
                   <div className="flex items-center gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="line-clamp-1 text-xs font-semibold">
+<<<<<<< HEAD
                         {isScrap && <Recycle className="mr-1 inline h-3 w-3 text-primary" />}
                         {i.name}
+=======
+                        {i.name}
+                        {sameProduct.length > 1 && (
+                          <span className="ml-1.5 text-[10px] font-normal text-muted-foreground bg-muted px-1.5 py-0.2 rounded">
+                            ед. {unitNo} из {sameProduct.length}
+                          </span>
+                        )}
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
                       </div>
                       <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
                         {discountVal > 0 ? (
@@ -268,6 +378,7 @@ export function KassaCart({
                         ) : (
                           formatSom(i.price)
                         )}{" "}
+<<<<<<< HEAD
                         <span className="text-[10px] opacity-70">
                           {isScrap ? `· ${formatWeight(i.weight)} лома` : "· 1 ед."}
                         </span>
@@ -296,23 +407,59 @@ export function KassaCart({
                         </div>
                       )}
                       {isAdmin && itemLoss && (
+=======
+                        <span className="text-[10px] opacity-70">· остаток {stock} шт.</span>
+                      </div>
+                      {itemLoss && (
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
                         <div className="font-mono text-[10px] font-semibold text-destructive mt-0.5">
                           убыток −{formatSom(i.cost - effectiveUnitPrice)}
                         </div>
                       )}
                     </div>
                     
+<<<<<<< HEAD
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-11 w-11 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => removeItem(i.lineId)}
                       aria-label={`Удалить ${i.name} из чека`}
+=======
+                    <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-0.5 border border-border/40">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded-md hover:bg-background"
+                        title="Убрать единицу"
+                        onClick={() => removeItem(i.lineId)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-5 text-center text-xs font-mono font-medium tabular-nums">1</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 rounded-md hover:bg-background"
+                        disabled={!canAddMore || !product}
+                        title={canAddMore ? "Добавить ещё единицу" : `Остаток: ${stock} шт.`}
+                        onClick={() => product && addToCart(product)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                      onClick={() => removeItem(i.lineId)}
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
 
+<<<<<<< HEAD
                   {(isScrap || i.weight > 0) && (
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/30 bg-muted/30 p-1.5 text-[10px]">
                       <span className="font-medium text-muted-foreground">По граммам:</span>
@@ -385,6 +532,10 @@ export function KassaCart({
 
                   <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-border/20 text-[10px]">
                     <span className="text-muted-foreground font-medium">Скидка:</span>
+=======
+                  <div className="flex flex-wrap items-center justify-between text-[10px] bg-muted/30 p-1.5 rounded-lg border border-border/30 gap-2">
+                    <span className="text-muted-foreground font-medium">Скидка на ед:</span>
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1">
                         <Input
@@ -392,6 +543,7 @@ export function KassaCart({
                           min={0}
                           placeholder="0"
                           value={i.discountSom || ""}
+<<<<<<< HEAD
                           onChange={(e) => {
                             const val = Math.max(0, Math.round(parseFloat(e.target.value) || 0))
                             changeItemDiscountSom(i.lineId, val)
@@ -424,11 +576,42 @@ export function KassaCart({
                 </div>
         
                 </div>
+=======
+                          onChange={(e) => changeItemDiscountSom(i.lineId, parseFloat(e.target.value))}
+                          className="h-6 w-14 text-center px-1 text-[11px] font-mono bg-background"
+                        />
+                        <span className="text-[10px] text-muted-foreground">с</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          placeholder="0"
+                          value={i.discountPercent || ""}
+                          onChange={(e) => changeItemDiscountPercent(i.lineId, parseFloat(e.target.value))}
+                          className="h-6 w-12 text-center px-1 text-[11px] font-mono bg-background"
+                        />
+                        <span className="text-[10px] text-muted-foreground">%</span>
+                      </div>
+                      {sameProduct.length > 1 && (
+                        <button
+                          onClick={() => applyDiscountToAll(i)}
+                          className="rounded border border-border/80 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+                        >
+                          Ко всем
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
               )
             })
           )}
         </div>
 
+<<<<<<< HEAD
         <div className="space-y-3 border-t border-border/80 bg-muted/20 p-4">
           {/* Сворачиваемый блок клиента (по умолчанию закрыт) */}
           <div className="overflow-hidden rounded-xl border border-border/60 bg-background/70 shadow-sm transition-all">
@@ -521,6 +704,28 @@ export function KassaCart({
                 </div>
               </div>
             )}
+=======
+        <div className="space-y-3 border-t border-border/80 p-4 bg-muted/20">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="relative">
+              <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input 
+                placeholder="Клиент" 
+                value={customerName} 
+                onChange={(e) => setCustomerName(e.target.value)} 
+                className="h-8 pl-8 text-xs bg-background" 
+              />
+            </div>
+            <div className="relative">
+              <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input 
+                placeholder="Телефон" 
+                value={customerPhone} 
+                onChange={(e) => setCustomerPhone(e.target.value)} 
+                className="h-8 pl-8 text-xs bg-background" 
+              />
+            </div>
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
           </div>
 
           <div className={cn("grid gap-2", showBonus ? "grid-cols-2" : "grid-cols-1")}>
@@ -542,6 +747,7 @@ export function KassaCart({
             )}
           </div>
 
+<<<<<<< HEAD
           <div className="space-y-2">
             <Label className="flex items-center gap-1 text-[10px] text-muted-foreground">
               <CreditCard className="h-3 w-3" /> Способ оплаты
@@ -601,6 +807,27 @@ export function KassaCart({
           </div>
 
           <div className="space-y-2 rounded-xl bg-background/80 border border-border/50 p-3 text-sm shadow-inner">
+=======
+          <div className="relative">
+            <Select value={payment} onValueChange={setPayment}>
+              <SelectTrigger className="h-8 text-xs bg-background">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_METHODS.map((m) => (
+                  <SelectItem key={m.value} value={m.value} className="text-xs">
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5 rounded-xl bg-background/80 border border-border/50 p-3 text-xs shadow-inner">
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
             <div className="flex justify-between text-muted-foreground">
               <span>Подытог</span>
               <span className="font-mono">{formatSom(subtotal)}</span>
@@ -617,6 +844,7 @@ export function KassaCart({
                 <span className="font-mono">−{formatSom(bonusNum)}</span>
               </div>
             )}
+<<<<<<< HEAD
             {isAdmin && cart.length > 0 && (
               <>
                 <div className="flex justify-between gap-3 border-t border-border/60 pt-2 text-muted-foreground">
@@ -634,6 +862,8 @@ export function KassaCart({
                 </div>
               </>
             )}
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
             <div className="flex justify-between pt-2 text-sm font-bold border-t border-border/60">
               <span>Итого</span>
               <span className="font-mono text-primary text-base">{formatSom(total)}</span>
@@ -652,12 +882,17 @@ export function KassaCart({
             disabled={cart.length === 0 || submitting} 
             onClick={submit}
           >
+<<<<<<< HEAD
             {submitting ? "Оформить..." : `Оформить · ${formatSom(total)}`}
+=======
+            {submitting ? "Оформление..." : `Оформить · ${formatSom(total)}`}
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
           </Button>
         </div>
       </div>
     </div>
   )
+<<<<<<< HEAD
 
   if (!isMobile) return cartPanel
 
@@ -695,4 +930,6 @@ export function KassaCart({
       </Dialog>
     </>
   )
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }

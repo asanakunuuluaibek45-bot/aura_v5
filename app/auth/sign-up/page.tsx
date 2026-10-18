@@ -9,7 +9,10 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { AuthShell } from "@/components/auth/auth-shell"
+<<<<<<< HEAD
 import { InlineLoader } from "@/components/ui/page-loader"
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 function signUpErrorMessage(error: unknown): string {
   const { code, status } = (error ?? {}) as { code?: string; status?: number }
@@ -48,9 +51,13 @@ export default function SignUpPage() {
         password,
         options: {
           emailRedirectTo:
+<<<<<<< HEAD
             process.env.NEXT_PUBLIC_SITE_URL
               ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
               : `${window.location.origin}/auth/callback`,
+=======
+            process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ?? `${window.location.origin}/auth/callback`,
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
           data: {
             full_name: fullName,
             shop_name: shopName,
@@ -132,6 +139,7 @@ export default function SignUpPage() {
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" className="w-full" disabled={isLoading}>
+<<<<<<< HEAD
           {isLoading ? (
             <span className="flex items-center gap-2">
               <InlineLoader />
@@ -140,6 +148,9 @@ export default function SignUpPage() {
           ) : (
             "Зарегистрироваться"
           )}
+=======
+          {isLoading ? "Создание..." : "Зарегистрироваться"}
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         </Button>
         <p className="text-center text-sm text-muted-foreground">
           Уже есть аккаунт?{" "}

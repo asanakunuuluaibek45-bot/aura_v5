@@ -6,11 +6,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+<<<<<<< HEAD
 import { useEffect, useState } from "react"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { InlineLoader } from "@/components/ui/page-loader"
 import { getSavedUserSession, saveUserSession, type SavedUserSession } from "@/lib/local-db/db"
 import { WifiOff, UserCheck } from "lucide-react"
+=======
+import { useState } from "react"
+import { AuthShell } from "@/components/auth/auth-shell"
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 function loginErrorMessage(error: unknown): string {
   const { code, status } = (error ?? {}) as { code?: string; status?: number }
@@ -25,6 +30,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+<<<<<<< HEAD
   const [savedSession, setSavedSession] = useState<SavedUserSession | null>(null)
   const [isOffline, setIsOffline] = useState(false)
   const router = useRouter()
@@ -49,12 +55,17 @@ export default function LoginPage() {
     }
   }, [])
 
+=======
+  const router = useRouter()
+
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     const supabase = createClient()
     setIsLoading(true)
     setError(null)
     try {
+<<<<<<< HEAD
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
 
@@ -84,12 +95,21 @@ export default function LoginPage() {
         window.location.assign("/crm/pos")
         return
       }
+=======
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+      router.push("/")
+      router.refresh()
+    } catch (error: unknown) {
+      console.error("[v0] Login error:", error)
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
       setError(loginErrorMessage(error))
     } finally {
       setIsLoading(false)
     }
   }
 
+<<<<<<< HEAD
   const [isResuming, setIsResuming] = useState(false)
 
   // Вход по сохранённой сессии: работает и без сети, и с сетью.
@@ -161,6 +181,10 @@ export default function LoginPage() {
         </div>
       )}
 
+=======
+  return (
+    <AuthShell title="Вход в систему" subtitle="Введите данные, чтобы войти в личный кабинет Aura">
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
       <form onSubmit={handleLogin} className="flex flex-col gap-5">
         <div className="grid gap-2">
           <Label htmlFor="email">Email</Label>
@@ -185,6 +209,7 @@ export default function LoginPage() {
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" className="w-full" disabled={isLoading}>
+<<<<<<< HEAD
           {isLoading ? (
             <span className="flex items-center gap-2">
               <InlineLoader />
@@ -193,6 +218,9 @@ export default function LoginPage() {
           ) : (
             "Войти"
           )}
+=======
+          {isLoading ? "Вход..." : "Войти"}
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
         </Button>
         <p className="text-center text-sm text-muted-foreground">
           Нет аккаунта?{" "}

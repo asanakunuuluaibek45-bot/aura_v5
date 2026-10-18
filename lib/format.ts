@@ -24,6 +24,7 @@ export function formatDateTime(value: string): string {
     minute: "2-digit",
   })
 }
+<<<<<<< HEAD
 export function formatDateTimeTotal(value: string): string {
   return new Date(value).toLocaleString('ru-RU', {
     day: '2-digit',
@@ -33,6 +34,8 @@ export function formatDateTimeTotal(value: string): string {
     minute: '2-digit',
   });
 }
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 export function roleLabel(role: string | null): string {
   switch (role) {

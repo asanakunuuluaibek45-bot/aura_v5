@@ -18,6 +18,7 @@ export type Profile = {
   created_at: string
 }
 
+<<<<<<< HEAD
 export type ProductStatus = "in_stock" | "reserved" | "sold" | "archived" | "draft"
 
 export type Customer = {
@@ -76,16 +77,23 @@ export type ShopSettings = {
 export type ProfileWithImpersonation = Profile & {
   impersonated_shop_id: string | null
 }
+=======
+export type ProductStatus = "in_stock" | "reserved" | "sold"
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 
 export type Product = {
   id: string
   shop_id: string
+<<<<<<< HEAD
   /** Короткий числовой ID магазина для QR-ссылок (seq_id из shop_settings). */
   shop_seq_id?: number | null
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   created_by: string
   name: string
   category: string | null
   metal: string | null
+<<<<<<< HEAD
   metal_color: string | null
   /** Колонка purity удалена из БД — проба вычисляется из metal (purityFromMetal). */
   weight: number
@@ -109,11 +117,20 @@ export type Product = {
   price_per_gram_purchase: number | null
   stones: string | null
   description: string | null
+=======
+  purity: string | null
+  weight: number
+  size: string | null
+  sku: string | null
+  quantity: number
+  purchase_price: number
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   sale_price: number
   image_url: string | null
   images: string[] | null
   supplier_name: string | null
   supplier_phone: string | null
+<<<<<<< HEAD
   consignment_operation_id?: string | null
   consignment_at?: string | null
   consignment_by?: string | null
@@ -141,6 +158,18 @@ export type SaleItem = {
   weight: number
   metal: string | null
   price_per_gram?: number | null
+=======
+  status: ProductStatus
+  created_at: string
+}
+
+export type SaleItem = {
+  product_id: string
+  name: string
+  weight: number
+  metal: string | null
+  quantity: number
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   price: number
   cost: number
 }
@@ -154,9 +183,12 @@ export type Sale = {
   customer_name: string | null
   customer_phone: string | null
   payment_method: string
+<<<<<<< HEAD
   /** Разбивка смешанной оплаты. */
   amount_cash?: number | null
   amount_electronic?: number | null
+=======
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   subtotal: number
   discount: number
   total: number
@@ -166,6 +198,7 @@ export type Sale = {
   bonus_used: number
   items: SaleItem[]
   created_at: string
+<<<<<<< HEAD
   updated_at?: string | null
   deleted_at?: string | null
   total_price?: number
@@ -219,6 +252,20 @@ export type MetalRate = {
 
 export const CATEGORIES = ["Кольца", "Серьги", "Цепи", "Браслеты", "Подвески", "Часы", "Прочее"] as const
 
+=======
+}
+
+export type Customer = {
+  id: string
+  shop_id: string
+  name: string | null
+  phone: string | null
+  bonus_points: number
+  created_at: string
+}
+
+export const CATEGORIES = ["Кольца", "Серьги", "Цепи", "Браслеты", "Подвески", "Часы", "Прочее"] as const
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 export const METALS = [
   "Золото 375",
   "Золото 585",
@@ -233,6 +280,7 @@ export const METALS = [
   "Вторичное золото 999",
   "Вторичное серебро 925",
 ] as const
+<<<<<<< HEAD
 
 /** Цвет металла — выбирается кнопками в карточке товара. */
 export const METAL_COLORS = [
@@ -287,6 +335,25 @@ export type CashOperation = {
   supplier_phone?: string | null
   supplier_debt_operation_id?: string | null
   client_op_id?: string | null
+=======
+export const PAYMENT_METHODS = [
+  { value: "cash", label: "Наличные" },
+  { value: "card", label: "Карта" },
+  { value: "transfer", label: "Перевод" },
+] as const
+
+export type CashOpType = "income" | "outcome" | "collection"
+
+export type CashOperation = {
+  id: string
+  shop_id: string
+  created_by: string
+  author_name: string | null
+  type: CashOpType
+  amount: number
+  reason: string
+  created_at: string
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 export type CashReasonPreset = {
@@ -295,6 +362,7 @@ export type CashReasonPreset = {
   created_by: string
   text: string
   created_at: string
+<<<<<<< HEAD
   updated_at?: string | null
   deleted_at?: string | null
 }
@@ -365,3 +433,6 @@ export type SuperadminNotification = {
 export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string }
+=======
+}
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6

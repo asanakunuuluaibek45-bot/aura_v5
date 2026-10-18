@@ -28,12 +28,20 @@ export async function approveMember(id: string, role: Role) {
   const { supabase } = await requireAdmin()
   const { error } = await supabase.from("profiles").update({ status: "approved", role }).eq("id", id)
   if (error) throw error
+<<<<<<< HEAD
   revalidatePath("/crm")
+=======
+  revalidatePath("/")
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 export async function rejectMember(id: string) {
   const { supabase } = await requireAdmin()
   const { error } = await supabase.from("profiles").update({ status: "rejected", role: null }).eq("id", id)
   if (error) throw error
+<<<<<<< HEAD
   revalidatePath("/crm")
+=======
+  revalidatePath("/")
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }

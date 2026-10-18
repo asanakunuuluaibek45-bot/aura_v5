@@ -1,16 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+<<<<<<< HEAD
   allowedDevOrigins: ["127.0.0.1", "**.replit.dev"],
 
   // Strip console.* from production bundles (keep console.error for real failures).
   compiler: {
     removeConsole: { exclude: ["error"] },
+=======
+  typescript: {
+    ignoreBuildErrors: true,
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
   },
 
   images: {
     unoptimized: true,
   },
 
+<<<<<<< HEAD
   // Keep production builds within the memory limits of small Replit containers.
   experimental: {
     cpus: 1,
@@ -41,6 +47,11 @@ const nextConfig = {
   //     { source: '/', destination: '/crm', permanent: false },
   //   ]
   // },
+=======
+  allowedDevOrigins: [
+    '192.168.1.176',
+  ],
+>>>>>>> 6517ddcf80422f00951dd9ac12bf4744f0ceb4f6
 }
 
 export default nextConfig
