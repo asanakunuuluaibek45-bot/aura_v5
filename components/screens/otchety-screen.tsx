@@ -108,8 +108,8 @@ function previousRange(range: { from: Date; to: Date }): { from: Date; to: Date 
 /* ------------------------------------------------------------------ */
 
 /** Normalises free-text metal/purity fields into a purity bucket ("585", "925"…). */
-function purityOf(p: Pick<Product, "purity" | "metal">): string {
-  const raw = `${p.purity ?? ""} ${p.metal ?? ""}`
+function purityOf(p: Pick<Product, "metal">): string {
+  const raw = p.metal ?? ""
   const match = raw.match(/\b(375|500|585|750|900|916|925|958|999)\b/)
   if (match) return match[1]
   if (/платин/i.test(raw)) return "950"
@@ -210,22 +210,22 @@ export function OtchetyScreen({
   const kpi = useMemo(() => summarise(inRange), [inRange])
   const prevKpi = useMemo(() => summarise(inPrevRange), [inPrevRange])
 
-  const stockCount = useMemo(
-    () => products.reduce((sum, p) => sum + Math.max(0, p.quantity), 0),
+  const stockProducts = useMemo(
+    () => products.filter((p) => p.status === "in_stock" || p.status === "reserved"),
     [products],
   )
+  const stockCount = stockProducts.length
 
   /* ---------------- purity breakdown of current stock ---------------- */
 
   const purityRows = useMemo(() => {
     const buckets = new Map<string, { purity: string; weight: number; cost: number; items: number }>()
-    for (const p of products) {
-      if (p.quantity <= 0) continue
+    for (const p of stockProducts) {
       const key = purityOf(p)
       const row = buckets.get(key) ?? { purity: key, weight: 0, cost: 0, items: 0 }
-      row.weight += (p.weight || 0) * p.quantity
-      row.cost += (p.purchase_price || 0) * p.quantity
-      row.items += p.quantity
+      row.weight += p.weight
+      row.cost += p.purchase_price
+      row.items += 1
       buckets.set(key, row)
     }
     return [...buckets.values()]
@@ -243,7 +243,7 @@ export function OtchetyScreen({
         }
       })
       .sort((a, b) => b.weight - a.weight)
-  }, [products, scrapPrices, markup])
+  }, [stockProducts, scrapPrices, markup])
 
   const purityTotals = useMemo(
     () =>
@@ -353,9 +353,9 @@ export function OtchetyScreen({
     >()
     for (const s of inRange) {
       for (const item of s.items ?? []) {
-        const product = productById.get(item.product_id)
+        const product = item.product_id ? productById.get(item.product_id) : undefined
         const category = categoryOf(item, productById)
-        const purity = purityOf({ purity: product?.purity ?? null, metal: item.metal ?? product?.metal ?? null })
+        const purity = purityOf({ metal: item.metal ?? product?.metal ?? null })
         const key = `${category}|${purity}`
         const row = rows.get(key) ?? { key, category, purity, count: 0, revenue: 0, cost: 0 }
         row.count += item.quantity
@@ -815,7 +815,8 @@ function summarise(sales: Sale[]) {
 }
 
 function categoryOf(item: SaleItem, productById: Map<string, Product>): string {
-  return productById.get(item.product_id)?.category ?? "Прочее"
+  const product = item.product_id ? productById.get(item.product_id) : undefined
+  return product?.category ?? "Прочее"
 }
 
 function delta(current: number, previous: number): number | null {

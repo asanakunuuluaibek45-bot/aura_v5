@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
-type FormState = Required<Pick<ProductInput, "name" | "category" | "metal" | "purity" | "weight" | "size" | "sku" | "quantity" | "purchase_price" | "sale_price">> & {
+type FormState = Required<Pick<ProductInput, "name" | "category" | "metal" | "weight" | "size" | "sku" | "purchase_price" | "sale_price">> & {
   images: string[]
   supplier_name: string
   supplier_phone: string
@@ -30,11 +30,9 @@ const EMPTY: FormState = {
   name: "",
   category: "Кольца",
   metal: "Золото 585",
-  purity: "",
   weight: 0,
   size: "",
   sku: "",
-  quantity: 1,
   purchase_price: 0,
   sale_price: 0,
   images: [],
@@ -74,11 +72,9 @@ export function ProductDialog({
         name: product.name,
         category: product.category ?? "Кольца",
         metal: product.metal ?? "Золото 585",
-        purity: product.purity ?? "",
         weight: product.weight,
         size: product.size ?? "",
         sku: product.sku ?? "",
-        quantity: product.quantity,
         purchase_price: product.purchase_price,
         sale_price: product.sale_price,
         images: gallery,
@@ -93,7 +89,7 @@ export function ProductDialog({
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }))
 
   const pickMetal = (m: string) =>
-    setForm((f) => ({ ...f, metal: m, purity: purityFromMetal(m) || f.purity }))
+    setForm((f) => ({ ...f, metal: m }))
 
   const submit = async () => {
     if (!form.name.trim()) {
@@ -176,12 +172,14 @@ export function ProductDialog({
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="p-purity">Проба</Label>
-              <Input id="p-purity" placeholder="585 / 925" value={form.purity} onChange={(e) => set("purity", e.target.value)} />
+              <Label>Проба</Label>
+              <div className="flex h-10 items-center rounded-md border border-input bg-muted/30 px-3 text-sm text-muted-foreground">
+                {purityFromMetal(form.metal) || "—"} <span className="ml-2 text-xs">по выбранному металлу</span>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="p-weight">Вес (г)</Label>
               <Input
@@ -196,16 +194,6 @@ export function ProductDialog({
             <div className="grid gap-2">
               <Label htmlFor="p-size">Размер</Label>
               <Input id="p-size" value={form.size} onChange={(e) => set("size", e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="p-qty">Кол-во</Label>
-              <Input
-                id="p-qty"
-                type="number"
-                min={0}
-                value={form.quantity}
-                onChange={(e) => set("quantity", Number(e.target.value))}
-              />
             </div>
           </div>
 
