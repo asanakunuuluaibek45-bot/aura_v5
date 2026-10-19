@@ -150,7 +150,7 @@ export const LabelBackground = memo(function LabelBackground({
               {labelShape}
               {sourceMeta.vbH > sourceMeta.bodyH && (
                 <rect
-                  x={(sourceMeta.vbW * ((key === "T30x25_45" || key === "T30x25_horizontal") ? 0.25 : 0.5)) - TAIL_W_MM / 2} y={sourceMeta.bodyH}
+                  x={(sourceMeta.vbW * (key === "T30x25_horizontal" ? 0.75 : key === "T30x25_45" ? 0.25 : 0.5)) - TAIL_W_MM / 2} y={sourceMeta.bodyH}
                   width={TAIL_W_MM} height={sourceMeta.vbH - sourceMeta.bodyH}
                   fill="#d9d9d9"
                 />
