@@ -15,6 +15,7 @@ export interface LabelEditorProps {
   density?:        number
   onSizeChange?:   (key: JewelryLabelSizeKey) => void
   onClose?:       () => void
+  backgroundControlsHost?: HTMLElement | null
 }
 
 // ── Элемент шаблона ───────────────────────────────────────────────────────────
