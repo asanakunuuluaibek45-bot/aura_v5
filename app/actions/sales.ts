@@ -38,12 +38,13 @@ export type CheckoutInput = {
   amount_electronic?: number
   customer_name: string
   customer_phone: string
+  customer_id?: string | null
   bonus_used: number
   /** Generate once on the client and reuse when retrying an uncertain result. */
   client_op_id?: string
 }
 
-const PAYMENTS = new Set(["cash", "card", "transfer", "mixed"])
+const PAYMENTS = new Set(["cash", "card", "transfer", "mixed", "credit"])
 
 export async function checkout(input: CheckoutInput) {
   const { supabase, shopId } = await requireProfile()
@@ -56,6 +57,10 @@ export async function checkout(input: CheckoutInput) {
     throw new Error("Количество каждой позиции должно быть равно 1")
   }
   const phone = (input.customer_phone ?? "").trim()
+  const customerId = (input.customer_id ?? "").trim() || null
+  if (input.payment_method === "credit" && !customerId) {
+    throw new Error("Для продажи в долг выберите клиента из списка")
+  }
   if (phone && !/^[\d+()\s-]{5,20}$/.test(phone)) throw new Error("Проверьте номер телефона клиента")
 
   // Resolve all scrap prices in one round trip instead of querying once per
@@ -109,6 +114,7 @@ export async function checkout(input: CheckoutInput) {
     _sale: {
       items: validated,
       payment_method: input.payment_method,
+      customer_id: customerId,
       amount_cash: input.amount_cash,
       amount_electronic: input.amount_electronic,
       bonus_used: input.bonus_used,
@@ -116,7 +122,12 @@ export async function checkout(input: CheckoutInput) {
       customer_phone: phone || null,
     },
   })
-  if (error) throw new Error(`Не удалось провести продажу: ${error.message}`)
+  if (error) {
+    if (input.payment_method === "credit" && (["42883", "42P01", "42703", "PGRST202", "PGRST204", "PGRST205"].includes(error.code ?? "") || error.message.includes("Некорректный способ оплаты"))) {
+      throw new Error("Сначала примените SQL-миграцию supabase/migrations/20261019_customer_credit_sales.sql")
+    }
+    throw new Error(`Не удалось провести продажу: ${error.message}`)
+  }
   if (result?.accepted === false) {
     const product = result.product_name ? ` «${result.product_name}»` : ""
     throw new Error(`Конфликт остатков: товар${product} уже продан или недоступен. Обновите склад и проверьте чек.`)
