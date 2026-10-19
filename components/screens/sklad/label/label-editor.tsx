@@ -2,12 +2,12 @@
 import React, {
   useRef, useState, useMemo, useCallback, useEffect, useLayoutEffect,
 } from "react"
-import { X, ChevronDown } from "lucide-react"
+import { X } from "lucide-react"
 import { createPortal } from "react-dom"
 import { canvasToLabelDataUrl, getLabelSizeDef, DEFAULT_SIZE_KEY, LABEL_SIZES, NIIMBOT_MODEL } from "@/lib/niimbot"
 import type { JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { LabelEditorProps } from "./types"
-import { RULER_SIZE, ZOOM_DEFAULT, ZOOM_MIN } from "./constants"
+import { RULER_SIZE, ZOOM_DEFAULT, ZOOM_MAX, ZOOM_MIN } from "./constants"
 import type { BorderStyleKey } from "./constants"
 import { getSvgLayout } from "./components/label-background"
 import { computeStageOrigin, makeTrigCache, screenToLabelPx } from "./utils/geometry"
@@ -150,8 +150,6 @@ export function LabelEditor({
   const [isPrinting,    setIsPrinting]    = useState(false)
   const [printStatus,   setPrintStatus]   = useState("")
   const [loaded,      setLoaded]      = useState(false)
-  const [collapsed,   setCollapsed]   = useState(false)
-  const [topCollapsed, setTopCollapsed] = useState(false)
 
   const isTransformingRef = useRef(false)
   const isPanModeForPan   = useRef(false)
@@ -246,10 +244,32 @@ export function LabelEditor({
   }, [isPanMode, activatePanMode, deactivatePanMode])
 
   // ── Zoom + transform ──────────────────────────────────────────────────────
-  const { zoom, zoomRef, zoomTo, zoomReset, transformRef } = useCanvasTransform(
+  const { zoom, zoomRef, zoomTo, transformRef } = useCanvasTransform(
     fabricRef, pan, offsetX, offsetY, totalW, totalH, rotation, sizeKey,
   )
   useEffect(() => { zoomRefProxy.current = zoomRef.current }, [zoom, zoomRef])
+
+  // Zoom around the printable body so the long tail cannot pull the text off-screen.
+  const zoomToPrintArea = useCallback((requestedZoom: number) => {
+    const nextZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, requestedZoom))
+    const stageW = totalW - RULER_SIZE
+    const stageH = totalH - RULER_SIZE
+    const dx = offsetX + sizeDef.w_px / 2 - stageW / 2
+    const dy = offsetY + sizeDef.h_px / 2 - stageH / 2
+    const angle = (rotation * Math.PI) / 180
+    const cos = Math.cos(angle)
+    const sin = Math.sin(angle)
+    const rotatedX = dx * cos - dy * sin
+    const rotatedY = dx * sin + dy * cos
+    const rect = viewportRef.current?.getBoundingClientRect()
+    const centerX = rect ? RULER_SIZE + (rect.width - RULER_SIZE) / 2 : RULER_SIZE + stageW / 2
+    const centerY = rect ? RULER_SIZE + (rect.height - RULER_SIZE) / 2 : RULER_SIZE + stageH / 2
+    setPan({
+      x: centerX - (RULER_SIZE + stageW / 2) - rotatedX * nextZoom,
+      y: centerY - (RULER_SIZE + stageH / 2) - rotatedY * nextZoom,
+    })
+    zoomTo(nextZoom)
+  }, [offsetX, offsetY, rotation, sizeDef, totalW, totalH, viewportRef, setPan, zoomTo])
 
   // Подбираем масштаб после появления реальной области холста, чтобы на первом
   // кадре вся этикетка помещалась между компактными панелями, а не за краем сцены.
@@ -458,9 +478,8 @@ export function LabelEditor({
   }, [actions])
 
   const handleZoomReset = useCallback(() => {
-    zoomReset()
-    setPan({ x: 0, y: 0 })
-  }, [zoomReset, setPan])
+    zoomToPrintArea(ZOOM_DEFAULT)
+  }, [zoomToPrintArea])
 
   const handlePanStart = useCallback((_cx: number, _cy: number) => {}, [])
 
@@ -511,7 +530,7 @@ export function LabelEditor({
       setLineHeight(lh)
       actions.handleLineHeightChange(lh)
     },
-    onZoomTo:         zoomTo,
+    onZoomTo:         zoomToPrintArea,
     onZoomReset:      handleZoomReset,
     onTogglePanMode:  handleTogglePan,
     onRotateCanvas:   handleRotateCanvas,
@@ -565,7 +584,6 @@ export function LabelEditor({
       )}
 
       {/* Компактная верхняя строка: формат, статус и закрытие. */}
-      {!collapsed && (
         <div className="relative z-20 shrink-0 border-b bg-background/95 backdrop-blur-md">
           <div className="flex min-h-10 items-center gap-1 px-2 py-1">
             <LabelEditorToolbar zone="header" {...toolbarCommon} />
@@ -588,34 +606,7 @@ export function LabelEditor({
             )}
           </div>
         </div>
-      )}
 
-      {/* Свёрнутый режим (и верх и низ свернуты): плавающие кнопки управления */}
-      {collapsed && (
-        <div className="absolute top-2 left-3 right-3 z-30 pointer-events-none flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => { setCollapsed(false); setTopCollapsed(false); }}
-            className="pointer-events-auto inline-flex max-w-[72vw] items-center gap-2 rounded-full border border-border/80 bg-background/90 px-3 py-1 text-xs font-medium shadow-md backdrop-blur-md hover:bg-background hover:border-primary/50 transition-colors"
-            title="Развернуть панели настроек"
-          >
-            <ChevronDown className="h-3.5 w-3.5 text-primary" />
-            <span className="shrink-0 text-[11px]"><strong className="text-primary font-mono">{sizeDef.label}</strong></span>
-          </button>
-          <div className="pointer-events-auto flex items-center gap-1">
-            {onClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-full border border-border/80 bg-background/90 p-1.5 text-muted-foreground shadow-md backdrop-blur-md hover:text-foreground"
-                aria-label="Закрыть"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── ОБЛАСТЬ ХОЛСТА ── */}
       <div className="relative z-0 flex min-h-0 w-full flex-1 overflow-hidden">
@@ -645,7 +636,7 @@ export function LabelEditor({
           showCanvasControls
           onPanStart={handlePanStart}
           onBgClick={handleBgClick}
-          onZoomTo={zoomTo}
+          onZoomTo={zoomToPrintArea}
           onZoomReset={handleZoomReset}
           onTogglePan={handleTogglePan}
           onActivatePan={activatePanMode}
@@ -660,8 +651,6 @@ export function LabelEditor({
       <div className="shrink-0" style={{ zIndex: 9990, position: "relative" }}>
         <LabelEditorToolbar
           zone="bottom"
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((v) => !v)}
           {...toolbarCommon}
         />
       </div>
