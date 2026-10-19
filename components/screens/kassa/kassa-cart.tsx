@@ -20,6 +20,7 @@ import {
   ChevronDown
 } from "lucide-react"
 import { PAYMENT_METHODS, type Customer, type Product } from "@/lib/types"
+import { normalizeText } from "@/lib/product-search"
 import { formatSom, formatWeight } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { ExtendedSaleItem } from "./index"
@@ -43,6 +44,8 @@ interface KassaCartProps {
   setCustomerName: (name: string) => void
   customerPhone: string
   setCustomerPhone: (phone: string) => void
+  customerId: string | null
+  setCustomerId: (id: string | null) => void
   customers?: Customer[]
   showBonus: boolean
   bonusUsed: string
@@ -84,6 +87,8 @@ export function KassaCart({
   setCustomerName,
   customerPhone,
   setCustomerPhone,
+  customerId,
+  setCustomerId,
   customers = [],
   showBonus,
   bonusUsed,
@@ -120,28 +125,27 @@ export function KassaCart({
 
   // Оптимизация: мемоизация фильтрации клиентов
   const filteredCustomers = useMemo(() => {
-    const q = customerName.trim().toLowerCase()
+    const q = normalizeText(customerName)
     if (q.length < 1) return []
     return customers
       .filter((c) =>
-        (c.name ?? "").toLowerCase().includes(q) ||
-        (c.phone ?? "").includes(q)
+        normalizeText(c.name).includes(q) ||
+        normalizeText(c.phone).includes(q)
       )
       .slice(0, 8)
   }, [customerName, customers])
 
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const selectedCustomer = useMemo(
+    () => customers.find((customer) => customer.id === customerId) ?? null,
+    [customerId, customers],
+  )
 
   const handleSelectCustomer = (c: Customer) => {
+    setCustomerId(c.id)
     setCustomerName(c.name ?? "")
     setCustomerPhone(c.phone ?? "")
-    setSelectedCustomer(c)
     setShowSuggestions(false)
   }
-
-  useEffect(() => {
-    if (!customerName.trim()) setSelectedCustomer(null)
-  }, [customerName])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -471,7 +475,7 @@ export function KassaCart({
                     <Input
                       placeholder="Имя клиента"
                       value={customerName}
-                      onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true) }}
+                      onChange={(e) => { setCustomerId(null); setCustomerName(e.target.value); setShowSuggestions(true) }}
                       onFocus={() => setShowSuggestions(true)}
                       className="h-8 pl-8 text-xs bg-background"
                       autoComplete="off"
@@ -514,7 +518,7 @@ export function KassaCart({
                     <Input 
                       placeholder="Телефон" 
                       value={customerPhone} 
-                      onChange={(e) => setCustomerPhone(e.target.value)} 
+                      onChange={(e) => { setCustomerId(null); setCustomerPhone(e.target.value) }} 
                       className="h-8 pl-8 text-xs bg-background" 
                     />
                   </div>
@@ -546,12 +550,12 @@ export function KassaCart({
             <Label className="flex items-center gap-1 text-[10px] text-muted-foreground">
               <CreditCard className="h-3 w-3" /> Способ оплаты
             </Label>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               {PAYMENT_METHODS.map((m) => (
                 <button
                   key={m.value}
                   type="button"
-                  onClick={() => setPayment(m.value)}
+                  onClick={() => { setPayment(m.value); if (m.value === "credit") setIsCustomerOpen(true) }}
                   className={cn(
                     "rounded-lg border px-2 py-2 text-[11px] font-medium transition-colors",
                     payment === m.value
@@ -563,6 +567,12 @@ export function KassaCart({
                 </button>
               ))}
             </div>
+
+            {payment === "credit" && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
+                Сумма будет записана как долг, а не в кассу. Выберите зарегистрированного клиента; для оформления нужен интернет.
+              </div>
+            )}
 
             {payment === "mixed" && (
               <div className="grid grid-cols-2 gap-2 rounded-xl border border-border/50 bg-background/80 p-2">

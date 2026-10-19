@@ -120,6 +120,7 @@ export function KassaScreen({
   const [payElectronic, setPayElectronic] = useState("")
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
+  const [customerId, setCustomerId] = useState<string | null>(null)
   
   const [submitting, setSubmitting] = useState(false)
   const checkoutAttempt = useRef<ClientOperationAttempt | null>(null)
@@ -150,6 +151,7 @@ export function KassaScreen({
       setBonusUsed("")
       setCustomerName("")
       setCustomerPhone("")
+      setCustomerId(null)
       setPayment("cash")
       setIsLoaded(true)
       return
@@ -167,6 +169,7 @@ export function KassaScreen({
         if (parsed.payment !== undefined) setPayment(parsed.payment)
         if (parsed.customerName !== undefined) setCustomerName(parsed.customerName)
         if (parsed.customerPhone !== undefined) setCustomerPhone(parsed.customerPhone)
+        if (parsed.customerId !== undefined) setCustomerId(parsed.customerId)
       }
     } catch (e) {
       console.error("[kassa] Error reading localStorage:", e)
@@ -180,12 +183,12 @@ export function KassaScreen({
     try {
       localStorage.setItem(
         cartStorageKey,
-        JSON.stringify({ cart, bonusUsed, payment, customerName, customerPhone })
+        JSON.stringify({ cart, bonusUsed, payment, customerName, customerPhone, customerId })
       )
     } catch (e) {
       console.error("[kassa] Error saving to localStorage:", e)
     }
-  }, [cart, bonusUsed, payment, customerName, customerPhone, isLoaded, onlineOnly, cartStorageKey])
+  }, [cart, bonusUsed, payment, customerName, customerPhone, customerId, isLoaded, onlineOnly, cartStorageKey])
 
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)")
@@ -349,6 +352,7 @@ export function KassaScreen({
     setBonusUsed("")
     setCustomerName("")
     setCustomerPhone("")
+    setCustomerId(null)
     setPayment("cash")
     setQuery("")
     if (!onlineOnly) localStorage.removeItem(cartStorageKey)
@@ -406,9 +410,10 @@ export function KassaScreen({
         amount_electronic: payment === "mixed" ? Number(payElectronic) || 0 : undefined,
         customer_name: customerName,
         customer_phone: customerPhone,
+        customer_id: customerId,
       }
 
-      if (onLocalCheckout) {
+      if (onLocalCheckout && payment !== "credit") {
         const res = await onLocalCheckout(checkoutPayload)
         toast.success(`Продажа записана локально: ${formatSom(res.sale?.final_price || total)}`, {
           description: "Ожидает подтверждения сервера. При конфликте с другой продажей приложение сообщит об этом.",
@@ -436,6 +441,14 @@ export function KassaScreen({
 
   const submit = () => {
     if (cart.length === 0) return
+    if (payment === "credit" && !customerId) {
+      toast.error("Для продажи в долг выберите клиента из списка")
+      return
+    }
+    if (payment === "credit" && !navigator.onLine) {
+      toast.error("Продажа в долг требует подключения к интернету")
+      return
+    }
     // Смешанная оплата: две суммы должны закрывать чек.
     if (payment === "mixed") {
       const paid = (Number(payCash) || 0) + (Number(payElectronic) || 0)
@@ -510,6 +523,8 @@ export function KassaScreen({
             setCustomerName={setCustomerName}
             customerPhone={customerPhone}
             setCustomerPhone={setCustomerPhone}
+            customerId={customerId}
+            setCustomerId={setCustomerId}
             showBonus={showBonus}
             bonusUsed={bonusUsed}
             setBonusUsed={setBonusUsed}

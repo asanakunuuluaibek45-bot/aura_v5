@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react"
 import type { Customer } from "@/lib/types"
-import { createClient_, updateClient, deleteClient, getClientPurchases, setClientBlacklist, type ClientPurchase } from "@/app/actions/clients"
+import { createClient_, updateClient, deleteClient, setClientBlacklist } from "@/app/actions/clients"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -41,6 +41,7 @@ import {
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { normalizeText } from "@/lib/product-search"
 import {PurchaseHistoryPanel} from "@/components/screens/clients/Purchase-History-Panel"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
@@ -112,15 +113,15 @@ export function ClientsScreen({
   const [isPending, startTransition] = useTransition()
 
   const filtered = useMemo(() => {
-    const q = debouncedQuery.toLowerCase()
+    const q = normalizeText(debouncedQuery)
     return clients.filter((c) => {
       const matchQuery =
         !q ||
-        (c.name ?? "").toLowerCase().includes(q) ||
-        (c.phone ?? "").includes(q) ||
-        (c.email ?? "").toLowerCase().includes(q) ||
-        (c.whatsapp ?? "").includes(q) ||
-        (c.instagram ?? "").toLowerCase().includes(q)
+        normalizeText(c.name).includes(q) ||
+        normalizeText(c.phone).includes(q) ||
+        normalizeText(c.email).includes(q) ||
+        normalizeText(c.whatsapp).includes(q) ||
+        normalizeText(c.instagram).includes(q)
       const matchGender = genderFilter === "all" || (c.gender ?? "") === genderFilter
       const matchBlacklist = blacklistFilter === "all" || c.is_blacklisted === true
       return matchQuery && matchGender && matchBlacklist

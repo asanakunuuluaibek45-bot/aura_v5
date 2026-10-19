@@ -37,6 +37,8 @@ export type Customer = {
   purchase_count: number
   /** Суммарная выручка по клиенту. */
   total_spent: number
+  /** Текущий долг клиента; поле добавляется миграцией кредитных продаж. */
+  debt_balance?: number
   /** Дата последней покупки. */
   last_purchase_at: string | null
   created_at: string
@@ -248,6 +250,7 @@ export const PAYMENT_METHODS = [
   { value: "cash", label: "Наличные" },
   { value: "transfer", label: "Перевод / карта" },
   { value: "mixed", label: "Смешанно" },
+  { value: "credit", label: "В долг" },
 ] as const
 
 /** Устаревший способ «card» остаётся для старых чеков. */
@@ -256,6 +259,7 @@ export const PAYMENT_LABELS: Record<string, string> = {
   card: "Карта",
   transfer: "Перевод / карта",
   mixed: "Смешанно",
+  credit: "В долг",
 }
 
 export type CashOpType = "income" | "outcome" | "collection"
@@ -286,6 +290,7 @@ export type CashOperation = {
   supplier_name?: string | null
   supplier_phone?: string | null
   supplier_debt_operation_id?: string | null
+  customer_debt_operation_id?: string | null
   client_op_id?: string | null
 }
 
@@ -322,6 +327,28 @@ export type SupplierDebtOperation = {
   created_at: string
   updated_at?: string | null
   deleted_at?: string | null
+  client_op_id?: string | null
+}
+
+export type CustomerDebtOperationType = "credit_sale" | "payment" | "credit_return"
+
+export type CustomerDebtOperation = {
+  id: string
+  shop_id: string
+  customer_id: string
+  sale_id: string | null
+  sale_return_id: string | null
+  operation_type: CustomerDebtOperationType
+  amount: number
+  balance_before: number
+  balance_after: number
+  cash_operation_id: string | null
+  source: SupplierDebtSource
+  amount_cash: number
+  amount_electronic: number
+  reason: string
+  author_name: string | null
+  created_at: string
   client_op_id?: string | null
 }
 
