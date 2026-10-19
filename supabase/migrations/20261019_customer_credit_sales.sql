@@ -17,6 +17,22 @@ BEGIN
 END;
 $$;
 
+ALTER TABLE public.sales
+  ADD COLUMN IF NOT EXISTS credit_balance numeric(14,2) NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'sales_credit_balance_nonnegative'
+      AND conrelid = 'public.sales'::regclass
+  ) THEN
+    ALTER TABLE public.sales
+      ADD CONSTRAINT sales_credit_balance_nonnegative CHECK (credit_balance >= 0);
+  END IF;
+END;
+$$;
+
 ALTER TABLE public.cash_operations
   ADD COLUMN IF NOT EXISTS customer_debt_operation_id uuid;
 
@@ -238,6 +254,46 @@ BEGIN
     RAISE EXCEPTION 'Некорректный способ оплаты' USING ERRCODE = '22023';
   END IF;
 
+  -- Lock customer rows before product rows; returns and repayments use the same
+  -- order, preventing deadlocks when the returned item is sold again.
+  v_customer_id := nullif(_sale->>'customer_id', '')::uuid;
+  v_customer_name := nullif(btrim(_sale->>'customer_name'), '');
+  v_customer_phone := nullif(btrim(_sale->>'customer_phone'), '');
+  IF v_payment_method = 'credit' AND v_customer_id IS NULL THEN
+    RAISE EXCEPTION 'Для продажи в долг выберите клиента из списка' USING ERRCODE = '22023';
+  END IF;
+  IF v_customer_id IS NOT NULL THEN
+    SELECT coalesce(v_customer_name, c.name),
+           coalesce(v_customer_phone, c.phone),
+           coalesce(c.debt_balance, 0)
+      INTO v_customer_name, v_customer_phone, v_customer_balance_before
+      FROM public.customers c
+     WHERE c.id = v_customer_id AND c.shop_id = v_shop_id
+     FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Клиент не найден в этом магазине' USING ERRCODE = '22023';
+    END IF;
+  ELSIF v_customer_phone IS NOT NULL THEN
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended('offline-customer:' || v_shop_id::text || ':' || v_customer_phone, 0)
+    );
+    SELECT c.id, coalesce(v_customer_name, c.name),
+           coalesce(v_customer_phone, c.phone),
+           coalesce(c.debt_balance, 0)
+      INTO v_customer_id, v_customer_name, v_customer_phone, v_customer_balance_before
+      FROM public.customers c
+     WHERE c.shop_id = v_shop_id AND c.phone = v_customer_phone
+     ORDER BY c.created_at
+     LIMIT 1
+     FOR UPDATE;
+    IF NOT FOUND THEN
+      v_customer_id := NULL;
+      v_customer_name := nullif(btrim(_sale->>'customer_name'), '');
+      v_customer_phone := nullif(btrim(_sale->>'customer_phone'), '');
+      v_customer_balance_before := 0;
+    END IF;
+  END IF;
+
   -- Validate ids and prevent adding the same unique item twice. Lock every
   -- existing product row in UUID order so concurrent multi-item sales cannot
   -- deadlock by locking the same products in different cart orders.
@@ -390,44 +446,16 @@ BEGIN
 
   v_sale_id := coalesce(nullif(_sale->>'id', '')::uuid, gen_random_uuid());
   v_created_at := coalesce(nullif(_sale->>'created_at', '')::timestamptz, now());
-  v_customer_id := nullif(_sale->>'customer_id', '')::uuid;
-  v_customer_name := nullif(btrim(_sale->>'customer_name'), '');
-  v_customer_phone := nullif(btrim(_sale->>'customer_phone'), '');
-  IF v_payment_method = 'credit' AND v_customer_id IS NULL THEN
-    RAISE EXCEPTION 'Для продажи в долг выберите клиента из списка' USING ERRCODE = '22023';
-  END IF;
-  IF v_customer_id IS NOT NULL THEN
-    SELECT coalesce(v_customer_name, c.name),
-           coalesce(v_customer_phone, c.phone),
-           coalesce(c.debt_balance, 0)
-      INTO v_customer_name, v_customer_phone, v_customer_balance_before
-      FROM public.customers c
-     WHERE c.id = v_customer_id AND c.shop_id = v_shop_id
-     FOR UPDATE;
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Клиент не найден в этом магазине' USING ERRCODE = '22023';
-    END IF;
-  END IF;
-  IF v_customer_id IS NULL AND v_customer_phone IS NOT NULL THEN
-    PERFORM pg_advisory_xact_lock(
-      hashtextextended('offline-customer:' || v_shop_id::text || ':' || v_customer_phone, 0)
-    );
-    SELECT id INTO v_customer_id
-      FROM public.customers
-     WHERE shop_id = v_shop_id AND phone = v_customer_phone
-     ORDER BY created_at
-     LIMIT 1
-     FOR UPDATE;
-
-    IF v_customer_id IS NULL AND v_customer_name IS NOT NULL THEN
-      INSERT INTO public.customers (shop_id, name, phone, bonus_points)
-      VALUES (v_shop_id, v_customer_name, v_customer_phone, 0)
-      RETURNING id INTO v_customer_id;
-    ELSIF v_customer_id IS NOT NULL AND v_customer_name IS NOT NULL THEN
-      UPDATE public.customers
-         SET name = v_customer_name
-       WHERE id = v_customer_id;
-    END IF;
+  IF v_customer_id IS NULL AND v_customer_phone IS NOT NULL AND v_customer_name IS NOT NULL THEN
+    INSERT INTO public.customers (shop_id, name, phone, bonus_points)
+    VALUES (v_shop_id, v_customer_name, v_customer_phone, 0)
+    RETURNING id INTO v_customer_id;
+  ELSIF v_customer_id IS NOT NULL
+        AND nullif(_sale->>'customer_id', '') IS NULL
+        AND v_customer_name IS NOT NULL THEN
+    UPDATE public.customers
+       SET name = v_customer_name
+     WHERE id = v_customer_id AND shop_id = v_shop_id;
   END IF;
 
   -- The product locks above make this conditional update a compare-and-set:
@@ -442,14 +470,15 @@ BEGIN
     id, shop_id, seller_id, seller_name, customer_id, customer_name,
     customer_phone, payment_method, amount_cash, amount_electronic,
     subtotal, discount, total, cost_total, profit, bonus_earned,
-    bonus_used, items, created_at, client_op_id
+    bonus_used, items, created_at, client_op_id, credit_balance
   ) VALUES (
     v_sale_id, v_shop_id, v_user_id, v_profile.full_name, v_customer_id,
     v_customer_name,
     v_customer_phone,
     v_payment_method, v_amount_cash, v_amount_electronic,
     v_subtotal, 0, v_total, v_cost_total, v_total - v_cost_total, v_bonus_earned,
-    v_bonus_used, v_validated_items, v_created_at, _client_op_id
+    v_bonus_used, v_validated_items, v_created_at, _client_op_id,
+    CASE WHEN v_payment_method = 'credit' THEN v_total ELSE 0 END
   );
 
   IF v_customer_id IS NOT NULL THEN
@@ -533,6 +562,9 @@ DECLARE
   v_after numeric(14,2);
   v_author text;
   v_source text;
+  v_remaining numeric(14,2);
+  v_applied numeric(14,2);
+  v_credit_sale record;
 BEGIN
   IF v_user IS NULL OR NOT public.is_approved() OR v_shop IS NULL THEN
     RAISE EXCEPTION 'Нет доступа к магазину' USING ERRCODE = '42501';
@@ -585,6 +617,30 @@ BEGIN
   END IF;
   v_after := round(v_before - v_amount, 2);
   SELECT full_name INTO v_author FROM public.profiles WHERE id = v_user;
+
+  -- Apply repayments to oldest outstanding credit sales first so returns can
+  -- distinguish an unpaid item from one the customer has already repaid.
+  v_remaining := v_amount;
+  FOR v_credit_sale IN
+    SELECT id, credit_balance
+      FROM public.sales
+     WHERE shop_id = v_shop
+       AND customer_id = _customer_id
+       AND payment_method = 'credit'
+       AND credit_balance > 0
+     ORDER BY created_at, id
+     FOR UPDATE
+  LOOP
+    v_applied := least(v_remaining, coalesce(v_credit_sale.credit_balance, 0));
+    UPDATE public.sales
+       SET credit_balance = greatest(0, round(credit_balance - v_applied, 2))
+     WHERE id = v_credit_sale.id AND shop_id = v_shop;
+    v_remaining := round(v_remaining - v_applied, 2);
+    EXIT WHEN v_remaining <= 0;
+  END LOOP;
+  IF v_remaining > 0 THEN
+    RAISE EXCEPTION 'Долг не совпадает с остатком по продажам' USING ERRCODE = '23514';
+  END IF;
 
   UPDATE public.customers
      SET debt_balance = v_after
@@ -648,6 +704,7 @@ DECLARE
   v_return      public.sale_returns;
   v_debt_before numeric(14,2) := 0;
   v_debt_reduction numeric(14,2) := 0;
+  v_credit_due numeric(14,2) := 0;
   v_cash_refund numeric(14,2) := 0;
 BEGIN
   IF v_user IS NULL OR NOT public.is_approved() THEN
@@ -660,7 +717,25 @@ BEGIN
     RAISE EXCEPTION 'Некорректный номер позиции' USING errcode = '22023';
   END IF;
 
-  -- Блокируем чек: параллельный возврат той же позиции невозможен.
+  -- Сначала блокируем клиента, затем чек: тот же порядок используется при
+  -- погашении долга и предотвращает конфликтующие блокировки.
+  SELECT * INTO v_sale
+    FROM public.sales
+   WHERE id = _sale_id AND shop_id = v_shop;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Продажа не найдена' USING errcode = 'P0002';
+  END IF;
+
+  IF v_sale.customer_id IS NOT NULL THEN
+    SELECT coalesce(debt_balance, 0) INTO v_debt_before
+      FROM public.customers
+     WHERE id = v_sale.customer_id AND shop_id = v_shop
+     FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Клиент не найден в этом магазине' USING errcode = 'P0002';
+    END IF;
+  END IF;
+
   SELECT * INTO v_sale
     FROM public.sales
    WHERE id = _sale_id AND shop_id = v_shop
@@ -721,12 +796,10 @@ BEGIN
   -- Сначала уменьшаем непогашенный долг; только уже оплаченная часть
   -- возвращается в кассу. Кредитный возврат не создаёт фиктивный расход.
   IF v_sale.payment_method = 'credit' AND v_sale.customer_id IS NOT NULL THEN
-    SELECT coalesce(debt_balance, 0) INTO v_debt_before
-      FROM public.customers
-     WHERE id = v_sale.customer_id AND shop_id = v_shop
-     FOR UPDATE;
-    IF FOUND THEN
-      v_debt_reduction := least(v_amount, greatest(0, v_debt_before));
+    v_credit_due := greatest(0, coalesce(v_sale.credit_balance, 0));
+    v_debt_reduction := least(v_amount, v_credit_due);
+    IF v_debt_reduction > v_debt_before THEN
+      RAISE EXCEPTION 'Остаток долга по продаже больше долга клиента' USING errcode = '23514';
     END IF;
     v_cash := v_amount - v_debt_reduction;
     v_electronic := 0;
@@ -780,6 +853,10 @@ BEGIN
   RETURNING * INTO v_return;
 
   IF v_debt_reduction > 0 AND v_sale.customer_id IS NOT NULL THEN
+    UPDATE public.sales
+       SET credit_balance = greatest(0, round(coalesce(credit_balance, 0) - v_debt_reduction, 2))
+     WHERE id = v_sale.id AND shop_id = v_shop;
+
     UPDATE public.customers
        SET debt_balance = greatest(0, round(v_debt_before - v_debt_reduction, 2))
      WHERE id = v_sale.customer_id AND shop_id = v_shop;
