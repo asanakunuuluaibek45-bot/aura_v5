@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronUp, RotateCw, Maximize2,
   ZoomIn, ZoomOut, Upload, Download, Hand,
   Bold, Italic, Underline, Strikethrough,
-  AlignLeft, AlignCenter, AlignRight,
+  AlignLeft, AlignCenter, AlignRight, SlidersHorizontal,
 } from "lucide-react"
 import { Button }    from "@/components/ui/button"
 import { Switch }    from "@/components/ui/switch"
@@ -37,6 +37,14 @@ export interface LabelEditorToolbarProps {
   fontSize:     number
   isPrinting:   boolean
   canPrint?:    boolean
+  printerName?: string
+  backgroundCalibration?: { offsetXmm: number; offsetYmm: number; widthPercent: number; heightPercent: number }
+  backgroundCalibrationOpen?: boolean
+  onToggleBackgroundCalibration?: () => void
+  onUpdateBackgroundCalibration?: (key: "offsetXmm" | "offsetYmm" | "widthPercent" | "heightPercent", value: number) => void
+  onResetBackgroundCalibration?: () => void
+  canExportPng?: boolean
+  exportPngTitle?: string
   status:       string
   autoFit:      boolean
   fitRatio:     number
@@ -65,6 +73,7 @@ export interface LabelEditorToolbarProps {
   // SVG рамка
   onLoadSvgFrame?:    (svgText: string, filename: string) => void
   onSaveToFile?:      () => void
+  onExportPng?:       () => void
   // Форматирование текста
   isBold?:             boolean
   isItalic?:           boolean
@@ -97,6 +106,8 @@ export const LabelEditorToolbar = memo(function LabelEditorToolbar(
 function HeaderZone({
   sizeKey,
   onSizeChange, onSaveTemplate, onReloadTemplate, onSaveToFile,
+  printerName, backgroundCalibration, backgroundCalibrationOpen = false,
+  onToggleBackgroundCalibration, onUpdateBackgroundCalibration, onResetBackgroundCalibration,
 }: LabelEditorToolbarProps) {
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
@@ -110,8 +121,8 @@ function HeaderZone({
       const trigger = triggerRef.current
       if (!trigger) return
       const rect = trigger.getBoundingClientRect()
-      const width = Math.min(360, window.innerWidth - 16)
-      const maxHeight = Math.min(360, Math.floor(window.innerHeight * 0.6))
+      const width = Math.min(380, window.innerWidth - 16)
+      const maxHeight = Math.min(480, Math.floor(window.innerHeight * 0.72))
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
       const top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - maxHeight - 8))
       setMenuPosition({ top, left, width, maxHeight })
@@ -147,7 +158,12 @@ function HeaderZone({
       >
         <span className="text-muted-foreground">Формат:</span>
         <span className="font-mono text-primary">{LABEL_SIZES[sizeKey]?.label ?? sizeKey}</span>
-        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        <span className="mx-0.5 h-4 shrink-0 border-l border-border" aria-hidden="true" />
+        <span className="inline-flex min-w-0 max-w-[30vw] items-center gap-1 text-muted-foreground" title={printerName ?? "Активный принтер"}>
+          <Printer className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <span className="truncate">{printerName ?? "Принтер"}</span>
+        </span>
+        {open ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
       </button>
 
       {open && menuPosition && typeof document !== "undefined" && createPortal(
@@ -208,6 +224,31 @@ function HeaderZone({
               ))}
             </div>
           </div>
+          {onToggleBackgroundCalibration && (
+            <div className="rounded-md border border-border bg-background p-2">
+              <button
+                type="button"
+                onClick={onToggleBackgroundCalibration}
+                aria-expanded={backgroundCalibrationOpen}
+                className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[11px] font-medium hover:bg-muted"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+                <span className="flex-1 text-left">Фон</span>
+                {backgroundCalibrationOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {backgroundCalibrationOpen && backgroundCalibration && onUpdateBackgroundCalibration && (
+                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Смещение X, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetXmm} onChange={(e) => onUpdateBackgroundCalibration("offsetXmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Смещение Y, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetYmm} onChange={(e) => onUpdateBackgroundCalibration("offsetYmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Ширина, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.widthPercent} onChange={(e) => onUpdateBackgroundCalibration("widthPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Высота, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.heightPercent} onChange={(e) => onUpdateBackgroundCalibration("heightPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <div className="col-span-2 flex justify-end">
+                    <button type="button" onClick={onResetBackgroundCalibration} className="rounded border border-border px-2 py-1 text-[10px] hover:bg-muted">Сброс</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>,
         document.body,
       )}
@@ -218,6 +259,7 @@ function HeaderZone({
 // ── Bottom Zone ───────────────────────────────────────────────────────────────
 function BottomZone({
   sizeDef, font, fontSize, isPrinting, canPrint = true, status,
+  onExportPng, canExportPng = true, exportPngTitle,
   autoFit, fitRatio, zoom, isPanMode,
   isBold = false, isItalic = false, isUnderline = false, isLinethrough = false,
   textAlign = "left", charSpacing = 0, lineHeight = 1.16,
@@ -309,9 +351,9 @@ function BottomZone({
             size="sm"
             onClick={(e) => { e.stopPropagation(); onPrint() }}
             disabled={isPrinting || !canPrint}
-            className="h-8 gap-1.5 rounded-xl px-2.5 text-[11px] font-semibold"
+            className="h-10 min-w-[104px] gap-2 rounded-xl px-4 text-sm font-semibold"
           >
-            <Printer className="h-4 w-4" />
+            <Printer className="h-5 w-5" />
             {!canPrint ? "Печать недоступна" : isPrinting ? "Печать…" : "Распечатать"}
           </Button>
         </div>
@@ -434,11 +476,11 @@ function BottomZone({
         <Button
           onClick={onPrint}
           disabled={isPrinting || !canPrint}
-          className="ml-auto h-8 shrink-0 gap-1 rounded-lg px-2 text-[11px] font-semibold"
+          className="ml-auto h-10 min-w-[96px] shrink-0 gap-2 rounded-lg px-4 text-sm font-semibold"
           title={!canPrint ? "Печать недоступна" : isPrinting ? "Печать…" : `Печать · ${sizeDef.label}`}
         >
-          <Printer className="h-4 w-4" />
-          <span className="hidden xs:inline">{!canPrint ? "Недоступно" : isPrinting ? "Печать…" : "Печать"}</span>
+          <Printer className="h-5 w-5" />
+          <span>{!canPrint ? "Недоступно" : isPrinting ? "Печать…" : "Печать"}</span>
         </Button>
       </div>
 
@@ -472,6 +514,14 @@ function BottomZone({
       {settingsOpen && (
         <>
           <div className="flex flex-wrap items-end gap-1.5 border-t border-border/60 px-2 py-1.5">
+        {onExportPng && (
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <span className="px-0.5 text-[9px] leading-none text-muted-foreground">Экспорт</span>
+            <button type="button" onClick={onExportPng} disabled={!canExportPng} title={exportPngTitle ?? "Скачать PNG"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted disabled:opacity-50">
+              <Download className="h-3.5 w-3.5" aria-hidden="true" /> PNG
+            </button>
+          </div>
+        )}
 
         {/* Шрифт */}
         <div className="flex flex-col gap-0.5 shrink-0">
