@@ -49,7 +49,6 @@ export interface LabelEditorToolbarProps {
   fitRatio:     number
   zoom:         number
   isPanMode:    boolean
-  collapsed?:   boolean
   onSizeChange:       (key: JewelryLabelSizeKey) => void
   onAddText:          () => void
   onAddBorder:        (style: BorderStyleKey) => void
@@ -65,7 +64,6 @@ export interface LabelEditorToolbarProps {
   onTogglePanMode:    () => void
   onRotateCanvas:     () => void
   onPrint:            () => void
-  onToggleCollapse?:  () => void
   // Масштаб элементов
   onScaleUp?:         () => void
   onScaleDown?:       () => void
@@ -134,6 +132,35 @@ export function LabelBackgroundControls({
   )
 }
 
+function LabelFormatThumbnail({ sizeKey }: { sizeKey: JewelryLabelSizeKey }) {
+  const horizontal = sizeKey === "T25x30_horizontal" || sizeKey === "T30x25_horizontal"
+  const compactHorizontal = sizeKey === "T30x25_horizontal"
+  const body = horizontal
+    ? (compactHorizontal ? { x: 2, y: 3, w: 14, h: 18 } : { x: 2, y: 4, w: 18, h: 14 })
+    : (sizeKey === "T25x30_45" ? { x: 17, y: 2, w: 14, h: 18 } : { x: 13, y: 2, w: 22, h: 18 })
+  const tailInFirstHalf = sizeKey === "T30x25_45" || sizeKey === "T30x25_horizontal"
+  const tailThickness = 1.6
+  const tailCenter = horizontal
+    ? body.y + body.h * (tailInFirstHalf ? 0.25 : 0.5)
+    : body.x + body.w * (tailInFirstHalf ? 0.25 : 0.5)
+  return (
+    <svg aria-hidden="true" width="40" height="22" viewBox="0 0 48 24" className="shrink-0">
+      {horizontal ? (
+        <rect x={body.x + body.w - 0.5} y={tailCenter - tailThickness / 2} width={46 - body.x - body.w} height={tailThickness} rx={0.8} fill="#d9d9d9" />
+      ) : (
+        <rect x={tailCenter - tailThickness / 2} y={body.y + body.h - 0.5} width={tailThickness} height={23 - body.y - body.h} rx={0.8} fill="#d9d9d9" />
+      )}
+      <rect x={body.x} y={body.y} width={body.w} height={body.h} rx={2.5} fill="#a1a1aa" stroke="#3b82f6" strokeWidth={0.8} strokeDasharray="2 1" />
+      <rect x={body.x + 1} y={body.y + 1} width={body.w - 2} height={body.h - 2} rx={1.8} fill="none" stroke="#ef4444" strokeWidth={0.7} strokeDasharray="2 1.5" />
+      {horizontal ? (
+        <line x1={body.x + 1} y1={body.y + body.h / 2} x2={body.x + body.w - 1} y2={body.y + body.h / 2} stroke="#e5e7eb" strokeWidth={0.8} strokeDasharray="1 1.2" />
+      ) : (
+        <line x1={body.x + body.w / 2} y1={body.y + 1} x2={body.x + body.w / 2} y2={body.y + body.h - 1} stroke="#e5e7eb" strokeWidth={0.8} strokeDasharray="1 1.2" />
+      )}
+    </svg>
+  )
+}
+
 // ── Header Zone ───────────────────────────────────────────────────────────────
 // Кнопка поворота удалена. Кнопка SVG-рамки перенесена в BottomZone.
 // Остались: выбор формата, Сохранить, Сброс, Экспорт в файл.
@@ -181,17 +208,18 @@ function HeaderZone({
   }, [open])
 
   return (
-    <div className="relative shrink-0">
+    <div className="relative min-w-0 max-w-[74vw] shrink sm:max-w-none">
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[10px] font-medium hover:bg-muted transition-colors"
+        className="inline-flex h-8 min-w-0 max-w-full items-center gap-1 rounded-md border border-border bg-background px-1.5 text-[10px] font-medium hover:bg-muted transition-colors"
         title="Формат этикетки и действия с шаблоном"
       >
-        <span className="text-muted-foreground">Формат:</span>
-        <span className="font-mono text-primary">{LABEL_SIZES[sizeKey]?.label ?? sizeKey}</span>
+        <LabelFormatThumbnail sizeKey={sizeKey} />
+        <span className="shrink-0 text-muted-foreground">Формат:</span>
+        <span title={LABEL_SIZES[sizeKey]?.label ?? sizeKey} className="min-w-0 truncate font-mono text-primary">{LABEL_SIZES[sizeKey]?.label ?? sizeKey}</span>
         {open ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
       </button>
 
@@ -234,7 +262,7 @@ function HeaderZone({
             )}
           </div>
           <div className="rounded-md border border-border bg-background p-1.5">
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-col gap-1">
               {LABEL_SIZE_SELECT_KEYS.map((key) => (
                 <button
                   key={key}
@@ -242,13 +270,14 @@ function HeaderZone({
                   role="menuitem"
                   onClick={() => { onSizeChange(key); setOpen(false) }}
                   className={[
-                    "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-mono transition-colors",
+                    "flex min-h-9 w-full items-center gap-2 rounded-md border px-2 py-1 text-left text-[11px] font-mono transition-colors",
                     key === sizeKey
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border bg-background text-foreground hover:bg-muted",
                   ].join(" ")}
                 >
-                  {LABEL_SIZES[key].label}
+                  <LabelFormatThumbnail sizeKey={key} />
+                  <span className="min-w-0 truncate">{LABEL_SIZES[key].label}</span>
                 </button>
               ))}
             </div>
@@ -282,7 +311,6 @@ function BottomZone({
   onScaleUp, onScaleDown,
   onLoadSvgFrame,
   onPrint,
-  collapsed = false, onToggleCollapse,
 }: LabelEditorToolbarProps) {
   const [borderMenuOpen, setBorderMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -339,39 +367,6 @@ function BottomZone({
     }
   }, [borderMenuOpen, updateBorderMenuPos])
 
-  // ── Свёрнутый режим ──────────────────────────────────────────────────────
-  if (collapsed) {
-    return (
-      <div
-        className="pointer-events-auto px-2 pb-2"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}
-      >
-        <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-2 py-1.5 shadow-lg backdrop-blur-md">
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
-            title="Развернуть панель инструментов"
-          >
-            <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate text-[12px] font-medium text-muted-foreground">
-              {status || `Настройки · ${sizeDef.label}`}
-            </span>
-          </button>
-          <Button
-            size="sm"
-            onClick={(e) => { e.stopPropagation(); onPrint() }}
-            disabled={isPrinting || !canPrint}
-            className="h-10 min-w-[104px] gap-2 rounded-xl px-4 text-sm font-semibold"
-          >
-            <Printer className="h-5 w-5" />
-            {!canPrint ? "Печать недоступна" : isPrinting ? "Печать…" : "Распечатать"}
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div
       className="pointer-events-auto shrink-0 border-t bg-background/95 backdrop-blur-sm"
@@ -390,13 +385,13 @@ function BottomZone({
 
       {/* Компактный ряд: инструменты прокручиваются, печать всегда остаётся видимой. */}
       <div className="flex items-center gap-1 px-2 py-1">
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-0.5 sm:justify-start sm:gap-1">
-          <ToolBtn onClick={onAddText} title="Добавить текст">
+        <div className="grid min-w-0 flex-1 grid-cols-5 gap-1">
+          <ToolBtn onClick={onAddText} title="Добавить текст" stretch>
             <Type className="h-3.5 w-3.5" /><span className="hidden sm:inline">Текст</span>
           </ToolBtn>
 
-          <div className="relative shrink-0" ref={borderBtnRef} data-border-menu-btn>
-            <ToolBtn onClick={toggleBorderMenu} title="Добавить рамку">
+          <div className="relative min-w-0" ref={borderBtnRef} data-border-menu-btn>
+            <ToolBtn onClick={toggleBorderMenu} title="Добавить рамку" stretch>
               <Square className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Рамка</span><span>{borderMenuOpen ? "▴" : "▾"}</span>
             </ToolBtn>
@@ -426,16 +421,16 @@ function BottomZone({
             )}
 
           {onLoadSvgFrame && (
-            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG-рамку из файла">
+            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG-рамку из файла" stretch>
               <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline">SVG</span>
             </ToolBtn>
           )}
 
-          <ToolBtn onClick={onRotateCanvas} title="Повернуть холст на 90°">
+          <ToolBtn onClick={onRotateCanvas} title="Повернуть холст на 90°" stretch>
             <RotateCw className="h-3.5 w-3.5" /><span className="hidden sm:inline">Поворот</span>
           </ToolBtn>
 
-          <ToolBtn onClick={onRemoveSelected} title="Удалить выделенное" destructive>
+          <ToolBtn onClick={onRemoveSelected} title="Удалить выделенное" destructive stretch>
             <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Удалить</span>
           </ToolBtn>
 
@@ -466,18 +461,6 @@ function BottomZone({
         </button>
         {status && <span className="min-w-0 flex-1 truncate text-[10px] text-blue-600">{status}</span>}
         {!status && <span className="flex-1" />}
-        {onToggleCollapse && (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground hover:bg-muted"
-            title="Свернуть панель инструментов"
-            aria-label="Свернуть панель инструментов"
-          >
-            <ChevronDown className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Свернуть</span>
-          </button>
-        )}
       </div>
 
       {settingsOpen && (
@@ -742,12 +725,13 @@ function BorderPreview({ style }: { style: typeof BORDER_STYLES[number] }) {
 
 // ── ToolBtn ───────────────────────────────────────────────────────────────────
 function ToolBtn({
-  children, onClick, title, destructive = false,
+  children, onClick, title, destructive = false, stretch = false,
 }: {
   children:     React.ReactNode
   onClick:      () => void
   title?:       string
   destructive?: boolean
+  stretch?:     boolean
 }) {
   return (
     <button
@@ -756,7 +740,8 @@ function ToolBtn({
       title={title}
       aria-label={title}
       className={[
-        "shrink-0 flex h-8 min-w-7 items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-[10px] font-medium transition-colors",
+        "flex h-8 items-center justify-center gap-1 rounded-lg border px-1.5 py-1 text-[10px] font-medium transition-colors",
+        stretch ? "w-full min-w-0" : "shrink-0 min-w-7",
         destructive
           ? "border-destructive/40 text-destructive hover:bg-destructive/10"
           : "border-border bg-background hover:bg-muted",
