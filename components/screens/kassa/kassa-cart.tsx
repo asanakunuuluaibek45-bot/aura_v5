@@ -125,15 +125,17 @@ export function KassaCart({
 
   // Оптимизация: мемоизация фильтрации клиентов
   const filteredCustomers = useMemo(() => {
-    const q = normalizeText(customerName)
-    if (q.length < 1) return []
-    return customers
-      .filter((c) =>
-        normalizeText(c.name).includes(q) ||
-        normalizeText(c.phone).includes(q)
-      )
-      .slice(0, 8)
-  }, [customerName, customers])
+    const nameQuery = normalizeText(customerName)
+    const phoneQuery = normalizeText(customerPhone)
+    const hasQuery = nameQuery.length > 0 || phoneQuery.length > 0
+    const matches = !hasQuery
+      ? (payment === "credit" ? customers : [])
+      : customers.filter((c) =>
+          (nameQuery.length > 0 && normalizeText(c.name).includes(nameQuery)) ||
+          (phoneQuery.length > 0 && normalizeText(c.phone).includes(phoneQuery))
+        )
+    return matches.slice(0, 8)
+  }, [customerName, customerPhone, customers, payment])
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === customerId) ?? null,
@@ -450,7 +452,7 @@ export function KassaCart({
                 <span className="text-xs font-semibold text-foreground">Клиент</span>
                 {customerName.trim() || customerPhone.trim() ? (
                   <span className="max-w-[150px] truncate rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                    {customerName.trim() || customerPhone.trim()}
+                    {customerId ? "Выбран: " : "Поиск: "}{customerName.trim() || customerPhone.trim()}
                   </span>
                 ) : (
                   <span className="text-[10px] text-muted-foreground">(не указан)</span>
@@ -480,9 +482,9 @@ export function KassaCart({
                       className="h-8 pl-8 text-xs bg-background"
                       autoComplete="off"
                     />
-                    {showSuggestions && filteredCustomers.length > 0 && (
-                      <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-border bg-card shadow-xl">
-                        {filteredCustomers.map((c) => (
+                    {showSuggestions && (
+                      <div className="mt-1 max-h-48 overflow-y-auto rounded-xl border border-border bg-card shadow-xl">
+                        {filteredCustomers.length > 0 ? filteredCustomers.map((c) => (
                           <button
                             key={c.id}
                             type="button"
@@ -499,7 +501,15 @@ export function KassaCart({
                               </span>
                             )}
                           </button>
-                        ))}
+                        )) : (
+                          <div className="px-3 py-2 text-[11px] text-muted-foreground">
+                            {customerName.trim() || customerPhone.trim()
+                              ? "Клиент не найден. Проверьте имя или телефон."
+                              : customers.length > 0
+                                ? "Введите имя или телефон для поиска."
+                                : "Клиентов пока нет — добавьте клиента в разделе «Клиенты»."}
+                          </div>
+                        )}
                       </div>
                     )}
                     {selectedCustomer && !showSuggestions && (selectedCustomer.purchase_count ?? 0) > 0 && (
@@ -518,7 +528,8 @@ export function KassaCart({
                     <Input 
                       placeholder="Телефон" 
                       value={customerPhone} 
-                      onChange={(e) => { setCustomerId(null); setCustomerPhone(e.target.value) }} 
+                      onChange={(e) => { setCustomerId(null); setCustomerPhone(e.target.value); setShowSuggestions(true) }}
+                      onFocus={() => setShowSuggestions(true)}
                       className="h-8 pl-8 text-xs bg-background" 
                     />
                   </div>
@@ -555,7 +566,13 @@ export function KassaCart({
                 <button
                   key={m.value}
                   type="button"
-                  onClick={() => { setPayment(m.value); if (m.value === "credit") setIsCustomerOpen(true) }}
+                  onClick={() => {
+                    setPayment(m.value)
+                    if (m.value === "credit") {
+                      setIsCustomerOpen(true)
+                      if (!customerId) setShowSuggestions(true)
+                    }
+                  }}
                   className={cn(
                     "rounded-lg border px-2 py-2 text-[11px] font-medium transition-colors",
                     payment === m.value
