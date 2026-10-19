@@ -235,6 +235,32 @@ export function useLocalCrm(initialData: {
     }
   }, [shopId, enabled])
 
+  // Hydrate newly-created customers after server actions/router.refresh. The
+  // offline-first state remains authoritative; this only adds missing rows.
+  useEffect(() => {
+    const serverClients = (initialData.clients || []).filter(
+      (client) => !client.shop_id || client.shop_id === shopId,
+    )
+    if (!enabled) {
+      setClients(serverClients)
+      return
+    }
+    if (!isReady || serverClients.length === 0) return
+
+    let cancelled = false
+    const refreshClients = async () => {
+      await seedMissingLocalRows('customers', serverClients, shopId)
+      const localClients = await getShopRecords<Customer>('customers', shopId)
+      if (!cancelled) setClients(localClients)
+    }
+    void refreshClients().catch((error) => {
+      console.error('Error refreshing customers from server data:', error)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [shopId, enabled, isReady, initialData.clients])
+
   // 2. Offline-first Checkout (Sales POS)
   const localCheckout = useCallback(
     async (input: {
