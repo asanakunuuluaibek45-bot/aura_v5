@@ -21,7 +21,7 @@ import { Label }     from "@/components/ui/label"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import { LABEL_SIZES } from "@/lib/niimbot"
+import { LABEL_SIZES, LABEL_SIZE_SELECT_KEYS } from "@/lib/niimbot"
 import type { JewelryLabelSizeKey, LabelSizeDef } from "@/lib/niimbot"
 import {
   FONTS, BORDER_STYLES, FIT_RATIO_MIN, FIT_RATIO_MAX,
@@ -99,12 +99,46 @@ function HeaderZone({
   onSizeChange, onSaveTemplate, onReloadTemplate, onSaveToFile,
 }: LabelEditorToolbarProps) {
   const [open, setOpen] = useState(false)
-  const formatsOpen = true
-  const allKeys = Object.keys(LABEL_SIZES) as (keyof typeof LABEL_SIZES)[]
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current
+      if (!trigger) return
+      const rect = trigger.getBoundingClientRect()
+      const width = Math.min(360, window.innerWidth - 16)
+      const maxHeight = Math.min(360, Math.floor(window.innerHeight * 0.6))
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
+      const top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - maxHeight - 8))
+      setMenuPosition({ top, left, width, maxHeight })
+    }
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setOpen(false)
+    }
+
+    updatePosition()
+    window.addEventListener("resize", updatePosition)
+    window.addEventListener("scroll", updatePosition, true)
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true)
+    return () => {
+      window.removeEventListener("resize", updatePosition)
+      window.removeEventListener("scroll", updatePosition, true)
+      document.removeEventListener("pointerdown", handleOutsidePointerDown, true)
+    }
+  }, [open])
 
   return (
     <div className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
@@ -116,8 +150,13 @@ function HeaderZone({
         {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 flex max-h-[min(60vh,360px)] min-w-[min(92vw,360px)] flex-col gap-2 overflow-y-auto rounded-lg border border-border bg-background/95 p-2 shadow-xl backdrop-blur-md sm:left-auto sm:right-0">
+      {open && menuPosition && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed flex flex-col gap-2 overflow-y-auto rounded-lg border border-border bg-background/95 p-2 shadow-xl backdrop-blur-md"
+          style={{ ...menuPosition, zIndex: 10050 }}
+        >
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
@@ -149,30 +188,28 @@ function HeaderZone({
               </button>
             )}
           </div>
-          {formatsOpen && (
-            <div
-              className="rounded-md border border-border bg-background p-1.5"
-            >
-              <div className="flex flex-wrap gap-1.5">
-                {allKeys.map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => { onSizeChange(key); setOpen(false) }}
-                    className={[
-                      "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-mono transition-colors",
-                      key === sizeKey
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-foreground hover:bg-muted",
-                    ].join(" ")}
-                  >
-                    {LABEL_SIZES[key].label}
-                  </button>
-                ))}
-              </div>
+          <div className="rounded-md border border-border bg-background p-1.5">
+            <div className="flex flex-wrap gap-1.5">
+              {LABEL_SIZE_SELECT_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { onSizeChange(key); setOpen(false) }}
+                  className={[
+                    "shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-mono transition-colors",
+                    key === sizeKey
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-foreground hover:bg-muted",
+                  ].join(" ")}
+                >
+                  {LABEL_SIZES[key].label}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
