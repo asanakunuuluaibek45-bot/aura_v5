@@ -38,7 +38,7 @@ export async function getClients(): Promise<Customer[]> {
   if (clientsError) throw clientsError
   if (!clients || clients.length === 0) return []
 
-  return clients as Customer[]
+  return clients as unknown as Customer[]
 }
 
 export type ClientPurchase = {
