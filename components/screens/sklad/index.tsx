@@ -86,6 +86,7 @@ export function SkladScreen({
   const [labelAutoPrint, setLabelAutoPrint] = useState(false)
   const [labelSizeKey, setLabelSizeKey] = useState<JewelryLabelSizeKey>(DEFAULT_SIZE_KEY)
   const [isTopControlsCollapsed, setIsTopControlsCollapsed] = useState(true)
+  const [labelBackgroundControlsHost, setLabelBackgroundControlsHost] = useState<HTMLDivElement | null>(null)
   const labelReturnScrollY = useRef<number | null>(null)
   const [deletedProductIds, setDeletedProductIds] = useState<Set<string>>(() => new Set())
   const [virtualMode, setVirtualMode] = useState(false)
@@ -624,24 +625,16 @@ export function SkladScreen({
               className={`h-8 gap-1.5 rounded-lg px-2.5 text-xs font-medium shrink-0 transition-colors ${
                 isTopControlsCollapsed ? "max-w-[48vw] sm:max-w-[16rem]" : ""
               }`}
-              title={isTopControlsCollapsed ? "Развернуть параметры принтера и изделия" : "Свернуть параметры для увеличения рабочей области"}
+              title={isTopControlsCollapsed ? "Развернуть настройки принтера и фона" : "Свернуть параметры для увеличения рабочей области"}
               aria-label={isTopControlsCollapsed
-                ? `Развернуть параметры этикетки ${labelProduct?.name ?? ""}`.trim()
+                ? `Развернуть параметры принтера ${printerProfile.displayName}`
                 : "Свернуть верхние параметры"}
             >
-              {isTopControlsCollapsed ? (
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
-                  <span className="truncate text-[11px] font-medium text-primary">
-                    {labelProduct?.name || "Этикетка"}
-                  </span>
-                </span>
-              ) : (
-                <>
-                  <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-[11px] text-muted-foreground hidden xs:inline">Свернуть верх</span>
-                </>
-              )}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Printer className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                <span className="truncate text-[11px] font-medium text-primary">{printerProfile.displayName}</span>
+                {isTopControlsCollapsed ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronUp className="h-3.5 w-3.5 shrink-0" />}
+              </span>
             </Button>
           </div>
           <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
@@ -666,6 +659,7 @@ export function SkladScreen({
               <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{printerProfile.dpi} dpi</span>
             </div>
           )}
+          {!isTopControlsCollapsed && <div ref={setLabelBackgroundControlsHost} className="shrink-0 border-b bg-muted/10" />}
           {labelProduct && (printerProfile.supportsDirectBluetooth === false || !fitsPrinthead) && (
             <p role="status" className="shrink-0 border-b bg-amber-500/10 px-3 py-1.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
               {!fitsPrinthead
@@ -750,6 +744,7 @@ export function SkladScreen({
                 autoPrint={labelAutoPrint}
                 initialSizeKey={labelSizeKey}
                 printerProfile={printerProfile}
+                backgroundControlsHost={labelBackgroundControlsHost}
                 onSizeChange={setLabelSizeKey}
                 onClose={closeLabel}
               />
