@@ -10,6 +10,8 @@ export type JewelryLabelSizeKey =
   | "T50x30_rect"  // T50*30-230 — прямоугольная бирка
   | "T12x30_d11"
   | "T12x50_d110"
+  | "T25x30_horizontal"
+  | "T30x25_horizontal"
 
 // ---------------------------------------------------------------------------
 // Профили Niimbot. B21, D11 и B3S используют совместимый протокол b1,
@@ -38,7 +40,7 @@ export const PRINTER_PROFILES: PrinterProfile[] = [
   makeProfile({ key: "d11", displayName: "Niimbot D11", label: "Niimbot D11", id: 512, supportedIds: [512], dpi: 203, protocol: "v4", task: "b1", density: 3, name_prefixes: ["D11"], printheadPx: 96, driverDocumented: false, defaultLabelKey: "T12x30_d11" }),
   makeProfile({ key: "d11h", displayName: "Niimbot D11_H", label: "Niimbot D11_H", id: 528, supportedIds: [528], dpi: 300, protocol: "v4", task: "v4", density: 3, name_prefixes: ["D11"], printheadPx: 144, driverDocumented: true, defaultLabelKey: "T12x30_d11" }),
   makeProfile({ key: "d110", displayName: "Niimbot D110", label: "Niimbot D110", id: 2304, supportedIds: [2304, 2305], dpi: 203, protocol: "v4", task: "b1", density: 3, name_prefixes: ["D110"], printheadPx: 96, driverDocumented: true, defaultLabelKey: "T12x50_d110" }),
-  makeProfile({ key: "b3s", displayName: "Niimbot B3S", label: "Niimbot B3S", id: 256, supportedIds: [256, 260, 262], dpi: 203, protocol: "v4", task: "b1", density: 3, name_prefixes: ["B3S"], printheadPx: 576, driverDocumented: false, supportsDirectBluetooth: true, printOffsetXmm: 0, defaultLabelKey: "T50x30_rect" }),
+  makeProfile({ key: "b3s", displayName: "Niimbot B3S", label: "Niimbot B3S", id: 256, supportedIds: [256, 260, 262], dpi: 203, protocol: "v4", task: "b1", density: 3, name_prefixes: ["B3S"], printheadPx: 576, driverDocumented: false, supportsDirectBluetooth: true, printOffsetXmm: 0, defaultLabelKey: "T30x25_horizontal" }),
   makeProfile({ key: "b1pro", displayName: "Niimbot B1 Pro", label: "Niimbot B1 Pro", id: 4097, supportedIds: [4097], dpi: 300, protocol: "v4", task: "v4", density: 3, name_prefixes: ["B1"], printheadPx: 584, driverDocumented: true, defaultLabelKey: "T25x30_45" }),
   makeProfile({ key: "b2pro", displayName: "Niimbot B2 Pro", label: "Niimbot B2 Pro", id: 6912, supportedIds: [6912], dpi: 300, protocol: "v4", task: "v4", density: 3, name_prefixes: ["B2"], printheadPx: 576, driverDocumented: true, defaultLabelKey: "T25x30_45" }),
   makeProfile({ key: "m2h", displayName: "Niimbot M2-H", label: "Niimbot M2-H", id: 4608, supportedIds: [4608], dpi: 300, protocol: "v4", task: "b1", density: 3, name_prefixes: ["M2"], printheadPx: 567, driverDocumented: true, defaultLabelKey: "T25x30_45" }),
@@ -481,6 +483,18 @@ export const LABEL_SIZES: Record<JewelryLabelSizeKey, LabelSizeDef> = {
     w_px: 240,
     h_px: 200,
   },
+  T25x30_horizontal: {
+    key: "T25x30_horizontal",
+    label: "Горизонтальный T25×30",
+    w_px: 240,
+    h_px: 200,
+  },
+  T30x25_horizontal: {
+    key: "T30x25_horizontal",
+    label: "Горизонтальный T30×25",
+    w_px: 240,
+    h_px: 200,
+  },
   T50x30_rect: {
     key: "T50x30_rect",
     label: "T50*30-230",
@@ -500,6 +514,16 @@ export const LABEL_SIZES: Record<JewelryLabelSizeKey, LabelSizeDef> = {
     h_px: 400,
   },
 }
+
+/** Форматы, которые доступны в меню выбора макета. Старые и узкие варианты
+ * остаются в реестре для загрузки ранее сохранённых шаблонов и принтерных профилей. */
+export const LABEL_SIZE_SELECT_KEYS: JewelryLabelSizeKey[] = [
+  "T25x30_45",
+  "T30x25_45",
+  "T30x25_50",
+  "T25x30_horizontal",
+  "T30x25_horizontal",
+]
 
 /** Размер по умолчанию */
 export const DEFAULT_SIZE_KEY: JewelryLabelSizeKey = "T25x30_45"
