@@ -2,7 +2,8 @@
 import React, {
   useRef, useState, useMemo, useCallback, useEffect, useLayoutEffect,
 } from "react"
-import { X, ChevronDown, Printer } from "lucide-react"
+import { X, ChevronDown } from "lucide-react"
+import { createPortal } from "react-dom"
 import { canvasToLabelDataUrl, getLabelSizeDef, DEFAULT_SIZE_KEY, LABEL_SIZES, NIIMBOT_MODEL } from "@/lib/niimbot"
 import type { JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { LabelEditorProps } from "./types"
@@ -24,7 +25,7 @@ import { useLabelPrint }      from "./hooks/use-label-print"
 import { cropPrintArea }      from "./canvas/print"
 
 import { CanvasArea }         from "./components/canvas-area"
-import { LabelEditorToolbar } from "./components/toolbar"
+import { LabelEditorToolbar, LabelBackgroundControls } from "./components/toolbar"
 
 const STAGE_PAD    = 32
 const SIZE_STORAGE = "sklad:label-size"
@@ -61,7 +62,7 @@ function getStoredSizeKey(fallback: JewelryLabelSizeKey, storageKey: string): Je
 
 export function LabelEditor({
   product, autoPrint, initialSizeKey, printerProfile = NIIMBOT_MODEL,
-  copies = 1, density, onSizeChange, onClose,
+  copies = 1, density, onSizeChange, onClose, backgroundControlsHost,
 }: LabelEditorProps) {
   const sizeStorageKey = `${SIZE_STORAGE}:${printerProfile.key}`
   const [sizeKey, setSizeKey] = useState<JewelryLabelSizeKey>(
@@ -104,8 +105,6 @@ export function LabelEditor({
   const sizeDef = useMemo(() => getLabelSizeDef(sizeKey), [sizeKey])
   const nativeWidth = Math.round(sizeDef.w_px * printerProfile.dpi / 203)
   const fitsPrinthead = nativeWidth <= printerProfile.printheadPx
-  const printerName =
-    (printerProfile as { displayName?: string }).displayName ?? printerProfile.key
   const canPrint = fitsPrinthead && printerProfile.supportsDirectBluetooth !== false
 
   const { stageW, stageH, offsetX, offsetY } = useMemo(() => {
@@ -521,10 +520,11 @@ export function LabelEditor({
     onScaleDown:      handleScaleDown,
     onLoadSvgFrame:   actions.loadSvgFrame,
     onSaveToFile:     actions.saveToFile,
-    printerName,
     backgroundCalibration,
     backgroundCalibrationOpen,
-    onToggleBackgroundCalibration: () => setBackgroundCalibrationOpen((open) => !open),
+    onToggleBackgroundCalibration: backgroundControlsHost === undefined
+      ? () => setBackgroundCalibrationOpen((open) => !open)
+      : undefined,
     onUpdateBackgroundCalibration: updateBackgroundCalibration,
     onResetBackgroundCalibration: () => setBackgroundCalibration(DEFAULT_BACKGROUND_CALIBRATION),
     onExportPng: handleExportPng,
@@ -551,7 +551,20 @@ export function LabelEditor({
         </div>
       )}
 
-      {/* Компактная верхняя строка: формат, статус, экспорт и закрытие. */}
+      {backgroundControlsHost && createPortal(
+        <div className="px-3 py-2">
+          <LabelBackgroundControls
+            backgroundCalibration={backgroundCalibration}
+            backgroundCalibrationOpen={backgroundCalibrationOpen}
+            onToggleBackgroundCalibration={() => setBackgroundCalibrationOpen((open) => !open)}
+            onUpdateBackgroundCalibration={updateBackgroundCalibration}
+            onResetBackgroundCalibration={() => setBackgroundCalibration(DEFAULT_BACKGROUND_CALIBRATION)}
+          />
+        </div>,
+        backgroundControlsHost,
+      )}
+
+      {/* Компактная верхняя строка: формат, статус и закрытие. */}
       {!collapsed && (
         <div className="relative z-20 shrink-0 border-b bg-background/95 backdrop-blur-md">
           <div className="flex min-h-10 items-center gap-1 px-2 py-1">
@@ -588,10 +601,6 @@ export function LabelEditor({
           >
             <ChevronDown className="h-3.5 w-3.5 text-primary" />
             <span className="shrink-0 text-[11px]"><strong className="text-primary font-mono">{sizeDef.label}</strong></span>
-            <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
-              <Printer className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-              <span className="max-w-[30vw] truncate">{printerName}</span>
-            </span>
           </button>
           <div className="pointer-events-auto flex items-center gap-1">
             {onClose && (
@@ -633,7 +642,7 @@ export function LabelEditor({
           stageW={stageW}
           stageH={stageH}
           isPanMode={isPanMode}
-          showCanvasControls={collapsed}
+          showCanvasControls
           onPanStart={handlePanStart}
           onBgClick={handleBgClick}
           onZoomTo={zoomTo}

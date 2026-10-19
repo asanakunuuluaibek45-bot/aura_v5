@@ -10,7 +10,7 @@ import { createPortal } from "react-dom"
 import {
   Printer, Save, RefreshCw, Trash2, Type, Square,
   ChevronDown, ChevronUp, RotateCw, Maximize2,
-  ZoomIn, ZoomOut, Upload, Download, Hand,
+  ZoomIn, ZoomOut, Upload, Download,
   Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, SlidersHorizontal,
 } from "lucide-react"
@@ -37,7 +37,6 @@ export interface LabelEditorToolbarProps {
   fontSize:     number
   isPrinting:   boolean
   canPrint?:    boolean
-  printerName?: string
   backgroundCalibration?: { offsetXmm: number; offsetYmm: number; widthPercent: number; heightPercent: number }
   backgroundCalibrationOpen?: boolean
   onToggleBackgroundCalibration?: () => void
@@ -100,13 +99,48 @@ export const LabelEditorToolbar = memo(function LabelEditorToolbar(
     : <BottomZone {...props} />
 })
 
+export function LabelBackgroundControls({
+  backgroundCalibration, backgroundCalibrationOpen = false,
+  onToggleBackgroundCalibration, onUpdateBackgroundCalibration, onResetBackgroundCalibration,
+}: Pick<LabelEditorToolbarProps, "backgroundCalibration" | "backgroundCalibrationOpen" | "onToggleBackgroundCalibration" | "onUpdateBackgroundCalibration" | "onResetBackgroundCalibration">) {
+  return (
+    <>
+          {onToggleBackgroundCalibration && (
+            <div className="rounded-md border border-border bg-background p-2">
+              <button
+                type="button"
+                onClick={onToggleBackgroundCalibration}
+                aria-expanded={backgroundCalibrationOpen}
+                className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[11px] font-medium hover:bg-muted"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
+                <span className="flex-1 text-left">Фон</span>
+                {backgroundCalibrationOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+              {backgroundCalibrationOpen && backgroundCalibration && onUpdateBackgroundCalibration && (
+                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Смещение X, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetXmm} onChange={(e) => onUpdateBackgroundCalibration("offsetXmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Смещение Y, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetYmm} onChange={(e) => onUpdateBackgroundCalibration("offsetYmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Ширина, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.widthPercent} onChange={(e) => onUpdateBackgroundCalibration("widthPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <label className="grid gap-1 text-[10px] text-muted-foreground">Высота, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.heightPercent} onChange={(e) => onUpdateBackgroundCalibration("heightPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
+                  <div className="col-span-2 flex justify-end">
+                    <button type="button" onClick={onResetBackgroundCalibration} className="rounded border border-border px-2 py-1 text-[10px] hover:bg-muted">Сброс</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+    </>
+  )
+}
+
 // ── Header Zone ───────────────────────────────────────────────────────────────
 // Кнопка поворота удалена. Кнопка SVG-рамки перенесена в BottomZone.
 // Остались: выбор формата, Сохранить, Сброс, Экспорт в файл.
 function HeaderZone({
   sizeKey,
   onSizeChange, onSaveTemplate, onReloadTemplate, onSaveToFile,
-  printerName, backgroundCalibration, backgroundCalibrationOpen = false,
+  backgroundCalibration, backgroundCalibrationOpen = false,
   onToggleBackgroundCalibration, onUpdateBackgroundCalibration, onResetBackgroundCalibration,
 }: LabelEditorToolbarProps) {
   const [open, setOpen] = useState(false)
@@ -158,11 +192,6 @@ function HeaderZone({
       >
         <span className="text-muted-foreground">Формат:</span>
         <span className="font-mono text-primary">{LABEL_SIZES[sizeKey]?.label ?? sizeKey}</span>
-        <span className="mx-0.5 h-4 shrink-0 border-l border-border" aria-hidden="true" />
-        <span className="inline-flex min-w-0 max-w-[30vw] items-center gap-1 text-muted-foreground" title={printerName ?? "Активный принтер"}>
-          <Printer className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-          <span className="truncate">{printerName ?? "Принтер"}</span>
-        </span>
         {open ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
       </button>
 
@@ -224,31 +253,13 @@ function HeaderZone({
               ))}
             </div>
           </div>
-          {onToggleBackgroundCalibration && (
-            <div className="rounded-md border border-border bg-background p-2">
-              <button
-                type="button"
-                onClick={onToggleBackgroundCalibration}
-                aria-expanded={backgroundCalibrationOpen}
-                className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-[11px] font-medium hover:bg-muted"
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
-                <span className="flex-1 text-left">Фон</span>
-                {backgroundCalibrationOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              </button>
-              {backgroundCalibrationOpen && backgroundCalibration && onUpdateBackgroundCalibration && (
-                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 pt-2">
-                  <label className="grid gap-1 text-[10px] text-muted-foreground">Смещение X, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetXmm} onChange={(e) => onUpdateBackgroundCalibration("offsetXmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-                  <label className="grid gap-1 text-[10px] text-muted-foreground">Смещение Y, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetYmm} onChange={(e) => onUpdateBackgroundCalibration("offsetYmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-                  <label className="grid gap-1 text-[10px] text-muted-foreground">Ширина, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.widthPercent} onChange={(e) => onUpdateBackgroundCalibration("widthPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-                  <label className="grid gap-1 text-[10px] text-muted-foreground">Высота, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.heightPercent} onChange={(e) => onUpdateBackgroundCalibration("heightPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-                  <div className="col-span-2 flex justify-end">
-                    <button type="button" onClick={onResetBackgroundCalibration} className="rounded border border-border px-2 py-1 text-[10px] hover:bg-muted">Сброс</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          <LabelBackgroundControls
+            backgroundCalibration={backgroundCalibration}
+            backgroundCalibrationOpen={backgroundCalibrationOpen}
+            onToggleBackgroundCalibration={onToggleBackgroundCalibration}
+            onUpdateBackgroundCalibration={onUpdateBackgroundCalibration}
+            onResetBackgroundCalibration={onResetBackgroundCalibration}
+          />
         </div>,
         document.body,
       )}
@@ -260,7 +271,7 @@ function HeaderZone({
 function BottomZone({
   sizeDef, font, fontSize, isPrinting, canPrint = true, status,
   onExportPng, canExportPng = true, exportPngTitle,
-  autoFit, fitRatio, zoom, isPanMode,
+  autoFit, fitRatio,
   isBold = false, isItalic = false, isUnderline = false, isLinethrough = false,
   textAlign = "left", charSpacing = 0, lineHeight = 1.16,
   onAddText, onAddBorder, onRemoveSelected, onRotateCanvas,
@@ -270,7 +281,7 @@ function BottomZone({
   onTextAlignChange, onCharSpacingChange, onLineHeightChange,
   onScaleUp, onScaleDown,
   onLoadSvgFrame,
-  onPrint, onZoomReset, onTogglePanMode,
+  onPrint,
   collapsed = false, onToggleCollapse,
 }: LabelEditorToolbarProps) {
   const [borderMenuOpen, setBorderMenuOpen] = useState(false)
@@ -428,49 +439,7 @@ function BottomZone({
             <Trash2 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Удалить</span>
           </ToolBtn>
 
-          <button
-            type="button"
-            onClick={onTogglePanMode}
-            aria-pressed={isPanMode}
-            className={`flex h-8 w-7 shrink-0 items-center justify-center rounded-md border transition-colors sm:w-8 ${
-              isPanMode
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-background hover:bg-muted"
-            }`}
-            title={isPanMode ? "Режим выделения (Alt отпускает руку)" : "Рука (удерживайте Alt)"}
-            aria-label={isPanMode ? "Режим выделения" : "Перемещение холста"}
-          >
-            <Hand className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={onZoomReset}
-            className="h-8 min-w-9 shrink-0 rounded-md border border-border bg-background px-1 text-[10px] tabular-nums hover:bg-muted"
-            title="Сбросить масштаб"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
 
-          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-            <button
-              type="button"
-              onClick={onScaleDown}
-              disabled={!onScaleDown}
-              className="flex h-8 w-7 items-center justify-center rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-40 sm:w-8"
-              title="Уменьшить выделенный элемент"
-            >
-              <ZoomOut className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onScaleUp}
-              disabled={!onScaleUp}
-              className="flex h-8 w-7 items-center justify-center rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-40 sm:w-8"
-              title="Увеличить выделенный элемент"
-            >
-              <ZoomIn className="h-3.5 w-3.5" />
-            </button>
-          </div>
         </div>
 
         <Button
@@ -520,6 +489,16 @@ function BottomZone({
             <button type="button" onClick={onExportPng} disabled={!canExportPng} title={exportPngTitle ?? "Скачать PNG"} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted disabled:opacity-50">
               <Download className="h-3.5 w-3.5" aria-hidden="true" /> PNG
             </button>
+          </div>
+        )}
+
+        {(onScaleDown || onScaleUp) && (
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <span className="px-0.5 text-[9px] leading-none text-muted-foreground">Размер объекта</span>
+            <div className="flex h-7 items-center gap-1">
+              <button type="button" onClick={onScaleDown} disabled={!onScaleDown} title="Уменьшить выделенный элемент" className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40"><ZoomOut className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={onScaleUp} disabled={!onScaleUp} title="Увеличить выделенный элемент" className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40"><ZoomIn className="h-3.5 w-3.5" /></button>
+            </div>
           </div>
         )}
 
