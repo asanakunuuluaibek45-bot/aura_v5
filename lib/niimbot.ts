@@ -485,15 +485,15 @@ export const LABEL_SIZES: Record<JewelryLabelSizeKey, LabelSizeDef> = {
   },
   T25x30_horizontal: {
     key: "T25x30_horizontal",
-    label: "Горизонтальный T25×30",
+    label: "Горизонтальный T25*30+45",
     w_px: 240,
     h_px: 200,
   },
   T30x25_horizontal: {
     key: "T30x25_horizontal",
-    label: "Горизонтальный T30×25",
-    w_px: 240,
-    h_px: 200,
+    label: "Горизонтальный T30*25+45",
+    w_px: 200,
+    h_px: 240,
   },
   T50x30_rect: {
     key: "T50x30_rect",

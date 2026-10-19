@@ -2,7 +2,7 @@
 import React, {
   useRef, useState, useMemo, useCallback, useEffect, useLayoutEffect,
 } from "react"
-import { Download, X, ChevronDown, Printer, SlidersHorizontal } from "lucide-react"
+import { X, ChevronDown, Printer } from "lucide-react"
 import { canvasToLabelDataUrl, getLabelSizeDef, DEFAULT_SIZE_KEY, LABEL_SIZES, NIIMBOT_MODEL } from "@/lib/niimbot"
 import type { JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { LabelEditorProps } from "./types"
@@ -521,6 +521,15 @@ export function LabelEditor({
     onScaleDown:      handleScaleDown,
     onLoadSvgFrame:   actions.loadSvgFrame,
     onSaveToFile:     actions.saveToFile,
+    printerName,
+    backgroundCalibration,
+    backgroundCalibrationOpen,
+    onToggleBackgroundCalibration: () => setBackgroundCalibrationOpen((open) => !open),
+    onUpdateBackgroundCalibration: updateBackgroundCalibration,
+    onResetBackgroundCalibration: () => setBackgroundCalibration(DEFAULT_BACKGROUND_CALIBRATION),
+    onExportPng: handleExportPng,
+    canExportPng: loaded && fitsPrinthead,
+    exportPngTitle: fitsPrinthead ? `Скачать PNG · ${printerProfile.dpi} dpi` : "Ширина макета превышает ширину печатающей головки",
   }
 
   // ── Рендер ────────────────────────────────────────────────────────────────
@@ -546,13 +555,6 @@ export function LabelEditor({
       {!collapsed && (
         <div className="relative z-20 shrink-0 border-b bg-background/95 backdrop-blur-md">
           <div className="flex min-h-10 items-center gap-1 px-2 py-1">
-            <span
-              className="min-w-0 max-w-[28vw] truncate text-[11px] font-semibold leading-tight sm:max-w-[200px]"
-              title="Активный принтер"
-            >
-              <Printer className="mr-1 inline h-3.5 w-3.5 text-primary" aria-hidden="true" />
-              {printerName}
-            </span>
             <LabelEditorToolbar zone="header" {...toolbarCommon} />
             <span className="flex-1" />
             <span
@@ -561,16 +563,6 @@ export function LabelEditor({
             >
               {printStatus || (loaded ? "Готово" : "Загрузка…")}
             </span>
-            <button
-              type="button"
-              onClick={handleExportPng}
-              disabled={!loaded || !fitsPrinthead}
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border px-2 text-[10px] hover:bg-muted disabled:opacity-50"
-              title={fitsPrinthead ? `Скачать PNG · ${printerProfile.dpi} dpi` : "Ширина макета превышает ширину печатающей головки"}
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden xs:inline">PNG</span>
-            </button>
             {onClose && (
               <button
                 type="button"
@@ -591,24 +583,17 @@ export function LabelEditor({
           <button
             type="button"
             onClick={() => { setCollapsed(false); setTopCollapsed(false); }}
-            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-background/90 px-3 py-1 text-xs font-medium shadow-md backdrop-blur-md hover:bg-background hover:border-primary/50 transition-colors"
+            className="pointer-events-auto inline-flex max-w-[72vw] items-center gap-2 rounded-full border border-border/80 bg-background/90 px-3 py-1 text-xs font-medium shadow-md backdrop-blur-md hover:bg-background hover:border-primary/50 transition-colors"
             title="Развернуть панели настроек"
           >
             <ChevronDown className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[11px]">
-              {printerName} · <strong className="text-primary font-mono">{sizeDef.label}</strong>
+            <span className="shrink-0 text-[11px]"><strong className="text-primary font-mono">{sizeDef.label}</strong></span>
+            <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+              <Printer className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="max-w-[30vw] truncate">{printerName}</span>
             </span>
           </button>
           <div className="pointer-events-auto flex items-center gap-1">
-            <button
-              type="button"
-              onClick={handleExportPng}
-              disabled={!loaded || !fitsPrinthead}
-              className="rounded-full border border-border/80 bg-background/90 p-1.5 text-muted-foreground shadow-md backdrop-blur-md hover:text-foreground"
-              title="Скачать PNG"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </button>
             {onClose && (
               <button
                 type="button"
@@ -660,35 +645,6 @@ export function LabelEditor({
           onRulerPointerMove={handleRulerPointerMove}
           onRulerPointerUp={handleRulerPointerUp}
         />
-        <div className="pointer-events-none absolute right-3 top-3 z-40">
-          <button
-            type="button"
-            onClick={() => setBackgroundCalibrationOpen((open) => !open)}
-            aria-expanded={backgroundCalibrationOpen}
-            className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background/95 px-2.5 text-xs font-medium text-foreground shadow-md backdrop-blur-md hover:bg-muted"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-            Фон
-          </button>
-          {backgroundCalibrationOpen && (
-            <div className="pointer-events-auto absolute right-0 top-full mt-2 w-72 rounded-lg border border-border bg-background/95 p-3 text-foreground shadow-xl backdrop-blur-md">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold">Калибровка фона</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">Только предпросмотр; печатный макет не меняется.</p>
-                </div>
-                <button type="button" onClick={() => setBackgroundCalibration(DEFAULT_BACKGROUND_CALIBRATION)} className="shrink-0 rounded border border-border px-2 py-1 text-[11px] hover:bg-muted">Сброс</button>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className="grid gap-1 text-[11px] text-muted-foreground">Смещение X, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetXmm} onChange={(e) => updateBackgroundCalibration("offsetXmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-                <label className="grid gap-1 text-[11px] text-muted-foreground">Смещение Y, мм<input type="number" min={-20} max={20} step={0.1} value={backgroundCalibration.offsetYmm} onChange={(e) => updateBackgroundCalibration("offsetYmm", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-                <label className="grid gap-1 text-[11px] text-muted-foreground">Ширина, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.widthPercent} onChange={(e) => updateBackgroundCalibration("widthPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-                <label className="grid gap-1 text-[11px] text-muted-foreground">Высота, %<input type="number" min={50} max={150} step={0.1} value={backgroundCalibration.heightPercent} onChange={(e) => updateBackgroundCalibration("heightPercent", Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground" /></label>
-              </div>
-              <p className="mt-2 text-[10px] leading-snug text-muted-foreground">Плюс X — вправо, плюс Y — вниз. Значения сохраняются отдельно для формата {sizeDef.label}.</p>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── НИЖНЯЯ ПАНЕЛЬ ── */}

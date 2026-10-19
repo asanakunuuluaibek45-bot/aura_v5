@@ -7,12 +7,15 @@ interface ShapeMeta {
   vbH: number
   bodyW: number
   bodyH: number
+  rotatedFrom?: "T25x30_45" | "T30x25_45"
 }
 
 const META: Record<string, ShapeMeta> = {
   T25x30_45:   { vbW: 25.12487, vbH: 74.945435, bodyW: 25.12487, bodyH: 30.02 },
   T30x25_45:   { vbW: 30,       vbH: 70,         bodyW: 30,       bodyH: 25   },
   T30x25_50:   { vbW: 30,       vbH: 75,         bodyW: 30,       bodyH: 25   },
+  T25x30_horizontal: { vbW: 74.945435, vbH: 25.12487, bodyW: 30.02, bodyH: 25.12487, rotatedFrom: "T25x30_45" },
+  T30x25_horizontal: { vbW: 70, vbH: 30, bodyW: 25, bodyH: 30, rotatedFrom: "T30x25_45" },
   T50x30_rect: { vbW: 50,       vbH: 30,         bodyW: 50,       bodyH: 30   },
   T12x30_d11:  { vbW: 12,       vbH: 30,         bodyW: 12,       bodyH: 30   },
   T12x50_d110: { vbW: 12,       vbH: 50,         bodyW: 12,       bodyH: 50   },
@@ -102,6 +105,10 @@ export const LabelBackground = memo(function LabelBackground({
   const baseSvgH = Math.round(m.vbH * pxPerMm + SVG_PAD * 2)
   const padMm = SVG_PAD / pxPerMm
   const hasShape = key in META && key !== "T12x30_d11" && key !== "T12x50_d110"
+  const shapeKey = m.rotatedFrom ?? key
+  const labelShape = shapeKey === "T30x25_50" || shapeKey === "T30x25_45"
+    ? <ShapeT30x25 />
+    : <ShapeT25x30_45 />
 
   return (
     <div
@@ -138,16 +145,22 @@ export const LabelBackground = memo(function LabelBackground({
           </defs>
 
           <g filter="url(#paper-shadow)">
-            {key === "T30x25_50" || key === "T30x25_45"
-              ? <ShapeT30x25 />
-              : <ShapeT25x30_45 />}
+            {m.rotatedFrom ? (
+              <g transform={`translate(${m.vbW} 0) rotate(90)`}>{labelShape}</g>
+            ) : labelShape}
 
-            {m.vbH > m.bodyH && (
-              <rect
-                x={(m.vbW - TAIL_W_MM) / 2} y={m.bodyH}
-                width={TAIL_W_MM} height={m.vbH - m.bodyH}
-                fill="#d9d9d9"
-              />
+            {m.rotatedFrom ? (
+              m.vbW > m.bodyW && (
+                <rect x={m.bodyW} y={0} width={m.vbW - m.bodyW} height={m.vbH} fill="#d9d9d9" />
+              )
+            ) : (
+              m.vbH > m.bodyH && (
+                <rect
+                  x={(m.vbW - TAIL_W_MM) / 2} y={m.bodyH}
+                  width={TAIL_W_MM} height={m.vbH - m.bodyH}
+                  fill="#d9d9d9"
+                />
+              )
             )}
           </g>
 
@@ -159,10 +172,18 @@ export const LabelBackground = memo(function LabelBackground({
             fill="none" stroke="rgba(239,68,68,0.65)"
             strokeWidth={0.16} strokeDasharray="2 1.5" />
 
-          {m.vbH > m.bodyH && (
-            <line x1={0} y1={m.bodyH} x2={m.bodyW} y2={m.bodyH}
-              stroke="rgba(156,163,175,0.8)"
-              strokeWidth={0.3} strokeDasharray="1 1.5" />
+          {m.rotatedFrom ? (
+            m.vbW > m.bodyW && (
+              <line x1={m.bodyW} y1={0} x2={m.bodyW} y2={m.bodyH}
+                stroke="rgba(156,163,175,0.8)"
+                strokeWidth={0.3} strokeDasharray="1 1.5" />
+            )
+          ) : (
+            m.vbH > m.bodyH && (
+              <line x1={0} y1={m.bodyH} x2={m.bodyW} y2={m.bodyH}
+                stroke="rgba(156,163,175,0.8)"
+                strokeWidth={0.3} strokeDasharray="1 1.5" />
+            )
           )}
         </svg>
       ) : (
