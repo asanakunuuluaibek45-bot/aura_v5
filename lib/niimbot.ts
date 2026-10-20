@@ -638,7 +638,11 @@ export async function printCanvas(
   api.WRITE_MODE = model.task === "b1" ? "paced" : null
   api.PACE_MS = 10
 
-  const offsetXpx = Math.round((model.printOffsetXmm ?? 0) * model.dpi / 25.4)
+  const isHorizontalLabel = sizeDef.key === "T25x30_horizontal" || sizeDef.key === "T30x25_horizontal"
+  const centeredLeftPx = Math.floor(Math.max(0, pageW - contentW) / 2)
+  const alignLeftOffsetXpx = isHorizontalLabel ? -centeredLeftPx : 0
+  const printerOffsetXpx = Math.round((model.printOffsetXmm ?? 0) * model.dpi / 25.4)
+  const offsetXpx = alignLeftOffsetXpx + printerOffsetXpx
   const dataUrl = canvasToLabelDataUrl(source, contentSize, pageW, offsetXpx)
 
   await enqueuePrinterOperation(() =>
