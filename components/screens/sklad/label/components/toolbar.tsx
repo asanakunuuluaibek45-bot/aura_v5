@@ -177,9 +177,10 @@ function LabelFormatThumbnail({
           width={body.tail + 0.4}
           height={tailThickness}
           rx={1.2}
-          fill="#eef2f7"
-          stroke="#cbd5e1"
-          strokeWidth={0.35}
+          fill="var(--muted)"
+          stroke="var(--foreground)"
+          strokeOpacity={0.5}
+          strokeWidth={0.5}
         />
       ) : (
         <rect
@@ -188,9 +189,10 @@ function LabelFormatThumbnail({
           width={tailThickness}
           height={body.tail + 0.4}
           rx={1.2}
-          fill="#eef2f7"
-          stroke="#cbd5e1"
-          strokeWidth={0.35}
+          fill="var(--muted)"
+          stroke="var(--foreground)"
+          strokeOpacity={0.5}
+          strokeWidth={0.5}
         />
       )}
       <rect
@@ -199,9 +201,10 @@ function LabelFormatThumbnail({
         width={body.width}
         height={body.height}
         rx={2.4}
-        fill="#f8fafc"
-        stroke="#cbd5e1"
-        strokeWidth={0.55}
+        fill="var(--muted)"
+        stroke="var(--foreground)"
+        strokeOpacity={0.5}
+        strokeWidth={0.6}
       />
       <rect
         x={inset}
@@ -210,8 +213,8 @@ function LabelFormatThumbnail({
         height={body.height - inset * 2}
         rx={1.5}
         fill="none"
-        stroke="#bfdbfe"
-        strokeOpacity={0.75}
+        stroke="var(--primary)"
+        strokeOpacity={0.72}
         strokeWidth={0.45}
         strokeDasharray="2 1.5"
       />
@@ -222,8 +225,8 @@ function LabelFormatThumbnail({
         height={body.height - (inset + 1) * 2}
         rx={1.2}
         fill="none"
-        stroke="#fca5a5"
-        strokeOpacity={0.7}
+        stroke="var(--destructive)"
+        strokeOpacity={0.72}
         strokeWidth={0.4}
         strokeDasharray="2 1.5"
       />
@@ -233,8 +236,9 @@ function LabelFormatThumbnail({
           y1={body.height / 2}
           x2={body.width - inset}
           y2={body.height / 2}
-          stroke="#cbd5e1"
-          strokeWidth={0.45}
+          stroke="var(--foreground)"
+          strokeOpacity={0.38}
+          strokeWidth={0.5}
           strokeDasharray="1.5 1.5"
         />
       ) : (
@@ -243,8 +247,9 @@ function LabelFormatThumbnail({
           y1={inset}
           x2={body.width / 2}
           y2={body.height - inset}
-          stroke="#cbd5e1"
-          strokeWidth={0.45}
+          stroke="var(--foreground)"
+          strokeOpacity={0.38}
+          strokeWidth={0.5}
           strokeDasharray="1.5 1.5"
         />
       )}
