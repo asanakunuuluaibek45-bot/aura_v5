@@ -132,30 +132,121 @@ export function LabelBackgroundControls({
   )
 }
 
-function LabelFormatThumbnail({ sizeKey }: { sizeKey: JewelryLabelSizeKey }) {
+function LabelFormatThumbnail({
+  sizeKey,
+  variant = "trigger",
+}: {
+  sizeKey: JewelryLabelSizeKey
+  variant?: "trigger" | "option"
+}) {
   const horizontal = sizeKey === "T25x30_horizontal" || sizeKey === "T30x25_horizontal"
-  const compactHorizontal = sizeKey === "T30x25_horizontal"
-  const body = horizontal
-    ? (compactHorizontal ? { x: 2, y: 3, w: 14, h: 18 } : { x: 2, y: 4, w: 18, h: 14 })
-    : (sizeKey === "T25x30_45" ? { x: 17, y: 2, w: 14, h: 18 } : { x: 13, y: 2, w: 22, h: 18 })
+  const body = sizeKey === "T25x30_45"
+    ? { width: 25.12487, height: 30.02, tail: 44.925435 }
+    : sizeKey === "T30x25_45"
+      ? { width: 30, height: 25, tail: 45 }
+      : sizeKey === "T30x25_50"
+        ? { width: 30, height: 25, tail: 50 }
+        : sizeKey === "T25x30_horizontal"
+          ? { width: 30.02, height: 25.12487, tail: 44.925435 }
+          : { width: 25, height: 30, tail: 45 }
   const tailInFirstHalf = sizeKey === "T30x25_45" || sizeKey === "T30x25_horizontal"
-  const tailThickness = 1.6
   const tailCenter = horizontal
-    ? body.y + body.h * (tailInFirstHalf ? 0.25 : 0.5)
-    : body.x + body.w * (tailInFirstHalf ? 0.25 : 0.5)
+    ? body.height * (tailInFirstHalf ? 0.25 : 0.5)
+    : body.width * (tailInFirstHalf ? 0.25 : 0.5)
+  const tailThickness = 3
+  const totalWidth = body.width + (horizontal ? body.tail : 0)
+  const totalHeight = body.height + (horizontal ? 0 : body.tail)
+  const hasHorizontalSeam = sizeKey === "T25x30_45" || sizeKey === "T30x25_horizontal"
+  const previewWidth = variant === "option" ? 46 : 38
+  const previewHeight = variant === "option" ? 32 : 22
+  const inset = 1.4
+
   return (
-    <svg aria-hidden="true" width="40" height="22" viewBox="0 0 48 24" className="shrink-0">
+    <svg
+      aria-hidden="true"
+      width={previewWidth}
+      height={previewHeight}
+      viewBox={"0 0 " + totalWidth + " " + totalHeight}
+      preserveAspectRatio="xMidYMid meet"
+      className="block shrink-0 overflow-visible"
+    >
       {horizontal ? (
-        <rect x={body.x + body.w - 0.5} y={tailCenter - tailThickness / 2} width={46 - body.x - body.w} height={tailThickness} rx={0.8} fill="#d9d9d9" />
+        <rect
+          x={body.width - 0.4}
+          y={tailCenter - tailThickness / 2}
+          width={body.tail + 0.4}
+          height={tailThickness}
+          rx={1.2}
+          fill="#eef2f7"
+          stroke="#cbd5e1"
+          strokeWidth={0.35}
+        />
       ) : (
-        <rect x={tailCenter - tailThickness / 2} y={body.y + body.h - 0.5} width={tailThickness} height={23 - body.y - body.h} rx={0.8} fill="#d9d9d9" />
+        <rect
+          x={tailCenter - tailThickness / 2}
+          y={body.height - 0.4}
+          width={tailThickness}
+          height={body.tail + 0.4}
+          rx={1.2}
+          fill="#eef2f7"
+          stroke="#cbd5e1"
+          strokeWidth={0.35}
+        />
       )}
-      <rect x={body.x} y={body.y} width={body.w} height={body.h} rx={2.5} fill="#a1a1aa" stroke="#3b82f6" strokeWidth={0.8} strokeDasharray="2 1" />
-      <rect x={body.x + 1} y={body.y + 1} width={body.w - 2} height={body.h - 2} rx={1.8} fill="none" stroke="#ef4444" strokeWidth={0.7} strokeDasharray="2 1.5" />
-      {horizontal ? (
-        <line x1={body.x + 1} y1={body.y + body.h / 2} x2={body.x + body.w - 1} y2={body.y + body.h / 2} stroke="#e5e7eb" strokeWidth={0.8} strokeDasharray="1 1.2" />
+      <rect
+        x={0}
+        y={0}
+        width={body.width}
+        height={body.height}
+        rx={2.4}
+        fill="#f8fafc"
+        stroke="#cbd5e1"
+        strokeWidth={0.55}
+      />
+      <rect
+        x={inset}
+        y={inset}
+        width={body.width - inset * 2}
+        height={body.height - inset * 2}
+        rx={1.5}
+        fill="none"
+        stroke="#bfdbfe"
+        strokeOpacity={0.75}
+        strokeWidth={0.45}
+        strokeDasharray="2 1.5"
+      />
+      <rect
+        x={inset + 1}
+        y={inset + 1}
+        width={body.width - (inset + 1) * 2}
+        height={body.height - (inset + 1) * 2}
+        rx={1.2}
+        fill="none"
+        stroke="#fca5a5"
+        strokeOpacity={0.7}
+        strokeWidth={0.4}
+        strokeDasharray="2 1.5"
+      />
+      {hasHorizontalSeam ? (
+        <line
+          x1={inset}
+          y1={body.height / 2}
+          x2={body.width - inset}
+          y2={body.height / 2}
+          stroke="#cbd5e1"
+          strokeWidth={0.45}
+          strokeDasharray="1.5 1.5"
+        />
       ) : (
-        <line x1={body.x + body.w / 2} y1={body.y + 1} x2={body.x + body.w / 2} y2={body.y + body.h - 1} stroke="#e5e7eb" strokeWidth={0.8} strokeDasharray="1 1.2" />
+        <line
+          x1={body.width / 2}
+          y1={inset}
+          x2={body.width / 2}
+          y2={body.height - inset}
+          stroke="#cbd5e1"
+          strokeWidth={0.45}
+          strokeDasharray="1.5 1.5"
+        />
       )}
     </svg>
   )
@@ -276,7 +367,7 @@ function HeaderZone({
                       : "border-border bg-background text-foreground hover:bg-muted",
                   ].join(" ")}
                 >
-                  <LabelFormatThumbnail sizeKey={key} />
+                  <LabelFormatThumbnail sizeKey={key} variant="option" />
                   <span className="min-w-0 truncate">{LABEL_SIZES[key].label}</span>
                 </button>
               ))}
