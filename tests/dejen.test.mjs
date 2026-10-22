@@ -1,8 +1,14 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { commandFrame, FrameDecoder, rasterRow, dothanTechPrintJob } from "../lib/dejen-protocol.mjs"
+import { commandFrame, FrameDecoder, rasterRow, dothanTechPrintJob, dejenPageWidthPx } from "../lib/dejen-protocol.mjs"
 import { connectDejen, printDejenRaster, DEJEN_SERVICE, DEJEN_VENDOR_SERVICE } from "../lib/dejen.ts"
 import { getPrintErrorMessage } from "../lib/printer-errors.ts"
+
+test("DP30P raster uses its 72 mm printable page width", () => {
+  assert.equal(dejenPageWidthPx(354, 300, 72), 850)
+  assert.equal(dejenPageWidthPx(354, 300), 354)
+  assert.throws(() => dejenPageWidthPx(851, 300, 72), /printable page width/)
+})
 
 test("command checksum matches the published software-version example", () => {
   assert.deepEqual([...commandFrame(0x7c)], [0x1f, 0x7c, 0, 0x83])

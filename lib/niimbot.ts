@@ -1,4 +1,5 @@
 import { connectDejen, printDejenRaster, type DejenPrinterInfo, type DejenModelName } from "./dejen"
+import { dejenPageWidthPx } from "./dejen-protocol.mjs"
 
 /**
  * Ювелирные форматы бирок.
@@ -38,6 +39,8 @@ export type DejenPrinterProfile = CommonPrinterProfile & {
   dpi: 300
   density: number
   maxWidthMm: number
+  /** Printable page width; content is placed at the left edge of this page. */
+  printableWidthMm?: number
 }
 export type PrinterProfile = NiimbotPrinterProfile | DejenPrinterProfile
 type IdentifiedPrinter = { profile: PrinterProfile; printer: NiimbotPrinterInfo | DejenPrinterInfo }
@@ -59,7 +62,7 @@ export const PRINTER_PROFILES: PrinterProfile[] = [
   makeProfile({ key: "n1", displayName: "Niimbot N1", label: "Niimbot N1", id: 3586, supportedIds: [3586], dpi: 203, protocol: "v4", task: "b1", density: 3, name_prefixes: ["N1"], printheadPx: 96, driverDocumented: true, defaultLabelKey: "T12x50_d110" }),
   // Conservative 300-dpi canvas limits from the advertised printable widths.
   // The BLE driver requires the actual DPI/head-width reply before printing.
-  { driver: "dejen", key: "dejen-dp30p", modelName: "DP30P", displayName: "Dejen DP30P", dpi: 300, density: 3, printheadPx: 945, maxWidthMm: 80, driverDocumented: false, supportsDirectBluetooth: true, defaultLabelKey: "T30x25_horizontal" },
+  { driver: "dejen", key: "dejen-dp30p", modelName: "DP30P", displayName: "Dejen DP30P", dpi: 300, density: 3, printheadPx: 945, maxWidthMm: 80, printableWidthMm: 72, driverDocumented: false, supportsDirectBluetooth: true, defaultLabelKey: "T30x25_horizontal" },
   { driver: "dejen", key: "dejen-dp27p", modelName: "DP27P", displayName: "Dejen DP27P", dpi: 300, density: 3, printheadPx: 567, maxWidthMm: 48, driverDocumented: false, supportsDirectBluetooth: true, defaultLabelKey: "T25x30_45" },
 ]
 
@@ -653,9 +656,10 @@ export async function printCanvas(
     throw new Error(`${model.displayName}: прямое Bluetooth-подключение не поддерживается. Скачайте PNG и откройте его в приложении Niimbot.`)
   }
   if (model.driver === "dejen") {
-    const width = Math.round(sizeDef.w_px * model.dpi / 203)
+    const contentWidth = Math.round(sizeDef.w_px * model.dpi / 203)
     const height = Math.round(sizeDef.h_px * model.dpi / 203)
-    if (width > model.printheadPx) throw new Error("Макет шире печатаемой области " + model.displayName)
+    const width = dejenPageWidthPx(contentWidth, model.dpi, model.printableWidthMm)
+    if (width > model.printheadPx) throw new Error("Печатная область шире печатающей головки " + model.displayName)
     const buffer = document.createElement("canvas")
     buffer.width = width
     buffer.height = height
@@ -663,7 +667,8 @@ export async function printCanvas(
     if (!context) throw new Error("Не удалось подготовить растр Dejen")
     context.fillStyle = "#fff"
     context.fillRect(0, 0, width, height)
-    context.drawImage(source, 0, 0, width, height)
+    // Preserve the label's physical size and anchor it to the page's left edge.
+    context.drawImage(source, 0, 0, contentWidth, height)
     const rgba = context.getImageData(0, 0, width, height).data
     await enqueuePrinterOperation(() => withPrinterDeviceSelection(model.key, "remembered", () =>
       printDejenRaster(rgba, width, height, {
