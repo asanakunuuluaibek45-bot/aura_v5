@@ -34,10 +34,28 @@ import { usePrinterConnection } from "./use-printer-connection"
 import { PrinterStatusIndicator } from "./printer-status-indicator"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 
-// Загружаем LabelEditor строго на клиенте для корректного связывания пакетов Bluetooth
+// Загружаем LabelEditor строго на клиенте и начинаем подкачку при нажатии на печать.
+let labelEditorPreload: Promise<typeof import("./label/label-editor")> | null = null
+const preloadLabelEditor = () => {
+  if (!labelEditorPreload) {
+    labelEditorPreload = import("./label/label-editor").catch((error) => {
+      labelEditorPreload = null
+      throw error
+    })
+  }
+  return labelEditorPreload
+}
 const LabelEditor = dynamic(
-  () => import("./label/label-editor").then((mod) => mod.LabelEditor),
-  { ssr: false }
+  () => preloadLabelEditor().then((mod) => mod.LabelEditor),
+  {
+    ssr: false,
+    loading: () => (
+      <div role="status" className="flex h-full min-h-48 items-center justify-center gap-3 text-sm text-muted-foreground">
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        Загружаю редактор этикеток…
+      </div>
+    ),
+  },
 )
 
 const PAGE_SIZE = 30
@@ -82,6 +100,9 @@ export function SkladScreen({
   const printerConnection = usePrinterConnection()
 
   const [labelProduct, setLabelProduct] = useState<Product | null>(null)
+  const [labelProductReady, setLabelProductReady] = useState(false)
+  const [labelLoadError, setLabelLoadError] = useState<string | null>(null)
+  const labelOpenRequestRef = useRef(0)
   const [labelDialogOpen, setLabelDialogOpen] = useState(false)
   const [labelAutoPrint, setLabelAutoPrint] = useState(false)
   const [labelSizeKey, setLabelSizeKey] = useState<JewelryLabelSizeKey>(DEFAULT_SIZE_KEY)
@@ -159,38 +180,56 @@ export function SkladScreen({
     return map
   }, [sales])
 
-  const openLabel = async (p: Product, autoPrint: boolean) => {
-    try {
-      // На каждом открытии сразу освобождаем максимум места под редактор этикетки.
-      setIsTopControlsCollapsed(true)
-      // В сценарии «товар → печать» сохраняем позицию до блокировки прокрутки диалогом.
-      if (!productDialogOpen || labelReturnScrollY.current === null) {
-        labelReturnScrollY.current = window.scrollY
-      }
-      const cachedSeqId = isValidShopSeqId(p.shop_seq_id)
-        ? p.shop_seq_id
-        : products.find((row) => row.shop_id === p.shop_id && isValidShopSeqId(row.shop_seq_id))?.shop_seq_id
-      const shopSeqId = isValidShopSeqId(cachedSeqId)
-        ? cachedSeqId
-        : await getShopSeqIdForLabel(p.shop_id)
-      setLabelProduct({ ...p, shop_seq_id: shopSeqId })
-      setLabelAutoPrint(autoPrint)
-      setLabelSizeKey(printerProfile.defaultLabelKey)
-      setLabelDialogOpen(true)
-      // Страница печати получает свою запись в истории: кнопка «Назад»
-      // (браузер, Android, жест на iOS) возвращает на склад, а не уходит со страницы.
-      if (typeof window !== "undefined" && !window.history.state?.auraLabel) {
-        const url = new URL(window.location.href)
-        url.searchParams.set("label", p.id)
-        window.history.pushState({ ...(window.history.state ?? {}), auraLabel: true }, "", url.toString())
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось подготовить QR-код для этикетки")
+  const loadLabelSequence = (product: Product, requestId: number) => {
+    setLabelLoadError(null)
+    void getShopSeqIdForLabel(product.shop_id)
+      .then((shopSeqId) => {
+        if (!isValidShopSeqId(shopSeqId)) {
+          throw new Error("Не удалось получить короткий номер магазина для QR-кода")
+        }
+        if (labelOpenRequestRef.current !== requestId) return
+        setLabelProduct((current) => current?.id === product.id
+          ? { ...current, shop_seq_id: shopSeqId }
+          : current)
+        setLabelProductReady(true)
+      })
+      .catch((error) => {
+        if (labelOpenRequestRef.current !== requestId) return
+        setLabelLoadError(error instanceof Error ? error.message : "Не удалось подготовить QR-код для этикетки")
+      })
+  }
+
+  const openLabel = (p: Product, autoPrint: boolean) => {
+    const requestId = ++labelOpenRequestRef.current
+    void preloadLabelEditor().catch(() => undefined)
+    // Open the print surface immediately; resolve the QR short ID in parallel.
+    setIsTopControlsCollapsed(true)
+    if (!productDialogOpen || labelReturnScrollY.current === null) {
+      labelReturnScrollY.current = window.scrollY
     }
+    const cachedSeqId = isValidShopSeqId(p.shop_seq_id)
+      ? p.shop_seq_id
+      : products.find((row) => row.shop_id === p.shop_id && isValidShopSeqId(row.shop_seq_id))?.shop_seq_id
+    const hasShopSeqId = isValidShopSeqId(cachedSeqId)
+    setLabelProduct(hasShopSeqId ? { ...p, shop_seq_id: cachedSeqId } : p)
+    setLabelProductReady(hasShopSeqId)
+    setLabelLoadError(null)
+    setLabelAutoPrint(autoPrint)
+    setLabelSizeKey(printerProfile.defaultLabelKey)
+    setLabelDialogOpen(true)
+    // The browser back button returns to the inventory instead of leaving it.
+    if (typeof window !== "undefined" && !window.history.state?.auraLabel) {
+      const url = new URL(window.location.href)
+      url.searchParams.set("label", p.id)
+      window.history.pushState({ ...(window.history.state ?? {}), auraLabel: true }, "", url.toString())
+    }
+    if (!hasShopSeqId) loadLabelSequence(p, requestId)
   }
 
   // Закрытие страницы печати: шаг назад по истории → возвращаемся на склад
   const closeLabel = useCallback(() => {
+    labelOpenRequestRef.current += 1
+    setLabelProductReady(false)
     if (typeof window !== "undefined" && window.history.state?.auraLabel) {
       window.history.back()
     } else {
@@ -200,7 +239,11 @@ export function SkladScreen({
 
   useEffect(() => {
     const onPop = () => {
-      if (!window.history.state?.auraLabel) setLabelDialogOpen(false)
+      if (!window.history.state?.auraLabel) {
+        labelOpenRequestRef.current += 1
+        setLabelProductReady(false)
+        setLabelDialogOpen(false)
+      }
     }
     window.addEventListener("popstate", onPop)
     // Если страницу обновили с ?label=..., убираем параметр — открыт склад
@@ -682,6 +725,8 @@ export function SkladScreen({
                         key={`${image}:${index}`}
                         src={image}
                         alt={`${labelProduct.name} — фото ${index + 1}`}
+                        loading="lazy"
+                        decoding="async"
                         className="h-14 w-14 shrink-0 rounded-md border object-cover"
                       />
                     ))}
@@ -692,6 +737,8 @@ export function SkladScreen({
                     <img
                       src={labelProduct.image_url}
                       alt={labelProduct.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-14 w-14 rounded-md border object-cover"
                     />
                   </div>
@@ -736,7 +783,22 @@ export function SkladScreen({
               </div>
             </details>
           )}
-          {labelProduct && (
+          {labelProduct && !labelProductReady && (
+            <div role={labelLoadError ? "alert" : "status"} className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
+              {labelLoadError ? (
+                <>
+                  <p>{labelLoadError}</p>
+                  <Button variant="outline" size="sm" onClick={() => loadLabelSequence(labelProduct, labelOpenRequestRef.current)}>Повторить</Button>
+                </>
+              ) : (
+                <>
+                  <span className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Подготавливаю QR-код и открываю редактор…
+                </>
+              )}
+            </div>
+          )}
+          {labelProduct && labelProductReady && (
             <div className="min-h-0 flex-1">
               <LabelEditor
                 key={`${labelProduct.id}:${printerProfile.key}`}
