@@ -88,12 +88,12 @@ function mockPrinter(options = {}) {
       assert.equal(inFlight, false, "GATT writes must not overlap")
       inFlight = true
       try {
-        assert.ok(data.length <= 20)
-        writes.push([...data])
-        const bytesSent = writes.flat()
+          assert.ok(data.length <= 512)
+          const bytesSent = [...writes.flat(), ...data]
         if (options.failRaster && bytesSent.some((byte, index) => byte === 0x1f && bytesSent[index + 1] === 0x21)) {
           throw new Error("simulated GATT failure")
         }
+          writes.push([...data])
         let payload
         const command = data[0] === 0x1f ? data[1] : -1
         if (command === 0x79) payload = [...new TextEncoder().encode(options.name ?? "DP27P-TEST"), 0]
@@ -241,6 +241,28 @@ test("Detonger Web Bluetooth FF00 profile uses FF02 for writes and FF01 for repl
   assert.equal(frames.filter((frame) => frame.command === 0x21).length, 1)
   assert.equal(frames.filter((frame) => frame.command === 0x28).length, 1)
   assert.ok(!frames.some((frame) => frame.command === 0x42 || frame.command === 0x43))
+})
+
+test("acknowledged BLE writes batch a large raster into fast 512-byte GATT values", async () => {
+  const mock = mockPrinter({ name: "DP30P-Y6085197", head: 960 })
+  const width = 960
+  const height = 32
+  const rgba = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4
+      const value = (x * 17 + y * 31) % 101 < 50 ? 0 : 255
+      rgba[offset] = value
+      rgba[offset + 1] = value
+      rgba[offset + 2] = value
+      rgba[offset + 3] = 255
+    }
+  }
+  await printDejenRaster(rgba, width, height, { ...jobOptions, model: "DP30P" })
+  const chunks = mock.writes.map((write) => write.length)
+  assert.ok(chunks.some((size) => size > 20))
+  assert.ok(chunks.every((size) => size <= 512))
+  assert.equal(receivedFrames(mock).filter((frame) => frame.command === 0x28).length, 1)
 })
 
 test("legacy FFE0 profile uses FFE2 for writes and FFE1 for replies", async () => {

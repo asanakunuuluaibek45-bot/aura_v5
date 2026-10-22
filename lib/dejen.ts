@@ -67,6 +67,10 @@ type Pending = {
 }
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+const DEJEN_ACKED_WRITE_CHUNK_SIZE = 512
+const DEJEN_ACKED_WRITE_DELAY_MS = 10
+const DEJEN_UNACKED_WRITE_CHUNK_SIZE = 20
+const DEJEN_UNACKED_WRITE_DELAY_MS = 20
 async function bounded<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -133,11 +137,23 @@ class DejenSession {
   }
 
   async write(data: Uint8Array, onProgress?: (fraction: number) => void) {
-    // 20-byte ATT payload works without assuming an Android-negotiated MTU.
+    // Match the working DothanTech Web Bluetooth flow: acknowledged writes
+    // accept larger GATT values, and each write promise provides flow control.
+    // Keep the conservative ATT-sized path for write-without-response devices.
     // No retries: retrying a partially transmitted print can duplicate a label.
-    for (let offset = 0; offset < data.length; offset += 20) {
+    const acknowledgedWrite = Boolean(
+      this.tx.properties.write
+      && (this.tx.writeValueWithResponse || this.tx.writeValue),
+    )
+    const chunkSize = acknowledgedWrite
+      ? DEJEN_ACKED_WRITE_CHUNK_SIZE
+      : DEJEN_UNACKED_WRITE_CHUNK_SIZE
+    const packetDelay = acknowledgedWrite
+      ? DEJEN_ACKED_WRITE_DELAY_MS
+      : DEJEN_UNACKED_WRITE_DELAY_MS
+    for (let offset = 0; offset < data.length; offset += chunkSize) {
       if (this.closed || !this.device.gatt?.connected) throw new Error("Dejen: принтер отключён")
-      const chunk = data.slice(offset, offset + 20)
+      const chunk = data.slice(offset, offset + chunkSize)
       let operation: Promise<unknown>
       if (this.tx.properties.write && this.tx.writeValueWithResponse) {
         operation = this.tx.writeValueWithResponse(chunk)
@@ -154,7 +170,7 @@ class DejenSession {
         this.dispose(error instanceof Error ? error : new Error("Dejen: ошибка записи"))
         throw error
       }
-      await delay(this.tx.properties.write ? 10 : 20)
+      if (offset + chunk.length < data.length) await delay(packetDelay)
       onProgress?.(Math.min(1, (offset + chunk.length) / data.length))
     }
   }
