@@ -55,3 +55,15 @@ Automated tests (Node 22.18+ or Node 24):
 ```sh
 node --test tests/dejen.test.mjs
 ```
+
+Connection diagnostics regression tests (Node 24):
+
+```sh
+node --test tests/dejen.test.mjs tests/dejen-monitor.test.mjs
+```
+
+Selecting an entry in Chrome's chooser is not a completed protocol connection.
+The app shows a connected status only after the identity/DPI/width handshake.
+For Dejen, focus changes do not silently reconnect raw GATT or clear a failed
+handshake diagnostic. The error identifies the failed stage, including a
+missing FFE0 service, instead of misreporting it as chooser cancellation.

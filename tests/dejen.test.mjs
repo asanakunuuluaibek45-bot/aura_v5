@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { commandFrame, FrameDecoder, rasterRow } from "../lib/dejen-protocol.mjs"
 import { connectDejen, printDejenRaster, DEJEN_SERVICE } from "../lib/dejen.ts"
+import { getPrintErrorMessage } from "../lib/printer-errors.ts"
 
 test("command checksum matches the published software-version example", () => {
   assert.deepEqual([...commandFrame(0x7c)], [0x1f, 0x7c, 0, 0x83])
@@ -106,6 +107,11 @@ function mockPrinter(options = {}) {
       },
       async getPrimaryService(uuid) {
         assert.equal(uuid, DEJEN_SERVICE)
+        if (options.missingService) {
+          const error = new Error("No Services matching UUID FFE0 found in Device.")
+          error.name = "NotFoundError"
+          throw error
+        }
         return { async getCharacteristics() { return [characteristic] } }
       },
     },
@@ -210,4 +216,29 @@ test("disconnect during identification rejects the pending query and does not pr
   await assert.rejects(() => connectDejen("DP27P"), /соединение прервано/)
   assert.equal(mock.device.gatt.connected, false)
   assert.ok(!mock.writes.some(isRaster))
+})
+
+test("missing service after selection is reported as a connection-stage error", async () => {
+  const mock = mockPrinter({ missingService: true })
+  await assert.rejects(() => connectDejen("DP27P"), (error) => {
+    assert.equal(error.name, "DejenConnectionError")
+    assert.match(getPrintErrorMessage(error), /устройство выбрано.*FFE0/)
+    assert.doesNotMatch(getPrintErrorMessage(error), /Принтер не выбран/)
+    return true
+  })
+  assert.equal(mock.device.gatt.connected, false)
+  assert.ok(!mock.writes.some(isRaster))
+})
+
+test("NotFoundError for a GATT service is not translated as chooser cancellation", () => {
+  const error = new Error("No Services matching UUID found")
+  error.name = "NotFoundError"
+  assert.match(getPrintErrorMessage(error), /Bluetooth-ресурс/)
+  assert.doesNotMatch(getPrintErrorMessage(error), /Принтер не выбран/)
+})
+
+test("actual chooser cancellation still has the appropriate instruction", () => {
+  const error = new Error("User cancelled the requestDevice() chooser.")
+  error.name = "NotFoundError"
+  assert.match(getPrintErrorMessage(error), /Принтер не выбран/)
 })

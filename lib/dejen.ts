@@ -7,6 +7,13 @@ const DEJEN_WRITE = "0000ffe1-0000-1000-8000-00805f9b34fb"
 export type DejenModelName = "DP27P" | "DP30P"
 export type DejenPrinterInfo = { name: string; dpi: number; printheadPx: number }
 
+function connectionError(stage: string, cause: unknown): Error {
+  const detail = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause)
+  const error = new Error(`Dejen — ${stage}. ${detail}`)
+  error.name = "DejenConnectionError"
+  return error
+}
+
 type Characteristic = {
   uuid: string
   properties: { write?: boolean; writeWithoutResponse?: boolean; notify?: boolean; indicate?: boolean }
@@ -168,10 +175,20 @@ export async function connectDejen(model: DejenModelName): Promise<DejenSession 
     bluetooth?: { requestDevice(options: unknown): Promise<DejenDevice> }
   }).bluetooth
   if (!bluetooth) throw new Error("Dejen: используйте Chrome на Android и HTTPS")
-  const device = await bluetooth.requestDevice({
-    filters: [{ namePrefix: model }],
-    optionalServices: [DEJEN_SERVICE],
-  })
+  let device: DejenDevice
+  try {
+    device = await bluetooth.requestDevice({
+      filters: [{ namePrefix: model }],
+      optionalServices: [DEJEN_SERVICE],
+    })
+  } catch (cause) {
+    if (cause instanceof Error && cause.name === "NotFoundError") {
+      const error = new Error(`Dejen ${model}: устройство не выбрано в окне Bluetooth. Выберите принтер и повторите подключение.`)
+      error.name = "PrinterChooserCancelled"
+      throw error
+    }
+    throw connectionError(`выбор устройства ${model}`, cause)
+  }
   if (activeSession?.device.id === device.id && !activeSession.closed && device.gatt?.connected) {
     if (!activeSession.info || !new RegExp(`^${model}(?:[-_ ]|$)`, "i").test(activeSession.info.name)) {
       throw new Error("Dejen: подключён другой принтер. Выберите устройство заново.")
@@ -182,34 +199,44 @@ export async function connectDejen(model: DejenModelName): Promise<DejenSession 
   const gatt = device.gatt
   if (!gatt) throw new Error("Dejen: устройство не предоставляет BLE GATT")
   let session: DejenSession | null = null
+  let stage = `подключение к ${model}`
   try {
     await bounded(gatt.connect(), 10000, "Dejen: истекло время подключения")
+    stage = `устройство выбрано, поиск BLE-сервиса FFE0 (${DEJEN_SERVICE})`
     const service = await bounded(gatt.getPrimaryService(DEJEN_SERVICE), 5000, "Dejen: сервис FFE0 недоступен")
+    stage = "чтение характеристик BLE-сервиса FFE0"
     const characteristics = await bounded(service.getCharacteristics(), 5000, "Dejen: не удалось прочитать BLE-характеристики")
     const tx = characteristics.find((c) => c.uuid.toLowerCase() === DEJEN_WRITE && (c.properties.write || c.properties.writeWithoutResponse))
     const rx = characteristics.find((c) => c.properties.notify || c.properties.indicate)
     if (!tx || !rx) throw new Error("Dejen: эта BLE-прошивка пока не поддерживается (нужны FFE0/FFE1 и уведомления)")
     session = new DejenSession(device, tx, rx)
+    stage = "включение ответов принтера"
     await bounded(rx.startNotifications(), 5000, "Dejen: не удалось включить ответы принтера")
+    stage = "инициализация BLE-протокола (команда 0x78)"
     await session.query(0x78, new Uint8Array([0x06]))
+    stage = "проверка модели (команда 0x79)"
     const nameBytes = await session.query(0x79)
     const name = new TextDecoder().decode(nameBytes).replace(/\0.*$/, "").trim()
     if (!new RegExp(`^${model}(?:[-_ ]|$)`, "i").test(name)) {
       throw new Error(`Dejen: выбран ${model}, но устройство сообщает «${name || "неизвестная модель"}». Печать заблокирована.`)
     }
+    stage = "проверка разрешения (команда 0x71)"
     const dpiBytes = await session.query(0x71)
-    const widthBytes = await session.query(0x72)
     const dpi = dpiBytes.length >= 2 ? (dpiBytes[0] << 8) | dpiBytes[1] : 0
-    const printheadPx = widthBytes.length >= 2 ? (widthBytes[0] << 8) | widthBytes[1] : 0
     if (dpi !== 300) throw new Error(`Dejen: принтер сообщил ${dpi || "неизвестное"} dpi вместо 300 dpi. Печать заблокирована, чтобы не исказить размер.`)
+    stage = "проверка ширины головки (команда 0x72)"
+    const widthBytes = await session.query(0x72)
+    const printheadPx = widthBytes.length >= 2 ? (widthBytes[0] << 8) | widthBytes[1] : 0
     if (printheadPx < 128 || printheadPx > 2048) throw new Error("Dejen: принтер не сообщил допустимую ширину головки")
     session.info = { name, dpi, printheadPx }
     activeSession = session
     return session as DejenSession & { info: DejenPrinterInfo }
   } catch (error) {
     if (session) session.dispose()
-    else gatt.disconnect()
-    throw error
+    else { try { gatt.disconnect() } catch { /* Preserve the original failure. */ } }
+    // A missing service also raises NotFoundError. Do not let the UI translate
+    // it into "no printer selected" after the user has already selected one.
+    throw connectionError(stage, error)
   }
 }
 
