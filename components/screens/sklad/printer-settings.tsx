@@ -135,14 +135,24 @@ export function PrinterSettings({ connection }: { connection: PrinterConnectionS
               >
                 {PRINTER_PROFILES.map((item) => (
                   <option key={item.key} value={item.key}>
-                    {item.displayName}
+                    {item.displayName}{item.driver === "dejen" ? " · 300 dpi · BLE (тест)" : ""}
                   </option>
                 ))}
               </select>
               <p className="text-[11px] text-muted-foreground">
-                {profile.dpi} dpi · печатаемая ширина {profile.printheadPx} px
+                {profile.driver === "dejen"
+                  ? `${profile.dpi} dpi · до ${profile.maxWidthMm} мм; фактическая ширина проверяется при подключении`
+                  : `${profile.dpi} dpi · печатаемая ширина ${profile.printheadPx} px`}
               </p>
             </div>
+
+            {profile.driver === "dejen" && (
+              <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:text-amber-200" role="note">
+                Экспериментальный BLE-драйвер для Chrome на Android. Поддерживается FFE0/FFE1 и этикетки с зазором.
+                Модель, 300 dpi и ширина проверяются по ответу устройства. Физический тест ещё не выполнен:
+                сначала подключитесь и напечатайте одну тестовую этикетку. Закройте WePrint перед подключением.
+              </p>
+            )}
 
             {!connection.bluetoothSupported && (
               <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-xs leading-5 text-destructive" role="alert">
