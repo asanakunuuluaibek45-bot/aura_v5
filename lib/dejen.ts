@@ -1,7 +1,9 @@
 import { commandFrame, FrameDecoder, rasterRow } from "./dejen-protocol.mjs"
 
-// FFE0/FFE1 are explicitly supported by the manufacturer's Android SDK
-// LPAPI-2026-01-08-R.jar. Other firmware/service variants are deliberately rejected.
+// E7810A71-... is the vendor service discovered by LPAPI Android SDK in its GATT
+// service scan; FFE0/FFE1 is the SDK's legacy serial-service fallback.
+// Other firmware/service variants are deliberately rejected.
+export const DEJEN_VENDOR_SERVICE = "e7810a71-73ae-499d-8c15-faa9aef0c3f2"
 export const DEJEN_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb"
 const DEJEN_WRITE = "0000ffe1-0000-1000-8000-00805f9b34fb"
 export type DejenModelName = "DP27P" | "DP30P"
@@ -31,7 +33,7 @@ type DejenDevice = {
     connected: boolean
     connect(): Promise<unknown>
     disconnect(): void
-    getPrimaryService(uuid: string): Promise<{ getCharacteristics(): Promise<Characteristic[]> }>
+    getPrimaryServices(): Promise<Array<{ uuid: string; getCharacteristics(): Promise<Characteristic[]> }>>
   } | null
   addEventListener(type: string, listener: () => void): void
   removeEventListener(type: string, listener: () => void): void
@@ -179,7 +181,7 @@ export async function connectDejen(model: DejenModelName): Promise<DejenSession 
   try {
     device = await bluetooth.requestDevice({
       filters: [{ namePrefix: model }],
-      optionalServices: [DEJEN_SERVICE],
+      optionalServices: [DEJEN_VENDOR_SERVICE, DEJEN_SERVICE],
     })
   } catch (cause) {
     if (cause instanceof Error && cause.name === "NotFoundError") {
@@ -202,15 +204,24 @@ export async function connectDejen(model: DejenModelName): Promise<DejenSession 
   let stage = `подключение к ${model}`
   try {
     await bounded(gatt.connect(), 10000, "Dejen: истекло время подключения")
-    stage = `устройство выбрано, поиск BLE-сервиса FFE0 (${DEJEN_SERVICE})`
-    const service = await bounded(gatt.getPrimaryService(DEJEN_SERVICE), 5000, "Dejen: сервис FFE0 недоступен")
-    stage = "чтение характеристик BLE-сервиса FFE0"
+    stage = `устройство выбрано, поиск BLE-сервиса Dejen (${DEJEN_VENDOR_SERVICE} или FFE0)`
+    const services = await bounded(gatt.getPrimaryServices(), 5000, "Dejen: не удалось прочитать BLE-сервисы")
+    const service = services.find((item) => item.uuid.toLowerCase() === DEJEN_VENDOR_SERVICE)
+      ?? services.find((item) => item.uuid.toLowerCase() === DEJEN_SERVICE)
+    if (!service) {
+      const visible = services.map((item) => item.uuid).join(", ") || "нет разрешённых сервисов"
+      throw new Error(`Dejen: поддерживаемый сервис E781/FFE0 не найден. Доступны: ${visible}`)
+    }
+    const serviceFamily = service.uuid.toLowerCase() === DEJEN_VENDOR_SERVICE ? "E781" : "FFE0"
+    stage = `чтение характеристик BLE-сервиса ${serviceFamily}`
     const characteristics = await bounded(service.getCharacteristics(), 5000, "Dejen: не удалось прочитать BLE-характеристики")
     const tx = characteristics.find((c) => c.uuid.toLowerCase() === DEJEN_WRITE && (c.properties.write || c.properties.writeWithoutResponse))
-    const rx = characteristics.find((c) => c.properties.notify || c.properties.indicate)
-    if (!tx || !rx) throw new Error("Dejen: эта BLE-прошивка пока не поддерживается (нужны FFE0/FFE1 и уведомления)")
+      ?? (serviceFamily === "E781" ? characteristics.find((c) => c.properties.write || c.properties.writeWithoutResponse) : undefined)
+    const rx = characteristics.find((c) => c !== tx && (c.properties.notify || c.properties.indicate))
+      ?? characteristics.find((c) => c === tx && (c.properties.notify || c.properties.indicate))
+    if (!tx || !rx) throw new Error(`Dejen: в сервисе ${serviceFamily} не найдены доступные характеристики записи и уведомлений`)
     session = new DejenSession(device, tx, rx)
-    stage = "включение ответов принтера"
+    stage = `включение ответов принтера (${serviceFamily})`
     await bounded(rx.startNotifications(), 5000, "Dejen: не удалось включить ответы принтера")
     stage = "инициализация BLE-протокола (команда 0x78)"
     await session.query(0x78, new Uint8Array([0x06]))

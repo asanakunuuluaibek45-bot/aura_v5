@@ -7,8 +7,34 @@ import { toast } from "sonner"
 import type { Canvas as FabricCanvas } from "fabric"
 import type { LabelSizeDef, PrinterProfile } from "@/lib/niimbot"
 import { printCanvas } from "@/lib/niimbot"
-import { getPrintErrorMessage } from "@/lib/printer-errors"
 import { cropPrintArea } from "../canvas/print"
+
+function getPrintErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "")
+  const name =
+    typeof error === "object" && error !== null && "name" in error
+      ? String(error.name)
+      : ""
+
+  if (name === "DejenPrintError") return message
+
+  if (
+    name === "NotFoundError" ||
+    /user cancelled the requestdevice(?:\(\))? chooser|no device selected|device selection.*cancel/i.test(message)
+  ) {
+    return "Принтер не выбран. Включите Bluetooth, выберите принтер в окне браузера и повторите печать."
+  }
+
+  if (name === "NotAllowedError") {
+    return "Браузеру не разрешён доступ к Bluetooth. Разрешите подключение и выберите принтер."
+  }
+
+  if (name === "NetworkError" || /\bGATT\b|disconnected|not connected/i.test(message)) {
+    return "Не удалось подключиться к принтеру. Проверьте, что он включён и находится рядом, затем повторите печать."
+  }
+
+  return message || "Ошибка при печати"
+}
 
 export function useLabelPrint(
   fabricRef:     React.RefObject<FabricCanvas | null>,

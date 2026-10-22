@@ -8,7 +8,10 @@ firmware compatibility or print alignment.
 ## Supported and fail-closed behavior
 
 - Profiles: Dejen DP27P and Dejen DP30P, requested resolution **300 dpi**.
-- Only the known FFE0 service / FFE1 writable characteristic is enabled.
+- The manufacturer's Android SDK scans the vendor E781 service and selects
+  writable/notify characteristics by properties; the legacy FFE0/FFE1
+  Bluetooth-serial service remains supported as a fallback. Other services are
+  rejected.
 - The driver reads the device-reported model, DPI and print-head width before
   any raster or paper-feed command. Wrong models, non-300-dpi units, absent
   responses and oversized rasters are rejected.
@@ -32,7 +35,8 @@ firmware compatibility or print alignment.
   DP30P support is assumed from that image: the device must report 300 dpi or
   printing is blocked.
 - [Manufacturer's Android SDK](https://en.detonger.com/software/Bluetooth%20Print%20Android%20SDK%20(Include%20API%20document).zip),
-  LPAPI-2026-01-08-R: FFE0/FFE1 service identifiers. SDK binaries are not bundled.
+  LPAPI-2026-01-08-R: vendor service UUID E7810A71-73AE-499D-8C15-FAA9AEF0C3F2;
+  legacy FFE0/FFE1 is also recognized. SDK binaries are not bundled.
 - [Published protocol notes](https://github.com/sb-child/dz-print/blob/master/protocol.md):
   framing, checksums, identity queries, settings and raster commands.
 - [Published status observations](https://github.com/sb-child/dz-print/blob/master/print-status.md).
@@ -66,4 +70,4 @@ Selecting an entry in Chrome's chooser is not a completed protocol connection.
 The app shows a connected status only after the identity/DPI/width handshake.
 For Dejen, focus changes do not silently reconnect raw GATT or clear a failed
 handshake diagnostic. The error identifies the failed stage, including a
-missing FFE0 service, instead of misreporting it as chooser cancellation.
+missing supported service, instead of misreporting it as chooser cancellation.

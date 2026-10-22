@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { commandFrame, FrameDecoder, rasterRow } from "../lib/dejen-protocol.mjs"
-import { connectDejen, printDejenRaster, DEJEN_SERVICE } from "../lib/dejen.ts"
+import { connectDejen, printDejenRaster, DEJEN_SERVICE, DEJEN_VENDOR_SERVICE } from "../lib/dejen.ts"
 import { getPrintErrorMessage } from "../lib/printer-errors.ts"
 
 test("command checksum matches the published software-version example", () => {
@@ -55,12 +55,18 @@ function mockPrinter(options = {}) {
   const listeners = new Map()
   const deviceListeners = new Map()
   let inFlight = false
-  const characteristic = {
-    uuid: options.badCharacteristic ? "unknown" : "0000ffe1-0000-1000-8000-00805f9b34fb",
-    properties: { write: true, notify: true },
+  const notificationCharacteristic = {
+    uuid: "e7810a73-73ae-499d-8c15-faa9aef0c3f2",
+    properties: { notify: true },
+    value: undefined,
     async startNotifications() {},
     addEventListener(type, listener) { listeners.set(type, listener) },
     removeEventListener(type) { listeners.delete(type) },
+  }
+  const characteristic = {
+    uuid: options.customService ? "e7810a72-73ae-499d-8c15-faa9aef0c3f2"
+      : options.badCharacteristic ? "unknown" : "0000ffe1-0000-1000-8000-00805f9b34fb",
+    properties: { write: true },
     async writeValueWithResponse(data) {
       assert.equal(inFlight, false, "GATT writes must not overlap")
       inFlight = true
@@ -85,8 +91,8 @@ function mockPrinter(options = {}) {
           // Deliver before the write promise settles, with nonzero DataView offsets.
           for (const part of [response.slice(0, 3), response.slice(3)]) {
             const padded = Uint8Array.from([99, ...part, 99])
-            characteristic.value = new DataView(padded.buffer, 1, part.length)
-            listeners.get("characteristicvaluechanged")?.({ target: characteristic })
+            notificationCharacteristic.value = new DataView(padded.buffer, 1, part.length)
+            listeners.get("characteristicvaluechanged")?.({ target: notificationCharacteristic })
           }
         }
         await new Promise((resolve) => setTimeout(resolve, 1))
@@ -105,14 +111,12 @@ function mockPrinter(options = {}) {
         this.connected = false
         deviceListeners.get("gattserverdisconnected")?.()
       },
-      async getPrimaryService(uuid) {
-        assert.equal(uuid, DEJEN_SERVICE)
+      async getPrimaryServices() {
         if (options.missingService) {
-          const error = new Error("No Services matching UUID FFE0 found in Device.")
-          error.name = "NotFoundError"
-          throw error
+          return []
         }
-        return { async getCharacteristics() { return [characteristic] } }
+        const uuid = options.serviceUuid ?? (options.customService ? DEJEN_VENDOR_SERVICE : DEJEN_SERVICE)
+        return [{ uuid, async getCharacteristics() { return [characteristic, notificationCharacteristic] } }]
       },
     },
     addEventListener(type, listener) { deviceListeners.set(type, listener) },
@@ -126,7 +130,7 @@ function mockPrinter(options = {}) {
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: { bluetooth: { async requestDevice(request) {
-      assert.deepEqual(request.optionalServices, [DEJEN_SERVICE])
+      assert.deepEqual(request.optionalServices, [DEJEN_VENDOR_SERVICE, DEJEN_SERVICE])
       return device
     } } },
   })
@@ -143,18 +147,25 @@ const isRaster = (b) => b[0] === 0x1f && b[1] === 0x2a
 
 test("both 300-dpi model handshakes are verified without feeding paper", async () => {
   for (const model of ["DP27P", "DP30P"]) {
-    const mock = mockPrinter({ name: `${model}-TEST`, head: model === "DP30P" ? 960 : 576 })
-    const session = await connectDejen(model)
-    assert.equal(session.info.dpi, 300)
-    assert.equal(session.info.name, `${model}-TEST`)
-    assert.ok(!mock.writes.some(isRaster))
-    assert.ok(!mock.writes.some((b) => b[0] === 0x0c || b[0] === 0x1b))
-    session.dispose()
+    for (const customService of [false, true]) {
+      const mock = mockPrinter({ name: `${model}-TEST`, head: model === "DP30P" ? 960 : 576, customService })
+      const session = await connectDejen(model)
+      assert.equal(session.info.dpi, 300)
+      assert.equal(session.info.name, `${model}-TEST`)
+      assert.ok(!mock.writes.some(isRaster))
+      assert.ok(!mock.writes.some((b) => b[0] === 0x0c || b[0] === 0x1b))
+      session.dispose()
+    }
   }
 })
 
 test("wrong model, 203 dpi and unknown BLE characteristics are blocked", async () => {
-  for (const options of [{ name: "DP30P-TEST" }, { dpi: 203 }, { badCharacteristic: true }]) {
+  for (const options of [
+    { name: "DP30P-TEST" },
+    { dpi: 203 },
+    { badCharacteristic: true },
+    { serviceUuid: "0000ffc0-0000-1000-8000-00805f9b34fb" },
+  ]) {
     const mock = mockPrinter(options)
     await assert.rejects(() => connectDejen("DP27P"))
     assert.equal(mock.device.gatt.connected, false)
@@ -192,6 +203,13 @@ test("copies are sequential and a partially failed raster is never retried", asy
   assert.equal(bad.device.gatt.connected, false)
 })
 
+test("vendor E781 service can transfer a label through separate custom write/notify characteristics", async () => {
+  const mock = mockPrinter({ customService: true, name: "DP30P-Y6085197", head: 960 })
+  await printDejenRaster(blackRow(8), 8, 1, { ...jobOptions, model: "DP30P" })
+  assert.equal(mock.writes.filter(isRaster).length, 1)
+  assert.equal(mock.writes.filter((b) => b[0] === 0x0c).length, 1)
+})
+
 test("invalid copy count and buffer size do not open the Bluetooth chooser", async () => {
   let requested = false
   Object.defineProperty(globalThis, "navigator", {
@@ -222,7 +240,8 @@ test("missing service after selection is reported as a connection-stage error", 
   const mock = mockPrinter({ missingService: true })
   await assert.rejects(() => connectDejen("DP27P"), (error) => {
     assert.equal(error.name, "DejenConnectionError")
-    assert.match(getPrintErrorMessage(error), /устройство выбрано.*FFE0/)
+    assert.match(getPrintErrorMessage(error), /устройство выбрано.*E781\/FFE0/)
+    assert.match(getPrintErrorMessage(error), /нет разрешённых сервисов/)
     assert.doesNotMatch(getPrintErrorMessage(error), /Принтер не выбран/)
     return true
   })

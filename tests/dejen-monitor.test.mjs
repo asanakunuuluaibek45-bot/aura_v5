@@ -31,11 +31,7 @@ test("failed Dejen handshake stays disconnected and retains its diagnostic on fo
         this.connected = false
         deviceEvents.get("gattserverdisconnected")?.()
       },
-      async getPrimaryService() {
-        const error = new Error("No Services matching UUID found in Device.")
-        error.name = "NotFoundError"
-        throw error
-      },
+      async getPrimaryServices() { return [] },
     },
     addEventListener(type, listener) { deviceEvents.set(type, listener) },
     removeEventListener(type) { deviceEvents.delete(type) },
@@ -61,7 +57,7 @@ test("failed Dejen handshake stays disconnected and retains its diagnostic on fo
   })
   const printer = await import("../lib/niimbot.ts")
   printer.startPrinterConnectionMonitor()
-  await assert.rejects(() => printer.identifyPrinter("dejen-dp27p"), /поиск BLE-сервиса FFE0/)
+  await assert.rejects(() => printer.identifyPrinter("dejen-dp27p"), /поиск BLE-сервиса Dejen/)
   const failed = printer.getPrinterConnectionSnapshot()
   assert.equal(failed.status, "disconnected")
   assert.match(failed.error, /FFE0/)
