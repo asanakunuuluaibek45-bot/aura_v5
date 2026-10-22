@@ -256,8 +256,10 @@ function watchPrinterDevice(device: BluetoothDeviceLike) {
   activePrinterDevice = device
   disconnectListener = () => {
     if (readStoredDeviceId() !== device.id) return
-    publishPrinterSnapshot({ status: "disconnected", error: null })
-    retryPrinterConnection(device, 0)
+    const dejen = getPrinterProfile(readStoredPrinterModel()).driver === "dejen"
+    publishPrinterSnapshot({ status: "disconnected", error: dejen ? printerSnapshot.error : null })
+    // A raw GATT reconnect is not a successful Dejen protocol handshake.
+    if (!dejen) retryPrinterConnection(device, 0)
   }
   device.addEventListener?.("gattserverdisconnected", disconnectListener)
 }
@@ -281,6 +283,13 @@ function retryPrinterConnection(device: BluetoothDeviceLike, attempt: number) {
 }
 
 async function restoreRememberedPrinter() {
+  if (getPrinterProfile(readStoredPrinterModel()).driver === "dejen") {
+    const validatedLiveConnection = Boolean(activePrinterDevice?.gatt?.connected) && printerSnapshot.status === "connected"
+    // Preserve the diagnostic until an explicit successful connection. Focus
+    // must not turn a failed handshake into a green 'connected' status.
+    publishPrinterSnapshot({ status: validatedLiveConnection ? "connected" : "disconnected" })
+    return
+  }
   const deviceId = readStoredDeviceId()
   if (!deviceId) {
     const status = activePrinterDevice?.gatt?.connected ? "connected" : "disconnected"
@@ -402,7 +411,7 @@ async function withPrinterDeviceSelection<T>(
     const device = devices.find((item) => item.id === deviceId) ?? activePrinterDevice
     if (device && (!deviceId || device.id === deviceId)) {
       watchPrinterDevice(device)
-      if (!device.gatt?.connected) {
+      if (!device.gatt?.connected && getPrinterProfile(modelKey).driver !== "dejen") {
         try {
           await device.gatt?.connect()
         } catch {
