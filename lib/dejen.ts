@@ -312,17 +312,16 @@ export async function printDejenRaster(
   if (!Number.isFinite(options.density)) throw new Error("Dejen: недопустимая плотность")
   const session = await connectDejen(options.model)
   if (width > session.info.printheadPx) throw new Error(`Dejen: макет ${width} px шире головки ${session.info.printheadPx} px`)
+  let printTransmissionStarted = false
   try {
     for (let copy = 0; copy < options.copies; copy++) {
       await session.waitReady()
-      const paper = await session.query(0x42, new Uint8Array([0x02])) // Adhesive/gap labels only.
-      if (paper[0] !== 0x02) throw new Error("Dejen: принтер не подтвердил режим этикеток с зазором")
-      const darkness = Math.round(Math.max(1, Math.min(5, options.density)) * 2 - 1)
-      const density = await session.query(0x43, new Uint8Array([darkness]))
-      if (density[0] !== darkness) throw new Error("Dejen: принтер не подтвердил плотность")
-      await session.write(commandFrame(0x27, new Uint8Array([Math.ceil(width / 8)])))
+      // Follow the working Web Bluetooth flow: use the printer's saved paper
+      // and darkness settings rather than waiting for unsupported 0x42/0x43
+      // read-backs before the print job.
       const job = dothanTechPrintJob(rgba, width, height)
       let lastProgress = -1
+      printTransmissionStarted = true
       await session.write(job, (fraction) => {
         const current = Math.floor(fraction * 100)
         if (current !== lastProgress) {
@@ -335,7 +334,10 @@ export async function printDejenRaster(
     options.onProgress?.("Данные переданы Dejen. Проверьте напечатанную этикетку.")
   } catch (cause) {
     session.dispose()
-    const error = new Error(`Передача Dejen прервана: ${cause instanceof Error ? cause.message : "ошибка"}. Этикетка могла напечататься частично. Проверьте принтер перед повтором.`)
+    const outcome = printTransmissionStarted
+      ? "Этикетка могла напечататься полностью или частично; проверьте принтер перед повтором."
+      : "Данные этикетки не передавались; проверьте состояние принтера и повторите подключение."
+    const error = new Error(`Передача Dejen прервана: ${cause instanceof Error ? cause.message : "ошибка"}. ${outcome}`)
     error.name = "DejenPrintError"
     throw error
   }

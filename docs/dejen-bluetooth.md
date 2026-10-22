@@ -16,7 +16,9 @@ firmware compatibility or print alignment.
   responses and oversized rasters are rejected.
 - The profile width limits are conservative estimates from 48 mm / 80 mm
   advertised printable widths. Actual head width is queried at runtime.
-- Adhesive labels with gaps are the only configured paper mode.
+- Print templates target adhesive labels with gaps. The job uses the printer's
+  saved media/darkness settings; change these in the manufacturer's app first
+  if needed.
 - Writes are sequential, at most 20 bytes, acknowledged where supported, and
   paced. A failed print is never automatically retried.
 - “Data sent” is not a claim that physical output has been inspected.

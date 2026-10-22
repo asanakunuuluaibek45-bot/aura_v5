@@ -237,8 +237,10 @@ test("vendor E781 service can transfer a label through separate custom write/not
 test("Detonger Web Bluetooth FF00 profile uses FF02 for writes and FF01 for replies", async () => {
   const mock = mockPrinter({ serviceUuid: "0000ff00-0000-1000-8000-00805f9b34fb", name: "DP30P-Y6085197", head: 960 })
   await printDejenRaster(blackRow(8), 8, 1, { ...jobOptions, model: "DP30P" })
-  assert.equal(receivedFrames(mock).filter((frame) => frame.command === 0x21).length, 1)
-  assert.equal(receivedFrames(mock).filter((frame) => frame.command === 0x28).length, 1)
+  const frames = receivedFrames(mock)
+  assert.equal(frames.filter((frame) => frame.command === 0x21).length, 1)
+  assert.equal(frames.filter((frame) => frame.command === 0x28).length, 1)
+  assert.ok(!frames.some((frame) => frame.command === 0x42 || frame.command === 0x43))
 })
 
 test("legacy FFE0 profile uses FFE2 for writes and FFE1 for replies", async () => {
