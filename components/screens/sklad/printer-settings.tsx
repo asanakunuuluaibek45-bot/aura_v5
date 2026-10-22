@@ -148,7 +148,7 @@ export function PrinterSettings({ connection }: { connection: PrinterConnectionS
 
             {profile.driver === "dejen" && (
               <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-xs leading-5 text-amber-800 dark:text-amber-200" role="note">
-                Экспериментальный BLE-драйвер для Chrome на Android. Поддерживаются BLE-сервисы Dejen E781 и FFE0/FFE1; этикетки с зазором.
+                Экспериментальный BLE-драйвер для Chrome на Android. Поддерживаются BLE-профили FF00, FFE0 и E781; этикетки с зазором.
                 Модель, 300 dpi и ширина проверяются по ответу устройства. Физический тест ещё не выполнен:
                 сначала подключитесь и напечатайте одну тестовую этикетку. Закройте WePrint перед подключением.
               </p>

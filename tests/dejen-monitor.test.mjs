@@ -57,7 +57,7 @@ test("failed Dejen handshake stays disconnected and retains its diagnostic on fo
   })
   const printer = await import("../lib/niimbot.ts")
   printer.startPrinterConnectionMonitor()
-  await assert.rejects(() => printer.identifyPrinter("dejen-dp27p"), /поиск BLE-сервиса Dejen/)
+  await assert.rejects(() => printer.identifyPrinter("dejen-dp27p"), /поиск BLE-сервисов Dejen/)
   const failed = printer.getPrinterConnectionSnapshot()
   assert.equal(failed.status, "disconnected")
   assert.match(failed.error, /FFE0/)

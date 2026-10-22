@@ -1,11 +1,33 @@
-import { commandFrame, FrameDecoder, rasterRow } from "./dejen-protocol.mjs"
+import { commandFrame, FrameDecoder, dothanTechPrintJob } from "./dejen-protocol.mjs"
 
-// E7810A71-... is the vendor service discovered by LPAPI Android SDK in its GATT
-// service scan; FFE0/FFE1 is the SDK's legacy serial-service fallback.
-// Other firmware/service variants are deliberately rejected.
+// UUIDs and characteristic pairs are from the user-provided Detonger Web
+// Bluetooth reference, with the manufacturer's E781 profile retained.
 export const DEJEN_VENDOR_SERVICE = "e7810a71-73ae-499d-8c15-faa9aef0c3f2"
-export const DEJEN_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb"
-const DEJEN_WRITE = "0000ffe1-0000-1000-8000-00805f9b34fb"
+export const DEJEN_SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb"
+const DEJEN_WRITE = "0000ff02-0000-1000-8000-00805f9b34fb"
+const DEJEN_NOTIFY = "0000ff01-0000-1000-8000-00805f9b34fb"
+const NIIMBOT_SERIAL_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb"
+const NIIMBOT_SERIAL_WRITE = "0000ffe2-0000-1000-8000-00805f9b34fb"
+const NIIMBOT_SERIAL_NOTIFY = "0000ffe1-0000-1000-8000-00805f9b34fb"
+const DEJEN_SUPPORTED_SERVICES = [
+  DEJEN_SERVICE,
+  NIIMBOT_SERIAL_SERVICE,
+  "ffffff00-0000-1000-8000-00805f9b34fb",
+  "000018f0-0000-1000-8000-00805f9b34fb",
+  DEJEN_VENDOR_SERVICE,
+  "49535343-fe7d-4ae5-8fa9-9fafd205e45a",
+  "49535343-8841-43f4-a8d4-ecbe34729bb3",
+]
+const DEJEN_OPTIONAL_SERVICES = [
+  DEJEN_SERVICE,
+  NIIMBOT_SERIAL_SERVICE,
+  "ffffff00-0000-1000-8000-00805f9b34fb",
+  "000018f0-0000-1000-8000-00805f9b34fb",
+  "0000180a-0000-1000-8000-00805f9b34fb",
+  DEJEN_VENDOR_SERVICE,
+  "49535343-fe7d-4ae5-8fa9-9fafd205e45a",
+  "49535343-8841-43f4-a8d4-ecbe34729bb3",
+]
 export type DejenModelName = "DP27P" | "DP30P"
 export type DejenPrinterInfo = { name: string; dpi: number; printheadPx: number }
 
@@ -110,7 +132,7 @@ class DejenSession {
     try { this.device.gatt?.disconnect() } catch { /* Already disconnected. */ }
   }
 
-  async write(data: Uint8Array) {
+  async write(data: Uint8Array, onProgress?: (fraction: number) => void) {
     // 20-byte ATT payload works without assuming an Android-negotiated MTU.
     // No retries: retrying a partially transmitted print can duplicate a label.
     for (let offset = 0; offset < data.length; offset += 20) {
@@ -133,6 +155,7 @@ class DejenSession {
         throw error
       }
       await delay(this.tx.properties.write ? 10 : 20)
+      onProgress?.(Math.min(1, (offset + chunk.length) / data.length))
     }
   }
 
@@ -181,7 +204,7 @@ export async function connectDejen(model: DejenModelName): Promise<DejenSession 
   try {
     device = await bluetooth.requestDevice({
       filters: [{ namePrefix: model }],
-      optionalServices: [DEJEN_VENDOR_SERVICE, DEJEN_SERVICE],
+      optionalServices: DEJEN_OPTIONAL_SERVICES,
     })
   } catch (cause) {
     if (cause instanceof Error && cause.name === "NotFoundError") {
@@ -204,27 +227,45 @@ export async function connectDejen(model: DejenModelName): Promise<DejenSession 
   let stage = `подключение к ${model}`
   try {
     await bounded(gatt.connect(), 10000, "Dejen: истекло время подключения")
-    stage = `устройство выбрано, поиск BLE-сервиса Dejen (${DEJEN_VENDOR_SERVICE} или FFE0)`
+    stage = `устройство выбрано, поиск BLE-сервисов Dejen (FF00, FFE0, E781)`
     const services = await bounded(gatt.getPrimaryServices(), 5000, "Dejen: не удалось прочитать BLE-сервисы")
-    const service = services.find((item) => item.uuid.toLowerCase() === DEJEN_VENDOR_SERVICE)
-      ?? services.find((item) => item.uuid.toLowerCase() === DEJEN_SERVICE)
-    if (!service) {
-      const visible = services.map((item) => item.uuid).join(", ") || "нет разрешённых сервисов"
-      throw new Error(`Dejen: поддерживаемый сервис E781/FFE0 не найден. Доступны: ${visible}`)
+    const candidates = DEJEN_SUPPORTED_SERVICES
+      .map((uuid) => services.find((item) => item.uuid.toLowerCase() === uuid))
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    let selected: { service: (typeof services)[number]; serviceUuid: string; tx: Characteristic; rx: Characteristic } | null = null
+    for (const service of candidates) {
+      const serviceUuid = service.uuid.toLowerCase()
+      stage = `чтение характеристик BLE-сервиса ${service.uuid}`
+      const characteristics = await bounded(service.getCharacteristics(), 5000, "Dejen: не удалось прочитать BLE-характеристики")
+      const isSerialService = serviceUuid === NIIMBOT_SERIAL_SERVICE
+      const txUuid = isSerialService ? NIIMBOT_SERIAL_WRITE : DEJEN_WRITE
+      const rxUuid = isSerialService ? NIIMBOT_SERIAL_NOTIFY : DEJEN_NOTIFY
+      const tx = characteristics.find((c) => c.uuid.toLowerCase() === txUuid && (c.properties.write || c.properties.writeWithoutResponse))
+        ?? (serviceUuid !== DEJEN_SERVICE && isSerialService === false
+          ? characteristics.find((c) => c.properties.write || c.properties.writeWithoutResponse)
+          : undefined)
+      const rx = characteristics.find((c) => c.uuid.toLowerCase() === rxUuid && (c.properties.notify || c.properties.indicate))
+        ?? (serviceUuid !== DEJEN_SERVICE && !isSerialService
+          ? characteristics.find((c) => c !== tx && (c.properties.notify || c.properties.indicate))
+            ?? characteristics.find((c) => c === tx && (c.properties.notify || c.properties.indicate))
+          : undefined)
+      if (tx && rx) {
+        selected = { service, serviceUuid, tx, rx }
+        break
+      }
     }
-    const serviceFamily = service.uuid.toLowerCase() === DEJEN_VENDOR_SERVICE ? "E781" : "FFE0"
-    stage = `чтение характеристик BLE-сервиса ${serviceFamily}`
-    const characteristics = await bounded(service.getCharacteristics(), 5000, "Dejen: не удалось прочитать BLE-характеристики")
-    const tx = characteristics.find((c) => c.uuid.toLowerCase() === DEJEN_WRITE && (c.properties.write || c.properties.writeWithoutResponse))
-      ?? (serviceFamily === "E781" ? characteristics.find((c) => c.properties.write || c.properties.writeWithoutResponse) : undefined)
-    const rx = characteristics.find((c) => c !== tx && (c.properties.notify || c.properties.indicate))
-      ?? characteristics.find((c) => c === tx && (c.properties.notify || c.properties.indicate))
-    if (!tx || !rx) throw new Error(`Dejen: в сервисе ${serviceFamily} не найдены доступные характеристики записи и уведомлений`)
+    if (!candidates.length) {
+      const visible = services.map((item) => item.uuid).join(", ") || "нет разрешённых сервисов"
+      throw new Error(`Dejen: сервис FF00/FFE0/E781 не найден. Доступны: ${visible}`)
+    }
+    if (!selected) throw new Error("Dejen: подходящие характеристики записи и уведомлений не найдены в разрешённых BLE-сервисах")
+    const { serviceUuid, tx, rx } = selected
+    const serviceFamily = serviceUuid === DEJEN_SERVICE ? "FF00"
+      : serviceUuid === NIIMBOT_SERIAL_SERVICE ? "FFE0"
+        : serviceUuid === DEJEN_VENDOR_SERVICE ? "E781" : selected.service.uuid
     session = new DejenSession(device, tx, rx)
     stage = `включение ответов принтера (${serviceFamily})`
     await bounded(rx.startNotifications(), 5000, "Dejen: не удалось включить ответы принтера")
-    stage = "инициализация BLE-протокола (команда 0x78)"
-    await session.query(0x78, new Uint8Array([0x06]))
     stage = "проверка модели (команда 0x79)"
     const nameBytes = await session.query(0x79)
     const name = new TextDecoder().decode(nameBytes).replace(/\0.*$/, "").trim()
@@ -233,7 +274,7 @@ export async function connectDejen(model: DejenModelName): Promise<DejenSession 
     }
     stage = "проверка разрешения (команда 0x71)"
     const dpiBytes = await session.query(0x71)
-    const dpi = dpiBytes.length >= 2 ? (dpiBytes[0] << 8) | dpiBytes[1] : 0
+    const dpi = dpiBytes.length >= 2 ? (dpiBytes[0] << 8) | dpiBytes[1] : dpiBytes[0] ?? 0
     if (dpi !== 300) throw new Error(`Dejen: принтер сообщил ${dpi || "неизвестное"} dpi вместо 300 dpi. Печать заблокирована, чтобы не исказить размер.`)
     stage = "проверка ширины головки (команда 0x72)"
     const widthBytes = await session.query(0x72)
@@ -274,18 +315,21 @@ export async function printDejenRaster(
   try {
     for (let copy = 0; copy < options.copies; copy++) {
       await session.waitReady()
-      await session.write(new Uint8Array([0x1b, 0x40]))
       const paper = await session.query(0x42, new Uint8Array([0x02])) // Adhesive/gap labels only.
       if (paper[0] !== 0x02) throw new Error("Dejen: принтер не подтвердил режим этикеток с зазором")
       const darkness = Math.round(Math.max(1, Math.min(5, options.density)) * 2 - 1)
       const density = await session.query(0x43, new Uint8Array([darkness]))
       if (density[0] !== darkness) throw new Error("Dejen: принтер не подтвердил плотность")
       await session.write(commandFrame(0x27, new Uint8Array([Math.ceil(width / 8)])))
-      for (let y = 0; y < height; y++) {
-        await session.write(rasterRow(rgba.subarray(y * width * 4, (y + 1) * width * 4), width))
-        if (y % 32 === 0) options.onProgress?.(`Передача Dejen: ${Math.round((y + 1) / height * 100)}% · ${copy + 1}/${options.copies}`)
-      }
-      await session.write(new Uint8Array([0x0c]))
+      const job = dothanTechPrintJob(rgba, width, height)
+      let lastProgress = -1
+      await session.write(job, (fraction) => {
+        const current = Math.floor(fraction * 100)
+        if (current !== lastProgress) {
+          lastProgress = current
+          options.onProgress?.(`Передача Dejen: ${current}% · ${copy + 1}/${options.copies}`)
+        }
+      })
       await session.waitReady()
     }
     options.onProgress?.("Данные переданы Dejen. Проверьте напечатанную этикетку.")
