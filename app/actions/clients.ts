@@ -38,7 +38,49 @@ export async function getClients(): Promise<Customer[]> {
   if (clientsError) throw clientsError
   if (!clients || clients.length === 0) return []
 
-  return clients as unknown as Customer[]
+  const typedClients = clients as unknown as Customer[]
+  const customerIds = typedClients.map((client) => client.id)
+  const { data: creditSales, error: creditSalesError } = await supabase
+    .from("sales")
+    .select("id, customer_id, credit_balance, credit_due_date")
+    .eq("shop_id", shopId)
+    .eq("payment_method", "credit")
+    .gt("credit_balance", 0)
+    .is("deleted_at", null)
+    .in("customer_id", customerIds)
+
+  if (creditSalesError) {
+    const missingCreditMigration = ["42703", "42P01", "PGRST202", "PGRST204", "PGRST205"].includes(creditSalesError.code ?? "")
+    if (missingCreditMigration) return typedClients
+    throw new Error("Не удалось загрузить просроченные долги: " + creditSalesError.message)
+  }
+
+  const todayParts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Bishkek",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date())
+  const today = ["year", "month", "day"].map((key) => todayParts.find((part) => part.type === key)?.value ?? "").join("-")
+  const overdueByCustomer = new Map<string, Array<{ id: string; credit_due_date: string; credit_balance: number }>>()
+
+  for (const sale of creditSales ?? []) {
+    const dueDate = typeof sale.credit_due_date === "string" ? sale.credit_due_date.slice(0, 10) : ""
+    const balance = Number(sale.credit_balance) || 0
+    if (!sale.customer_id || !dueDate || dueDate >= today || balance <= 0) continue
+    const list = overdueByCustomer.get(sale.customer_id) ?? []
+    list.push({ id: sale.id, credit_due_date: dueDate, credit_balance: balance })
+    overdueByCustomer.set(sale.customer_id, list)
+  }
+
+  return typedClients.map((client) => {
+    const overdueCreditSales = overdueByCustomer.get(client.id) ?? []
+    return {
+      ...client,
+      overdue_credit_sales: overdueCreditSales,
+      overdue_debt_balance: overdueCreditSales.reduce((sum, sale) => sum + sale.credit_balance, 0),
+    }
+  })
 }
 
 export type ClientPurchase = {
@@ -135,6 +177,30 @@ export async function payCustomerDebt(input: {
   if (!row) throw new Error("Платёж не был записан")
   revalidatePath("/crm")
   return row as CustomerDebtOperation
+}
+
+/** Продлить срок конкретной просроченной продажи в долг. */
+export async function extendCustomerCreditDueDate(input: {
+  saleId: string
+  dueDate: string
+}): Promise<void> {
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) throw new Error("Ваш аккаунт не привязан к магазину")
+  if (!input.saleId || !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
+    throw new Error("Укажите продажу и новую дату оплаты")
+  }
+
+  const { error } = await supabase.rpc("extend_customer_credit_due_date", {
+    _sale_id: input.saleId,
+    _due_date: input.dueDate,
+  })
+  if (error) {
+    if (["42883", "42P01", "42703", "PGRST202", "PGRST204", "PGRST205"].includes(error.code ?? "")) {
+      throw new Error("Сначала примените SQL-миграцию supabase/migrations/20261022_customer_credit_due_dates.sql")
+    }
+    throw new Error("Не удалось продлить срок долга: " + error.message)
+  }
+  revalidatePath("/crm")
 }
 
 /** Добавить/убрать клиента из чёрного списка. */

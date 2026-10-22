@@ -82,6 +82,15 @@ function DeferredSalesHistory(props: SalesHistoryProps) {
   )
 }
 
+function dateAfterDays(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return year + "-" + month + "-" + day
+}
+
 export function KassaScreen({
   products,
   profile,
@@ -116,6 +125,7 @@ export function KassaScreen({
   const [cart, setCart] = useState<ExtendedSaleItem[]>([])
   const [bonusUsed, setBonusUsed] = useState("")
   const [payment, setPayment] = useState("cash")
+  const [creditDueDate, setCreditDueDate] = useState(() => dateAfterDays(30))
   const [payCash, setPayCash] = useState("")
   const [payElectronic, setPayElectronic] = useState("")
   const [customerName, setCustomerName] = useState("")
@@ -153,6 +163,7 @@ export function KassaScreen({
       setCustomerPhone("")
       setCustomerId(null)
       setPayment("cash")
+      setCreditDueDate(dateAfterDays(30))
       setIsLoaded(true)
       return
     }
@@ -354,6 +365,7 @@ export function KassaScreen({
     setCustomerPhone("")
     setCustomerId(null)
     setPayment("cash")
+    setCreditDueDate(dateAfterDays(30))
     setQuery("")
     if (!onlineOnly) localStorage.removeItem(cartStorageKey)
     toast.info("Чек полностью сброшен")
@@ -406,6 +418,7 @@ export function KassaScreen({
         discount: totalDiscountAmount,
         bonus_used: bonusNum,
         payment_method: payment,
+        credit_due_date: payment === "credit" ? creditDueDate : undefined,
         amount_cash: payment === "mixed" ? Number(payCash) || 0 : undefined,
         amount_electronic: payment === "mixed" ? Number(payElectronic) || 0 : undefined,
         customer_name: customerName,
@@ -443,6 +456,10 @@ export function KassaScreen({
     if (cart.length === 0) return
     if (payment === "credit" && !customerId) {
       toast.error("Для продажи в долг выберите клиента из списка")
+      return
+    }
+    if (payment === "credit" && creditDueDate < dateAfterDays(0)) {
+      toast.error("Срок оплаты не может быть в прошлом")
       return
     }
     if (payment === "credit" && !navigator.onLine) {
@@ -529,6 +546,8 @@ export function KassaScreen({
             bonusUsed={bonusUsed}
             setBonusUsed={setBonusUsed}
             payment={payment}
+            creditDueDate={creditDueDate}
+            setCreditDueDate={setCreditDueDate}
             payCash={payCash}
             setPayCash={setPayCash}
             payElectronic={payElectronic}
