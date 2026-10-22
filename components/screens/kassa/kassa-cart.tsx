@@ -51,6 +51,8 @@ interface KassaCartProps {
   bonusUsed: string
   setBonusUsed: (bonus: string) => void
   payment: string
+  creditDueDate: string
+  setCreditDueDate: (value: string) => void
   setPayment: (payment: string | null) => void
   payCash: string
   setPayCash: (v: string) => void
@@ -94,6 +96,8 @@ export function KassaCart({
   bonusUsed,
   setBonusUsed,
   payment,
+  creditDueDate,
+  setCreditDueDate,
   setPayment,
   payCash,
   setPayCash,
@@ -586,8 +590,20 @@ export function KassaCart({
             </div>
 
             {payment === "credit" && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
-                Сумма будет записана как долг, а не в кассу. Выберите зарегистрированного клиента; для оформления нужен интернет.
+              <div className="space-y-2">
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
+                  Сумма будет записана как долг, а не в кассу. Выберите зарегистрированного клиента; для оформления нужен интернет.
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="credit-due-date" className="text-[10px] text-muted-foreground">Срок оплаты</Label>
+                  <Input
+                    id="credit-due-date"
+                    type="date"
+                    value={creditDueDate}
+                    onChange={(event) => setCreditDueDate(event.target.value)}
+                    className="h-9 bg-background text-xs"
+                  />
+                </div>
               </div>
             )}
 
