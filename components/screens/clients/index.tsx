@@ -95,6 +95,12 @@ function addDaysToDate(value: string, days: number) {
   return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0")
 }
 
+function formatCreditDate(value: string | null | undefined) {
+  if (!value) return "не указан"
+  const [year, month, day] = value.split("-")
+  return day + "." + month + "." + year
+}
+
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat("ru", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(iso))
 }
@@ -272,7 +278,7 @@ export function ClientsScreen({
     if (!sale) return
     setExtensionClient(client)
     setExtensionSaleId(sale.id)
-    const baseDate = sale.credit_due_date > localDateString() ? sale.credit_due_date : localDateString()
+    const baseDate = (sale.credit_due_date ?? "") > localDateString() ? sale.credit_due_date! : localDateString()
     setExtensionDueDate(addDaysToDate(baseDate, 30))
   }
 
@@ -281,7 +287,11 @@ export function ClientsScreen({
 
   const saveDebtExtension = async () => {
     if (!selectedExtensionSale || !extensionDueDate) return
-    if (extensionDueDate <= selectedExtensionSale.credit_due_date) {
+    if (extensionDueDate < localDateString()) {
+      toast.error("Новая дата не может быть в прошлом")
+      return
+    }
+    if (extensionDueDate <= (selectedExtensionSale.credit_due_date ?? "")) {
       toast.error("Новая дата должна быть позже текущего срока")
       return
     }
@@ -404,6 +414,14 @@ export function ClientsScreen({
                           <Badge variant="destructive" className="text-[10px] px-1.5 py-0">ЧС</Badge>
                         )}
                       </div>
+                      {(c.credit_debt_balance ?? c.debt_balance ?? 0) > 0 && (
+                        <div className="mt-1 space-y-0.5 text-xs">
+                          <p className="font-semibold">Долг: {formatSom(c.credit_debt_balance ?? c.debt_balance ?? 0)}</p>
+                          <p className={cn("text-muted-foreground", (c.overdue_debt_balance ?? 0) > 0 && "text-destructive")}>
+                            Ближайший срок возврата: {formatCreditDate(c.next_credit_due_date)}
+                          </p>
+                        </div>
+                      )}
                       {(c.overdue_debt_balance ?? 0) > 0 && (
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-destructive">
                           <span className="font-semibold">Просрочено: {formatSom(c.overdue_debt_balance ?? 0)}</span>
@@ -522,6 +540,14 @@ export function ClientsScreen({
                   </div>
                 </div>
 
+                {(c.credit_debt_balance ?? c.debt_balance ?? 0) > 0 && (
+                  <div className="rounded-lg bg-muted/50 px-2.5 py-2 text-xs">
+                    <p className="font-semibold">Долг: {formatSom(c.credit_debt_balance ?? c.debt_balance ?? 0)}</p>
+                    <p className={cn("mt-1 text-muted-foreground", (c.overdue_debt_balance ?? 0) > 0 && "text-destructive")}>
+                      Ближайший срок возврата: {formatCreditDate(c.next_credit_due_date)}
+                    </p>
+                  </div>
+                )}
                 {(c.overdue_debt_balance ?? 0) > 0 && (
                   <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-xs text-destructive">
                     <span className="font-semibold">Просрочено: {formatSom(c.overdue_debt_balance ?? 0)}</span>
@@ -611,7 +637,7 @@ export function ClientsScreen({
       )}
 
       <Dialog open={Boolean(extensionClient)} onOpenChange={(open) => { if (!open) setExtensionClient(null) }}>
-        <DialogContent className="max-w-md w-full">
+        <DialogContent className="max-w-md w-full overflow-visible">
           <DialogHeader>
             <DialogTitle>Продлить срок долга</DialogTitle>
           </DialogHeader>
@@ -626,7 +652,7 @@ export function ClientsScreen({
                     const sale = extensionSales.find((item) => item.id === value)
                     setExtensionSaleId(value ?? "")
                     if (sale) {
-                      const baseDate = sale.credit_due_date > localDateString() ? sale.credit_due_date : localDateString()
+                      const baseDate = (sale.credit_due_date ?? "") > localDateString() ? sale.credit_due_date! : localDateString()
                       setExtensionDueDate(addDaysToDate(baseDate, 30))
                     }
                   }}
@@ -635,7 +661,7 @@ export function ClientsScreen({
                   <SelectContent>
                     {extensionSales.map((sale) => (
                       <SelectItem key={sale.id} value={sale.id}>
-                        {sale.credit_due_date} · {formatSom(sale.credit_balance)}
+                        {formatCreditDate(sale.credit_due_date)} · {formatSom(sale.credit_balance)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -654,7 +680,10 @@ export function ClientsScreen({
                 type="date"
                 value={extensionDueDate}
                 onChange={(event) => setExtensionDueDate(event.target.value)}
-                min={selectedExtensionSale ? addDaysToDate(selectedExtensionSale.credit_due_date, 1) : undefined}
+                min={selectedExtensionSale && addDaysToDate(selectedExtensionSale.credit_due_date ?? localDateString(), 1) > localDateString()
+                  ? addDaysToDate(selectedExtensionSale.credit_due_date ?? localDateString(), 1)
+                  : localDateString()}
+                className="h-11 min-w-0 text-base [color-scheme:light] dark:[color-scheme:dark]"
               />
             </div>
             <div className="flex gap-2">

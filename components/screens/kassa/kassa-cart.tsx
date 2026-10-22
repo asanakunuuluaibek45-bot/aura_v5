@@ -16,6 +16,7 @@ import {
   Phone,
   Gift,
   CreditCard,
+  CalendarDays,
   Tag,
   ChevronDown
 } from "lucide-react"
@@ -70,6 +71,19 @@ interface KassaCartProps {
   handleReset: () => void
 }
 
+function todayDateInput() {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Bishkek", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date())
+  return ["year", "month", "day"].map((key) => parts.find((part) => part.type === key)?.value ?? "").join("-")
+}
+
+function displayDateInput(value: string) {
+  if (!value) return "Выберите дату"
+  const [year, month, day] = value.split("-")
+  return day + "." + month + "." + year
+}
+
 export function KassaCart({
   cart,
   isMobile,
@@ -118,6 +132,9 @@ export function KassaCart({
   const autocompleteRef = useRef<HTMLDivElement>(null)
   // Блок клиента по умолчанию свёрнут при первом открытии
   const [isCustomerOpen, setIsCustomerOpen] = useState(false)
+  const [creditDateDialogOpen, setCreditDateDialogOpen] = useState(false)
+  const [creditDateDraft, setCreditDateDraft] = useState(creditDueDate)
+  const todayDate = todayDateInput()
 
   // Локальное состояние для плавного ввода "Своей цены" без багов ререндера
   const [customPriceInputs, setCustomPriceInputs] = useState<Record<string, string>>({})
@@ -595,14 +612,20 @@ export function KassaCart({
                   Сумма будет записана как долг, а не в кассу. Выберите зарегистрированного клиента; для оформления нужен интернет.
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="credit-due-date" className="text-[10px] text-muted-foreground">Срок оплаты</Label>
-                  <Input
+                  <Label htmlFor="credit-due-date" className="text-xs font-medium">Срок возврата денег</Label>
+                  <Button
                     id="credit-due-date"
-                    type="date"
-                    value={creditDueDate}
-                    onChange={(event) => setCreditDueDate(event.target.value)}
-                    className="h-9 bg-background text-xs"
-                  />
+                    type="button"
+                    variant="outline"
+                    className="h-11 w-full min-w-0 justify-between bg-background text-sm"
+                    onClick={() => {
+                      setCreditDateDraft(creditDueDate)
+                      setCreditDateDialogOpen(true)
+                    }}
+                  >
+                    <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{displayDateInput(creditDueDate)}</span>
+                    <span className="text-xs text-muted-foreground">Изменить</span>
+                  </Button>
                 </div>
               </div>
             )}
@@ -702,7 +725,37 @@ export function KassaCart({
     </div>
   )
 
-  if (!isMobile) return cartPanel
+  // Keep the native date picker outside the scrollable receipt sheet so it cannot be clipped.
+  const creditDateDialog = (
+    <Dialog open={creditDateDialogOpen} onOpenChange={setCreditDateDialogOpen}>
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-sm overflow-visible">
+        <DialogTitle>Срок возврата денег</DialogTitle>
+        <DialogDescription>Выберите дату, до которой клиент должен погасить долг.</DialogDescription>
+        <div className="space-y-4">
+          <Label htmlFor="credit-due-date-input">Дата возврата</Label>
+          <Input
+            id="credit-due-date-input"
+            type="date"
+            min={todayDate}
+            value={creditDateDraft}
+            onChange={(event) => setCreditDateDraft(event.target.value)}
+            className="h-12 w-full min-w-0 bg-background text-base [color-scheme:light] dark:[color-scheme:dark]"
+          />
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setCreditDateDialogOpen(false)}>Отмена</Button>
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={!creditDateDraft || creditDateDraft < todayDate}
+              onClick={() => { setCreditDueDate(creditDateDraft); setCreditDateDialogOpen(false) }}
+            >Готово</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+
+  if (!isMobile) return <>{cartPanel}{creditDateDialog}</>
 
   return (
     <>
@@ -734,6 +787,7 @@ export function KassaCart({
           <DialogTitle className="sr-only">Чек</DialogTitle>
           <DialogDescription className="sr-only">Товары, скидки, оплата и итоговая сумма продажи</DialogDescription>
           {cartPanel}
+          {creditDateDialog}
         </DialogContent>
       </Dialog>
     </>

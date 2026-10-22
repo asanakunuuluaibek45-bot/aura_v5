@@ -62,21 +62,26 @@ export async function getClients(): Promise<Customer[]> {
     day: "2-digit",
   }).formatToParts(new Date())
   const today = ["year", "month", "day"].map((key) => todayParts.find((part) => part.type === key)?.value ?? "").join("-")
-  const overdueByCustomer = new Map<string, Array<{ id: string; credit_due_date: string; credit_balance: number }>>()
+  const activeByCustomer = new Map<string, Array<{ id: string; credit_due_date: string | null; credit_balance: number }>>()
 
   for (const sale of creditSales ?? []) {
-    const dueDate = typeof sale.credit_due_date === "string" ? sale.credit_due_date.slice(0, 10) : ""
+    const dueDate = typeof sale.credit_due_date === "string" ? sale.credit_due_date.slice(0, 10) : null
     const balance = Number(sale.credit_balance) || 0
-    if (!sale.customer_id || !dueDate || dueDate >= today || balance <= 0) continue
-    const list = overdueByCustomer.get(sale.customer_id) ?? []
+    if (!sale.customer_id || balance <= 0) continue
+    const list = activeByCustomer.get(sale.customer_id) ?? []
     list.push({ id: sale.id, credit_due_date: dueDate, credit_balance: balance })
-    overdueByCustomer.set(sale.customer_id, list)
+    activeByCustomer.set(sale.customer_id, list)
   }
 
   return typedClients.map((client) => {
-    const overdueCreditSales = overdueByCustomer.get(client.id) ?? []
+    const activeCreditSales = (activeByCustomer.get(client.id) ?? [])
+      .sort((a, b) => (a.credit_due_date ?? "9999-12-31").localeCompare(b.credit_due_date ?? "9999-12-31"))
+    const overdueCreditSales = activeCreditSales.filter((sale) => sale.credit_due_date !== null && sale.credit_due_date < today)
     return {
       ...client,
+      active_credit_sales: activeCreditSales,
+      credit_debt_balance: activeCreditSales.reduce((sum, sale) => sum + sale.credit_balance, 0),
+      next_credit_due_date: activeCreditSales.find((sale) => sale.credit_due_date !== null)?.credit_due_date ?? null,
       overdue_credit_sales: overdueCreditSales,
       overdue_debt_balance: overdueCreditSales.reduce((sum, sale) => sum + sale.credit_balance, 0),
     }
