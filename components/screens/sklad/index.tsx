@@ -5,7 +5,7 @@ import dynamic from "next/dynamic"
 import type { Product, Sale } from "@/lib/types"
 import { DEFAULT_SIZE_KEY, getLabelSizeDef, getPrinterProfile, PRINTER_PROFILES, type JewelryLabelSizeKey } from "@/lib/niimbot"
 import { formatDate, formatSom, formatWeight } from "@/lib/format"
-import { deleteProduct, getShopSeqIdForLabel } from "@/app/actions/products"
+import { deleteProduct, findProductBySku, getShopSeqIdForLabel } from "@/app/actions/products"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -116,6 +116,7 @@ export function SkladScreen({
   const [editing, setEditing] = useState<Product | null>(null)
   const [query, setQuery] = useState("")
   const debouncedQuery = useDebouncedValue(query)
+  const [remoteSkuMatch, setRemoteSkuMatch] = useState<{ query: string; product: Product } | null>(null)
   const [page, setPage] = useState(1)
   const printerProfile = getPrinterProfile(printerConnection.modelKey)
   const nativeWidth = Math.round(getLabelSizeDef(labelSizeKey).w_px * printerProfile.dpi / 203)
@@ -136,7 +137,38 @@ export function SkladScreen({
     })
   }, [products, deletedProductIds])
 
-  const filtered = useMemo(() => filterProducts(visibleProducts, debouncedQuery), [visibleProducts, debouncedQuery])
+  const productsForSearch = useMemo(() => {
+    const skuQuery = debouncedQuery.trim().toUpperCase()
+    const remoteProduct = remoteSkuMatch?.query === skuQuery ? remoteSkuMatch.product : null
+    if (!remoteProduct || visibleProducts.some((product) => product.id === remoteProduct.id)) return visibleProducts
+    return [...visibleProducts, remoteProduct]
+  }, [visibleProducts, remoteSkuMatch, debouncedQuery])
+
+  useEffect(() => {
+    const skuQuery = debouncedQuery.trim().toUpperCase()
+    const isExactSku = /^[A-Z]{2}\d{1,8}$/.test(skuQuery)
+    const isLoadedLocally = visibleProducts.some((product) => String(product.sku ?? "").trim().toUpperCase() === skuQuery)
+    if (!isExactSku || isLoadedLocally) {
+      setRemoteSkuMatch(null)
+      return
+    }
+
+    let active = true
+    setRemoteSkuMatch(null)
+    void findProductBySku(skuQuery)
+      .then((product) => {
+        if (active && product) setRemoteSkuMatch({ query: skuQuery, product })
+      })
+      .catch((error) => {
+        if (active) console.warn("[inventory] SKU lookup failed:", error)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [debouncedQuery, visibleProducts])
+
+  const filtered = useMemo(() => filterProducts(productsForSearch, debouncedQuery), [productsForSearch, debouncedQuery])
 
   const handleProductSaved = (savedProduct: Product, isNew: boolean) => {
     onProductSaved?.(savedProduct)
