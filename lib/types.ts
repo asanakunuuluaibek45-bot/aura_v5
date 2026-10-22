@@ -22,7 +22,7 @@ export type ProductStatus = "in_stock" | "reserved" | "sold" | "archived" | "dra
 
 export type CustomerCreditSale = {
   id: string
-  credit_due_date: string
+  credit_due_date: string | null
   credit_balance: number
 }
 
@@ -45,7 +45,10 @@ export type Customer = {
   total_spent: number
   /** Текущий долг клиента; поле добавляется миграцией кредитных продаж. */
   debt_balance?: number
-  /** Просроченный остаток и отдельные продажи с истёкшим сроком оплаты. */
+  /** Общий открытый долг, ближайший срок и просроченные продажи клиента. */
+  credit_debt_balance?: number
+  next_credit_due_date?: string | null
+  active_credit_sales?: CustomerCreditSale[]
   overdue_debt_balance?: number
   overdue_credit_sales?: CustomerCreditSale[]
   /** Дата последней покупки. */
