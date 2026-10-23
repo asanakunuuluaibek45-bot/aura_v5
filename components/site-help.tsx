@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, CircleHelp, Compass, Lightbulb, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Compass, Lightbulb, X } from "lucide-react"
 import type { ScreenId } from "@/components/app-nav"
 
 type SectionGuide = { id: ScreenId; title: string; description: string; actions: string[]; adminOnly?: boolean; superAdminOnly?: boolean }
@@ -104,29 +104,61 @@ function describeButton(label: string) {
   return normalized ? `Действие «${normalized}».` : ""
 }
 
-function addButtonHints(root: ParentNode) {
+function addButtonHints(root: ParentNode, enabled: boolean) {
   const buttons = root instanceof HTMLButtonElement
     ? [root]
     : Array.from(root.querySelectorAll?.("button") ?? [])
 
   for (const element of buttons) {
     const button = element as HTMLButtonElement
-    const ariaLabel = button.getAttribute("aria-label")?.trim()
+    const currentTitle = button.getAttribute("title")?.trim() ?? ""
+    const initialized = button.dataset.auraHintsInitialized === "true"
+    const appliedTitle = button.dataset.auraAppliedTitle ?? ""
+
+    if (!initialized) {
+      button.dataset.auraOriginalTitle = currentTitle
+      button.dataset.auraHasOriginalTitle = currentTitle ? "true" : "false"
+      button.dataset.auraHasOriginalDescription = button.hasAttribute("aria-description") ? "true" : "false"
+      button.dataset.auraHintsInitialized = "true"
+    } else if (currentTitle && appliedTitle && currentTitle !== appliedTitle) {
+      // A React-rendered title changed (for example, a changing sync status).
+      button.dataset.auraOriginalTitle = currentTitle
+      button.dataset.auraHasOriginalTitle = "true"
+      if (button.dataset.auraGeneratedLabel === "true" && !button.innerText.trim()) {
+        button.setAttribute("aria-label", currentTitle)
+      }
+    }
+
     const visibleLabel = button.innerText.replace(/\s+/g, " ").trim()
-    const existingTitle = button.getAttribute("title")?.trim()
-    const label = ariaLabel || visibleLabel || existingTitle
+    const originalTitle = button.dataset.auraOriginalTitle ?? ""
+    if (!button.getAttribute("aria-label") && !visibleLabel && originalTitle) {
+      button.setAttribute("aria-label", originalTitle)
+      button.dataset.auraGeneratedLabel = "true"
+    }
+    const label = button.getAttribute("aria-label")?.trim() || visibleLabel || originalTitle
     if (!label) continue
 
-    const generatedTitle = button.dataset.auraButtonHint === "true"
-    const titleIsTheOnlyLabel = !ariaLabel && !visibleLabel && Boolean(existingTitle)
-    const hint = existingTitle && (existingTitle !== label || titleIsTheOnlyLabel) && !generatedTitle
-      ? existingTitle
-      : describeButton(label)
-    if ((!existingTitle || generatedTitle || existingTitle === label) && hint) {
-      button.setAttribute("title", hint)
-      button.dataset.auraButtonHint = "true"
+    if (!enabled) {
+      if (button.hasAttribute("title")) button.removeAttribute("title")
+      if (button.dataset.auraGeneratedDescription === "true") {
+        button.removeAttribute("aria-description")
+        delete button.dataset.auraGeneratedDescription
+      }
+      button.dataset.auraButtonHint = "false"
+      continue
     }
-    if ((!button.hasAttribute("aria-description") || generatedTitle) && hint) button.setAttribute("aria-description", hint)
+
+    const explicitTitle = button.dataset.auraHasOriginalTitle === "true" && originalTitle !== label
+      ? originalTitle
+      : ""
+    const hint = explicitTitle || describeButton(label)
+    if (button.getAttribute("title") !== hint) button.setAttribute("title", hint)
+    button.dataset.auraAppliedTitle = hint
+    button.dataset.auraButtonHint = "true"
+    if (button.dataset.auraHasOriginalDescription !== "true") {
+      if (button.getAttribute("aria-description") !== hint) button.setAttribute("aria-description", hint)
+      button.dataset.auraGeneratedDescription = "true"
+    }
   }
 }
 
@@ -143,13 +175,16 @@ const SECTION_GUIDES: SectionGuide[] = [
   { id: "kabinet", title: "Кабинет", description: "Ваш профиль, команда и рабочие настройки.", actions: ["«Сохранить» применяет изменения профиля или настроек.", "«Обнулить баллы» сбрасывает бонусные баллы выбранного пользователя.", "Администраторы могут переключать режим просмотра роли — это не меняет саму роль.", "История действий позволяет просматривать и отменять поддерживаемые операции.", "«Отклонить» отклоняет запрос пользователя.", "«Выйти из системы» завершает текущий вход."] },
 ]
 
-export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen: ScreenId; onNavigate: (screen: ScreenId) => void; isAdmin: boolean; isSuperAdmin: boolean }) {
+export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin, onRegisterOpenHelp }: { screen: ScreenId; onNavigate: (screen: ScreenId) => void; isAdmin: boolean; isSuperAdmin: boolean; onRegisterOpenHelp: (openHelp: () => void) => void }) {
   const [open, setOpen] = useState(false)
   const [tourIndex, setTourIndex] = useState<number | null>(null)
   const [ready, setReady] = useState(false)
   const [hasSeen, setHasSeen] = useState(true)
+  const [hintsEnabled, setHintsEnabled] = useState(() => {
+    if (typeof window === "undefined") return true
+    try { return window.localStorage.getItem("aura-button-hints-enabled-v1") !== "0" } catch { return true }
+  })
   const [focusHint, setFocusHint] = useState<FocusHint | null>(null)
-  const helpButtonRef = useRef<HTMLButtonElement | null>(null)
   const dialogRef = useRef<HTMLElementTagNameMap["section"] | null>(null)
   const focusReturnRef = useRef<HTMLElement | null>(null)
 
@@ -162,28 +197,36 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
   const tourSteps = useMemo<TourStep[]>(() => [
     { title: "Верхняя панель", description: "Здесь находятся меню, текущий магазин, быстрое создание, уведомления и статус синхронизации.", actions: ["«Создать» открывает быстрые действия: новая продажа, товар, клиент и — для администратора — поставщики.", "Кнопка с названием магазина показывает текущий магазин.", "Индикатор синхронизации сообщает о состоянии обмена данными.", "Переключатель темы находится в боковом меню."] },
     ...sections.map((section) => ({ title: section.title, description: section.description, screen: section.id, actions: section.actions })),
-    { title: "Помощь всегда рядом", description: "Кнопка «Помощь» остаётся внизу экрана. Подсказки есть у кнопок: наведите курсор или перейдите к кнопке клавишей Tab. Откройте справку в любой момент, чтобы снова пройти тур или посмотреть текущий раздел." },
+    { title: "Помощь всегда рядом", description: "Кнопка «Помощь» находится внизу бокового меню. Подсказки к кнопкам можно включать и отключать в этой справке." },
   ], [sections])
 
   useEffect(() => {
-    addButtonHints(document)
+    addButtonHints(document, hintsEnabled)
     const observer = new MutationObserver((records) => {
       for (const record of records) {
         if (record.type === "characterData") {
           const button = record.target.parentElement?.closest("button")
-          if (button?.dataset.auraButtonHint === "true") addButtonHints(button)
+          if (button) addButtonHints(button, hintsEnabled)
+          continue
+        }
+        if (record.type === "attributes") {
+          if (record.target instanceof HTMLButtonElement) addButtonHints(record.target, hintsEnabled)
           continue
         }
         for (const node of record.addedNodes) {
-          if (node instanceof HTMLElement) addButtonHints(node)
+          if (node instanceof HTMLElement) addButtonHints(node, hintsEnabled)
         }
       }
     })
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["title", "aria-label", "aria-description"] })
     return () => observer.disconnect()
-  }, [])
+  }, [hintsEnabled])
 
   useEffect(() => {
+    if (!hintsEnabled) {
+      setFocusHint(null)
+      return
+    }
     const updateHint = (button: HTMLButtonElement | null) => {
       const text = button?.getAttribute("aria-description") || button?.getAttribute("title")
       if (!button || !text) {
@@ -218,13 +261,26 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
       window.removeEventListener("resize", focusedButton)
       window.removeEventListener("scroll", focusedButton, true)
     }
+  }, [hintsEnabled])
+
+  const openHelp = useCallback(() => {
+    focusReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setTourIndex(null)
+    setOpen(true)
   }, [])
+
+  useEffect(() => {
+    onRegisterOpenHelp(openHelp)
+  }, [onRegisterOpenHelp, openHelp])
 
   useEffect(() => {
     let seen = true
     try { seen = window.localStorage.getItem("aura-site-help-seen-v1") === "1" } catch { /* Storage may be disabled. */ }
     setHasSeen(seen)
-    if (!seen) setOpen(true)
+    if (!seen) {
+      focusReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      setOpen(true)
+    }
     setReady(true)
   }, [])
 
@@ -276,7 +332,10 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
     return () => {
       window.cancelAnimationFrame(focusFrame)
       document.removeEventListener("keydown", handleDialogKeyDown)
-      const target = focusReturnRef.current ?? helpButtonRef.current
+      const returnTarget = focusReturnRef.current
+      const target = returnTarget?.isConnected
+        ? returnTarget
+        : document.querySelector<HTMLButtonElement>('header button[aria-label="Открыть меню"]')
       if (target?.isConnected) window.requestAnimationFrame(() => target.focus())
     }
   }, [ready, open, closeHelp])
@@ -295,11 +354,6 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
 
   return (
     <>
-      <button ref={helpButtonRef} type="button" onClick={() => { focusReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : helpButtonRef.current; setTourIndex(null); setOpen(true) }} aria-label="Открыть помощь по Aura" title="Помощь по сайту" className="fixed bottom-4 right-4 z-[120] inline-flex min-h-11 items-center gap-2 rounded-full border border-primary/30 bg-background px-4 text-sm font-semibold text-foreground shadow-lg transition hover:-translate-y-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <CircleHelp className="h-4 w-4 text-primary" aria-hidden="true" />
-        <span>Помощь</span>
-      </button>
-
       {ready && open && (
         <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/50 p-3 backdrop-blur-[2px] sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) closeHelp() }}>
           <section ref={dialogRef} tabIndex={-1} data-aura-help-dialog role="dialog" aria-modal="true" aria-labelledby="aura-help-title" aria-describedby="aura-help-description" className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl focus:outline-none">
@@ -315,6 +369,26 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="mb-4 rounded-xl border border-border bg-muted/20 p-3">
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={hintsEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked
+                      setHintsEnabled(enabled)
+                      try { window.localStorage.setItem("aura-button-hints-enabled-v1", enabled ? "1" : "0") } catch { /* Storage may be disabled. */ }
+                    }}
+                    aria-describedby="aura-button-hints-description"
+                    className="h-4 w-4 shrink-0 accent-primary"
+                  />
+                  <span id="aura-button-hints-description" className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">Показывать подсказки к кнопкам</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">Выбор сохраняется на этом устройстве.</span>
+                  </span>
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground">{hintsEnabled ? "Включены" : "Отключены"}</span>
+                </label>
+              </div>
               {currentStep ? (
                 <div>
                   <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true"><div className="h-full rounded-full bg-primary transition-all" style={{ width: (((tourIndex! + 1) / tourSteps.length) * 100) + "%" }} /></div>
@@ -330,7 +404,7 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
                   <div className="mb-5 rounded-xl border border-border bg-muted/30 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текущий раздел</div><h3 className="mt-1 text-base font-semibold">{currentGuide?.title ?? "Разделы Aura"}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{currentGuide?.description ?? "Разделы и действия видны согласно вашей роли."}</p>{currentGuide?.actions.length ? <ul className="mt-3 space-y-2">{currentGuide.actions.map((action) => <li key={action} className="flex gap-2.5 text-sm leading-6"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" /><span>{action}</span></li>)}</ul> : null}</div>
                   <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Все разделы</h3><button type="button" onClick={startTour} className="text-xs font-semibold text-primary underline-offset-4 hover:underline">Пройти тур</button></div>
                   <div className="grid gap-2 sm:grid-cols-2">{sections.map((section) => <button key={section.id} type="button" onClick={() => { onNavigate(section.id); closeHelp() }} className="rounded-xl border border-border p-3 text-left transition hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="block text-sm font-semibold">{section.title}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{section.description}</span></button>)}</div>
-                  <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Подсказка отображается при наведении и при переходе к кнопке клавишей Tab. Экранный диктор читает её описание вместе с названием кнопки.</div>
+                   <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Когда подсказки включены, они появляются при наведении и переходе к кнопке клавишей Tab. Экранный диктор читает описание вместе с названием кнопки.</div>
                 </>
               )}
             </div>
