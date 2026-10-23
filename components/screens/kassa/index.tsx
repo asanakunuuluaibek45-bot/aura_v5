@@ -7,7 +7,7 @@ import { formatSom } from "@/lib/format"
 import { buildRateMap, scrapRateOf } from "@/lib/rates"
 import { round, toNumber } from "@/hooks/useCalculator"
 import { checkout } from "@/app/actions/sales"
-import type { SalesHistoryProps } from "@/components/sales-history"
+import type { SalesHistoryProps } from "@/components/sales-history/index"
 import { CashPanel } from "@/components/screens/kassa/cash-panel"
 import type { CashData } from "@/app/actions/cash"
 import { Button } from "@/components/ui/button"
@@ -33,7 +33,7 @@ const MIN_QUERY = 3
 const LOCAL_STORAGE_KEY = "kassa_cart_state_v2"
 
 const LazySalesHistory = dynamic(
-  () => import("@/components/sales-history").then((mod) => mod.SalesHistory),
+  () => import("@/components/sales-history/index").then((mod) => mod.SalesHistory),
   {
     ssr: false,
     loading: () => (
