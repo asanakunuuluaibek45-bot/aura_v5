@@ -31,8 +31,5 @@ dist-ssr
 *.sln
 *.sw?
 .next/
-# Local environment files (keep the example template tracked).
-.env*
-!.env.example
 *.tsbuildinfo
 .node_modules/ No newline at end of file
