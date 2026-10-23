@@ -6,6 +6,7 @@ import type { ScreenId } from "@/components/app-nav"
 
 type SectionGuide = { id: ScreenId; title: string; description: string; actions: string[]; adminOnly?: boolean; superAdminOnly?: boolean }
 type TourStep = { title: string; description: string; screen?: ScreenId; actions?: string[] }
+type FocusHint = { text: string; top: number; left: number }
 
 const BUTTON_HINTS: Record<string, string> = {
   "Добавить клиента": "Открыть форму и создать карточку нового клиента.",
@@ -25,6 +26,13 @@ const BUTTON_HINTS: Record<string, string> = {
   "Обновить": "Загрузить актуальные данные раздела.",
   "Показать ещё": "Загрузить следующую часть списка.",
   "История покупок": "Открыть список покупок выбранного клиента.",
+  "Вернуться к списку клиентов": "Закрыть историю покупок и вернуться к списку клиентов.",
+  "Предыдущая страница": "Показать предыдущую страницу списка.",
+  "Следующая страница": "Показать следующую страницу списка.",
+  "Сгенерировать новый артикул": "Создать новый артикул товара.",
+  "Печать этикетки товара": "Отправить этикетку товара на печать.",
+  "Редактировать товар": "Открыть карточку товара для изменения.",
+  "Удалить товар": "Удалить выбранный товар со склада.",
   "История": "Открыть историю операций или покупок.",
   "Чёрный список": "Добавить клиента в чёрный список или снять ограничение.",
   "Отметить все прочитанными": "Пометить все уведомления прочитанными.",
@@ -85,6 +93,8 @@ function describeButton(label: string) {
   if (/^(Оформить|Провести|Да, продать)\b/i.test(normalized)) return `Подтвердить и завершить операцию: ${normalized}.`
   if (/^(Оплатить|Внести|Изъять)\b/i.test(normalized)) return `Подтвердить денежную операцию: ${normalized}.`
   if (/^Отменить\b/i.test(normalized)) return `Отменить выбранную операцию: ${normalized.replace(/^Отменить\s*/i, "")}.`
+  const pageMatch = normalized.match(/^Перейти на страницу\s+(\d+)$/i)
+  if (pageMatch) return `Открыть страницу списка номер ${pageMatch[1]}.`
   if (/^(Закрыть|Отмена)\b/i.test(normalized)) return `Закрыть текущее окно: ${normalized}.`
   if (/^(Предыдущее|Следующее)\b/i.test(normalized)) return `Переключить элемент просмотра: ${normalized}.`
   if (/^(Свернуть|Развернуть)\b/i.test(normalized)) return `${normalized} панель или настройки текущего раздела.`
@@ -138,6 +148,7 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
   const [tourIndex, setTourIndex] = useState<number | null>(null)
   const [ready, setReady] = useState(false)
   const [hasSeen, setHasSeen] = useState(true)
+  const [focusHint, setFocusHint] = useState<FocusHint | null>(null)
   const helpButtonRef = useRef<HTMLButtonElement | null>(null)
   const dialogRef = useRef<HTMLElementTagNameMap["section"] | null>(null)
   const focusReturnRef = useRef<HTMLElement | null>(null)
@@ -170,6 +181,43 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
     })
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const updateHint = (button: HTMLButtonElement | null) => {
+      const text = button?.getAttribute("aria-description") || button?.getAttribute("title")
+      if (!button || !text) {
+        setFocusHint(null)
+        return
+      }
+      const rect = button.getBoundingClientRect()
+      const below = rect.bottom + 64 < window.innerHeight
+      const center = rect.left + rect.width / 2
+      setFocusHint({
+        text,
+        top: below ? rect.bottom + 8 : Math.max(8, rect.top - 56),
+        left: Math.max(8, Math.min(window.innerWidth - 8, center)),
+      })
+    }
+    const focusedButton = () => {
+      const active = document.activeElement
+      updateHint(active instanceof Element ? active.closest("button") : null)
+    }
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target
+      updateHint(target instanceof Element ? target.closest("button") : null)
+    }
+    const handleFocusOut = () => window.setTimeout(focusedButton, 0)
+    document.addEventListener("focusin", handleFocusIn)
+    document.addEventListener("focusout", handleFocusOut)
+    window.addEventListener("resize", focusedButton)
+    window.addEventListener("scroll", focusedButton, true)
+    return () => {
+      document.removeEventListener("focusin", handleFocusIn)
+      document.removeEventListener("focusout", handleFocusOut)
+      window.removeEventListener("resize", focusedButton)
+      window.removeEventListener("scroll", focusedButton, true)
+    }
   }, [])
 
   useEffect(() => {
@@ -282,7 +330,7 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
                   <div className="mb-5 rounded-xl border border-border bg-muted/30 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текущий раздел</div><h3 className="mt-1 text-base font-semibold">{currentGuide?.title ?? "Разделы Aura"}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{currentGuide?.description ?? "Разделы и действия видны согласно вашей роли."}</p>{currentGuide?.actions.length ? <ul className="mt-3 space-y-2">{currentGuide.actions.map((action) => <li key={action} className="flex gap-2.5 text-sm leading-6"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" /><span>{action}</span></li>)}</ul> : null}</div>
                   <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Все разделы</h3><button type="button" onClick={startTour} className="text-xs font-semibold text-primary underline-offset-4 hover:underline">Пройти тур</button></div>
                   <div className="grid gap-2 sm:grid-cols-2">{sections.map((section) => <button key={section.id} type="button" onClick={() => { onNavigate(section.id); closeHelp() }} className="rounded-xl border border-border p-3 text-left transition hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="block text-sm font-semibold">{section.title}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{section.description}</span></button>)}</div>
-                  <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Наведите курсор на кнопку или перейдите к ней клавишей Tab, чтобы увидеть подсказку. Для экранного диктора описание действия доступно вместе с названием кнопки.</div>
+                  <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Подсказка отображается при наведении и при переходе к кнопке клавишей Tab. Экранный диктор читает её описание вместе с названием кнопки.</div>
                 </>
               )}
             </div>
@@ -291,6 +339,7 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
           </section>
         </div>
       )}
+      {focusHint && <div role="tooltip" aria-hidden="true" className="pointer-events-none fixed z-[200] max-w-sm -translate-x-1/2 rounded-md bg-foreground px-3 py-2 text-xs leading-5 text-background shadow-lg" style={{ top: focusHint.top, left: focusHint.left, maxWidth: "calc(100vw - 1rem)" }}>{focusHint.text}</div>}
     </>
   )
 }

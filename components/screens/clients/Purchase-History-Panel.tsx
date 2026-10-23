@@ -51,7 +51,7 @@ export function PurchaseHistoryPanel({ client, onClose }: { client: Customer; on
       <div className="w-full max-w-2xl px-4 py-8">
         <div className="rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
           <div className="flex items-center gap-3 border-b border-border px-5 py-4 bg-muted/30">
-            <button type="button" onClick={onClose} className="rounded-lg p-1.5 hover:bg-muted transition-colors">
+            <button type="button" onClick={onClose} aria-label="Вернуться к списку клиентов" title="Закрыть историю покупок и вернуться к списку клиентов" className="rounded-lg p-1.5 hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <ArrowLeft className="h-4 w-4" />
             </button>
             <div className="flex items-center gap-2 min-w-0">

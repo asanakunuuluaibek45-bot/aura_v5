@@ -541,6 +541,8 @@ export function SkladScreen({
               variant="outline"
               size="icon"
               className="h-8 w-8"
+              aria-label="Предыдущая страница"
+              title="Показать предыдущую страницу товаров"
               disabled={currentPage === 1}
               onClick={() => setPage(Math.max(1, currentPage - 1))}
             >
@@ -557,6 +559,8 @@ export function SkladScreen({
                     variant={n === currentPage ? "default" : "outline"}
                     size="icon"
                     className="h-8 w-8 text-xs"
+                    aria-label={`Перейти на страницу ${n}`}
+                    title={`Перейти на страницу ${n}`}
                     onClick={() => setPage(n)}
                   >
                     {n}
@@ -567,6 +571,8 @@ export function SkladScreen({
               variant="outline"
               size="icon"
               className="h-8 w-8"
+              aria-label="Следующая страница"
+              title="Показать следующую страницу товаров"
               disabled={currentPage === totalPages}
               onClick={() => setPage(Math.min(totalPages, currentPage + 1))}
             >
@@ -793,6 +799,7 @@ function ActionButtons({
         variant="ghost"
         size="icon"
         className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+        aria-label="Печать этикетки товара"
         title="Печать этикетки"
         onClick={() => onPrint(p)}
       >
@@ -802,6 +809,7 @@ function ActionButtons({
         variant="ghost"
         size="icon"
         className="h-8 w-8 text-muted-foreground hover:text-primary"
+        aria-label="Редактировать товар"
         title="Редактировать"
         onClick={() => onEdit(p)}
       >
@@ -812,6 +820,7 @@ function ActionButtons({
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          aria-label="Удалить товар"
           onClick={() => onDelete(p)}
         >
           <Trash2 className="h-3.5 w-3.5" />
