@@ -1,23 +1,136 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, CircleHelp, Compass, Lightbulb, X } from "lucide-react"
 import type { ScreenId } from "@/components/app-nav"
 
 type SectionGuide = { id: ScreenId; title: string; description: string; actions: string[]; adminOnly?: boolean; superAdminOnly?: boolean }
 type TourStep = { title: string; description: string; screen?: ScreenId; actions?: string[] }
 
+const BUTTON_HINTS: Record<string, string> = {
+  "Добавить клиента": "Открыть форму и создать карточку нового клиента.",
+  "Добавить товар": "Открыть форму и создать карточку нового товара.",
+  "Создать": "Открыть меню быстрых действий.",
+  "Открыть меню": "Показать или скрыть боковое меню разделов.",
+  "Открыть меню профиля": "Открыть меню профиля и доступных настроек.",
+  "Быстрое создание": "Открыть список быстрых действий.",
+  "Сохранить": "Сохранить изменения в текущей форме.",
+  "Сохранить расположение": "Сохранить текущую раскладку элементов этикетки.",
+  "Отмена": "Закрыть форму без сохранения новых изменений.",
+  "Закрыть": "Закрыть текущее окно или панель.",
+  "Закрыть помощь": "Закрыть справку и вернуться к экрану.",
+  "Редактировать": "Открыть выбранную запись для изменения.",
+  "Изменить": "Изменить данные выбранной записи.",
+  "Удалить": "Удалить выбранную запись. Проверьте выбор перед подтверждением.",
+  "Обновить": "Загрузить актуальные данные раздела.",
+  "Показать ещё": "Загрузить следующую часть списка.",
+  "История покупок": "Открыть список покупок выбранного клиента.",
+  "История": "Открыть историю операций или покупок.",
+  "Чёрный список": "Добавить клиента в чёрный список или снять ограничение.",
+  "Отметить все прочитанными": "Пометить все уведомления прочитанными.",
+  "Все прочитаны": "Пометить уведомления прочитанными.",
+  "Все уведомления": "Открыть полный список уведомлений.",
+  "Добавить комментарий": "Добавить пояснение к выплате поставщику.",
+  "Начать экскурсию": "Запустить пошаговое знакомство с Aura.",
+  "Пройти тур": "Запустить экскурсию по разделам сайта.",
+  "Пропустить тур": "Закрыть экскурсию. Справка останется доступна по кнопке «Помощь».",
+  "Назад": "Перейти к предыдущему шагу или странице.",
+  "Вперёд": "Перейти к следующей странице списка.",
+  "Предыдущий шаг": "Вернуться к предыдущему шагу экскурсии.",
+  "Следующий шаг": "Перейти к следующему шагу экскурсии.",
+  "Синхронизировать": "Запустить обмен данными с сервером.",
+  "Инкассация": "Перевести наличные средства в электронные.",
+  "Изъять": "Записать выдачу наличных из кассы.",
+  "Внести": "Записать поступление средств в кассу.",
+  "Принять лом": "Открыть оформление приёма ювелирного лома.",
+  "Добавить строкой в чек": "Добавить рассчитанную позицию лома в текущий чек.",
+  "Оформить": "Завершить продажу и сохранить чек.",
+  "Оплатить": "Подтвердить и сохранить выплату.",
+  "Переподключить": "Повторно подключиться к выбранному устройству.",
+  "Сменить устройство": "Выбрать другое устройство для подключения.",
+  "Сбросить масштаб": "Вернуть исходный масштаб холста.",
+  "Развернуть панель инструментов": "Показать дополнительные настройки редактора этикеток.",
+  "Свернуть панель инструментов": "Скрыть панель настроек редактора этикеток.",
+  "Развернуть панели настроек": "Показать боковые панели редактора этикеток.",
+  "Жирный": "Включить или выключить жирное начертание текста.",
+  "Курсив": "Включить или выключить курсивное начертание текста.",
+  "Подчёркивание": "Включить или выключить подчёркивание текста.",
+  "Зачёркивание": "Включить или выключить зачёркивание текста.",
+  "По левому краю": "Выровнять текст по левому краю.",
+  "По центру": "Выровнять текст по центру.",
+  "По правому краю": "Выровнять текст по правому краю.",
+  "Уменьшить выделенный элемент": "Уменьшить размер выбранного элемента этикетки.",
+  "Увеличить выделенный элемент": "Увеличить размер выбранного элемента этикетки.",
+  "Скачать PNG": "Скачать изображение этикетки в формате PNG.",
+  "Сделать фото": "Сделать снимок товара камерой.",
+  "Снять фото": "Сделать снимок товара камерой.",
+  "Загрузить": "Выбрать файл и добавить его в форму.",
+  "PNG": "Скачать этикетку как изображение PNG.",
+  "Просмотр": "Открыть выбранный магазин в режиме просмотра.",
+  "Биллинг": "Открыть настройки оплаты и подписки магазина.",
+  "Долг": "Открыть форму для учёта долга поставщику.",
+  "Рассчитаться": "Открыть форму выплаты поставщику.",
+  "Выйти": "Завершить текущий вход в систему.",
+  "Выйти из системы": "Завершить текущий вход в систему.",
+}
+
+function describeButton(label: string) {
+  const normalized = label.replace(/\s+/g, " ").trim()
+  const exact = BUTTON_HINTS[normalized]
+  if (exact) return exact
+  if (/^Удалить\b/i.test(normalized)) return `Удалить выбранный объект: ${normalized.replace(/^Удалить\s*/i, "")}.`
+  if (/^(Добавить|Создать)\b/i.test(normalized)) return `Создать новую запись: ${normalized}.`
+  if (/^(Редактировать|Изменить)\b/i.test(normalized)) return `Открыть выбранный объект для изменения: ${normalized}.`
+  if (/^(Печать|Распечатать)\b/i.test(normalized)) return `Отправить выбранные данные на печать: ${normalized}.`
+  if (/^(Оформить|Провести|Да, продать)\b/i.test(normalized)) return `Подтвердить и завершить операцию: ${normalized}.`
+  if (/^(Оплатить|Внести|Изъять)\b/i.test(normalized)) return `Подтвердить денежную операцию: ${normalized}.`
+  if (/^Отменить\b/i.test(normalized)) return `Отменить выбранную операцию: ${normalized.replace(/^Отменить\s*/i, "")}.`
+  if (/^(Закрыть|Отмена)\b/i.test(normalized)) return `Закрыть текущее окно: ${normalized}.`
+  if (/^(Предыдущее|Следующее)\b/i.test(normalized)) return `Переключить элемент просмотра: ${normalized}.`
+  if (/^(Свернуть|Развернуть)\b/i.test(normalized)) return `${normalized} панель или настройки текущего раздела.`
+  if (/^(Сброс|Очистить)\b/i.test(normalized)) return `Очистить или сбросить текущие данные: ${normalized}.`
+  if (/^Показать ещё\b/i.test(normalized)) return "Загрузить следующую часть списка."
+  if (/^Обновить\b/i.test(normalized)) return "Загрузить актуальные данные."
+  return normalized ? `Действие «${normalized}».` : ""
+}
+
+function addButtonHints(root: ParentNode) {
+  const buttons = root instanceof HTMLButtonElement
+    ? [root]
+    : Array.from(root.querySelectorAll?.("button") ?? [])
+
+  for (const element of buttons) {
+    const button = element as HTMLButtonElement
+    const ariaLabel = button.getAttribute("aria-label")?.trim()
+    const visibleLabel = button.innerText.replace(/\s+/g, " ").trim()
+    const existingTitle = button.getAttribute("title")?.trim()
+    const label = ariaLabel || visibleLabel || existingTitle
+    if (!label) continue
+
+    const generatedTitle = button.dataset.auraButtonHint === "true"
+    const titleIsTheOnlyLabel = !ariaLabel && !visibleLabel && Boolean(existingTitle)
+    const hint = existingTitle && (existingTitle !== label || titleIsTheOnlyLabel) && !generatedTitle
+      ? existingTitle
+      : describeButton(label)
+    if ((!existingTitle || generatedTitle || existingTitle === label) && hint) {
+      button.setAttribute("title", hint)
+      button.dataset.auraButtonHint = "true"
+    }
+    if ((!button.hasAttribute("aria-description") || generatedTitle) && hint) button.setAttribute("aria-description", hint)
+  }
+}
+
 const SECTION_GUIDES: SectionGuide[] = [
-  { id: "kassa", title: "Касса", description: "Оформляйте продажи и работайте с чеком.", actions: ["Найдите товар по названию или штрихкоду и добавьте его в чек.", "Проверьте состав чека и данные клиента перед оплатой.", "Завершите продажу, чтобы сохранить её в истории."] },
-  { id: "money", title: "Деньги", description: "Смотрите движение денег и операции кассы.", actions: ["Проверяйте операции и остаток за выбранный период.", "Используйте раздел для контроля денежных поступлений и расходов."] },
-  { id: "vitrina", title: "Витрина", description: "Просматривайте ассортимент магазина.", actions: ["Ищите украшения в каталоге.", "Откройте карточку товара, чтобы посмотреть его сведения."] },
-  { id: "sklad", title: "Склад", description: "Управляйте карточками товаров и складским ассортиментом.", actions: ["Найдите товар через поиск и доступные фильтры.", "Создайте карточку нового товара или откройте существующую для редактирования."] },
-  { id: "clients", title: "Клиенты", description: "Храните карточки клиентов и просматривайте их покупки.", actions: ["Найдите клиента или добавьте нового.", "Откройте историю покупок в карточке клиента."] },
-  { id: "suppliers", title: "Поставщики", description: "Работайте с поставщиками и связанными расчётами.", actions: ["Откройте поставщика, чтобы посмотреть его данные.", "Проверяйте задолженности и выплаты в этом разделе."], adminOnly: true },
-  { id: "otchety", title: "Отчёты", description: "Анализируйте продажи и показатели магазина.", actions: ["Выберите нужный период отчёта.", "Сравните показатели для контроля работы магазина."], adminOnly: true },
-  { id: "shops", title: "Магазины", description: "Управляйте магазинами в панели супер-администратора.", actions: ["Выберите магазин, чтобы открыть его данные.", "Этот раздел доступен супер-администратору."], superAdminOnly: true },
-  { id: "notifications", title: "Уведомления", description: "Просматривайте системные уведомления Aura.", actions: ["Откройте уведомление, чтобы прочитать его содержание.", "Возвращайтесь сюда, чтобы проверить новые сообщения."], superAdminOnly: true },
-  { id: "kabinet", title: "Кабинет", description: "Ваш профиль, команда и рабочие настройки.", actions: ["Откройте профиль, чтобы посмотреть данные учётной записи.", "Администраторы могут переключать режим просмотра роли — это не меняет саму роль.", "Используйте историю действий для просмотра недавних операций."] },
+  { id: "kassa", title: "Касса", description: "Оформляйте продажи и работайте с чеком.", actions: ["Найдите товар по названию или штрихкоду и добавьте его в чек.", "Выберите клиента и способ оплаты; для продажи в долг клиент обязателен.", "«Оформить» сохраняет продажу и чек.", "«Сброс» очищает текущий чек.", "«Принять лом» открывает оформление приёма лома, а «Добавить строкой в чек» добавляет его в чек."] },
+  { id: "money", title: "Деньги", description: "Смотрите движение денег и операции кассы.", actions: ["«Внести» записывает поступление средств в кассу.", "«Изъять» записывает выдачу наличных.", "«Инкассация» переносит наличные в электронные средства.", "История кассы показывает операции за выбранный период."] },
+  { id: "vitrina", title: "Витрина", description: "Просматривайте ассортимент магазина.", actions: ["«Все» показывает весь каталог, а «Проданные» — проданные товары.", "Откройте карточку товара, чтобы посмотреть его сведения.", "В галерее используйте «Предыдущее фото» и «Следующее фото».", "«Показать ещё» загружает следующую часть каталога."] },
+  { id: "sklad", title: "Склад", description: "Управляйте карточками товаров и складским ассортиментом.", actions: ["«Добавить товар» открывает форму новой карточки.", "«Редактировать» меняет данные выбранного товара; «Удалить» удаляет его.", "«Этикетка» открывает редактор макета, а «Печать этикетки» отправляет этикетку на принтер.", "В редакторе этикеток кнопки панели меняют текст, форматирование, масштаб и расположение элементов.", "В настройках принтера можно подключить, переподключить или сменить Bluetooth-устройство."] },
+  { id: "clients", title: "Клиенты", description: "Храните карточки клиентов и просматривайте их покупки.", actions: ["«Добавить клиента» создаёт новую карточку.", "«История покупок» показывает покупки выбранного клиента.", "«Редактировать» меняет карточку, а «Удалить» удаляет её.", "«Чёрный список» включает или снимает ограничение для клиента."] },
+  { id: "suppliers", title: "Поставщики", description: "Работайте с поставщиками и связанными расчётами.", actions: ["«Рассчитаться» открывает форму выплаты поставщику.", "«Долг» открывает форму учёта задолженности.", "«История» показывает прошлые расчёты.", "В карточке поставщика можно просматривать и редактировать связанные товары."], adminOnly: true },
+  { id: "otchety", title: "Отчёты", description: "Анализируйте продажи и показатели магазина.", actions: ["Выберите период, чтобы изменить даты отчёта.", "Таблицы и диаграммы показывают продажи, остатки и показатели магазина.", "Используйте фильтры категорий для уточнения отчёта.", "Наведите курсор на диаграмму, чтобы увидеть точные значения."], adminOnly: true },
+  { id: "shops", title: "Магазины", description: "Управляйте магазинами в панели супер-администратора.", actions: ["«Просмотр» открывает выбранный магазин в его контексте.", "«Выйти из просмотра» возвращает к списку магазинов.", "«Биллинг» открывает настройки оплаты и подписки.", "«Автоблокировка» включает или выключает автоматическую блокировку магазина.", "«Сохранить» применяет изменения."], superAdminOnly: true },
+  { id: "notifications", title: "Уведомления", description: "Просматривайте системные уведомления Aura.", actions: ["Откройте уведомление, чтобы прочитать его содержание.", "«Отметить все прочитанными» помечает все уведомления прочитанными.", "«Все уведомления» открывает полный список.", "«Обновить» загружает новые уведомления."], superAdminOnly: true },
+  { id: "kabinet", title: "Кабинет", description: "Ваш профиль, команда и рабочие настройки.", actions: ["«Сохранить» применяет изменения профиля или настроек.", "«Обнулить баллы» сбрасывает бонусные баллы выбранного пользователя.", "Администраторы могут переключать режим просмотра роли — это не меняет саму роль.", "История действий позволяет просматривать и отменять поддерживаемые операции.", "«Отклонить» отклоняет запрос пользователя.", "«Выйти из системы» завершает текущий вход."] },
 ]
 
 export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen: ScreenId; onNavigate: (screen: ScreenId) => void; isAdmin: boolean; isSuperAdmin: boolean }) {
@@ -25,6 +138,9 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
   const [tourIndex, setTourIndex] = useState<number | null>(null)
   const [ready, setReady] = useState(false)
   const [hasSeen, setHasSeen] = useState(true)
+  const helpButtonRef = useRef<HTMLButtonElement | null>(null)
+  const dialogRef = useRef<HTMLElementTagNameMap["section"] | null>(null)
+  const focusReturnRef = useRef<HTMLElement | null>(null)
 
   const sections = useMemo(() => SECTION_GUIDES.filter((section) => {
     if (section.superAdminOnly) return isSuperAdmin
@@ -35,8 +151,26 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
   const tourSteps = useMemo<TourStep[]>(() => [
     { title: "Верхняя панель", description: "Здесь находятся меню, текущий магазин, быстрое создание, уведомления и статус синхронизации.", actions: ["«Создать» открывает быстрые действия: новая продажа, товар, клиент и — для администратора — поставщики.", "Кнопка с названием магазина показывает текущий магазин.", "Индикатор синхронизации сообщает о состоянии обмена данными.", "Переключатель темы находится в боковом меню."] },
     ...sections.map((section) => ({ title: section.title, description: section.description, screen: section.id, actions: section.actions })),
-    { title: "Помощь всегда рядом", description: "Кнопка «Помощь» остаётся внизу экрана. Откройте её в любой момент, чтобы снова пройти тур или посмотреть подсказку по текущему разделу." },
+    { title: "Помощь всегда рядом", description: "Кнопка «Помощь» остаётся внизу экрана. Подсказки есть у кнопок: наведите курсор или перейдите к кнопке клавишей Tab. Откройте справку в любой момент, чтобы снова пройти тур или посмотреть текущий раздел." },
   ], [sections])
+
+  useEffect(() => {
+    addButtonHints(document)
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "characterData") {
+          const button = record.target.parentElement?.closest("button")
+          if (button?.dataset.auraButtonHint === "true") addButtonHints(button)
+          continue
+        }
+        for (const node of record.addedNodes) {
+          if (node instanceof HTMLElement) addButtonHints(node)
+        }
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     let seen = true
@@ -46,12 +180,58 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
     setReady(true)
   }, [])
 
-  const markSeen = () => {
+  const markSeen = useCallback(() => {
     setHasSeen(true)
     try { window.localStorage.setItem("aura-site-help-seen-v1", "1") } catch { /* Help remains available for this session. */ }
-  }
-  const closeHelp = () => { markSeen(); setOpen(false); setTourIndex(null) }
+  }, [])
+  const closeHelp = useCallback(() => { markSeen(); setOpen(false); setTourIndex(null) }, [markSeen])
   const startTour = () => { setTourIndex(0); setOpen(true) }
+
+  useEffect(() => {
+    if (!ready || !open) return
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    const focusableSelector = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    const getFocusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => element.getClientRects().length > 0 && element.getAttribute("aria-hidden") !== "true")
+    const focusFirst = () => (getFocusable()[0] ?? dialog).focus()
+    const focusFrame = window.requestAnimationFrame(focusFirst)
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        closeHelp()
+        return
+      }
+      if (event.key !== "Tab") return
+
+      const focusable = getFocusable()
+      if (focusable.length === 0) {
+        event.preventDefault()
+        dialog.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener("keydown", handleDialogKeyDown)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener("keydown", handleDialogKeyDown)
+      const target = focusReturnRef.current ?? helpButtonRef.current
+      if (target?.isConnected) window.requestAnimationFrame(() => target.focus())
+    }
+  }, [ready, open, closeHelp])
   const moveTour = (direction: -1 | 1) => {
     if (tourIndex === null) return
     const nextIndex = tourIndex + direction
@@ -67,20 +247,20 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
 
   return (
     <>
-      <button type="button" onClick={() => { setTourIndex(null); setOpen(true) }} aria-label="Открыть помощь по Aura" title="Помощь по сайту" className="fixed bottom-4 right-4 z-[120] inline-flex min-h-11 items-center gap-2 rounded-full border border-primary/30 bg-background px-4 text-sm font-semibold text-foreground shadow-lg transition hover:-translate-y-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <button ref={helpButtonRef} type="button" onClick={() => { focusReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : helpButtonRef.current; setTourIndex(null); setOpen(true) }} aria-label="Открыть помощь по Aura" title="Помощь по сайту" className="fixed bottom-4 right-4 z-[120] inline-flex min-h-11 items-center gap-2 rounded-full border border-primary/30 bg-background px-4 text-sm font-semibold text-foreground shadow-lg transition hover:-translate-y-0.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <CircleHelp className="h-4 w-4 text-primary" aria-hidden="true" />
         <span>Помощь</span>
       </button>
 
       {ready && open && (
         <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/50 p-3 backdrop-blur-[2px] sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) closeHelp() }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="aura-help-title" className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+          <section ref={dialogRef} tabIndex={-1} data-aura-help-dialog role="dialog" aria-modal="true" aria-labelledby="aura-help-title" aria-describedby="aura-help-description" className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl focus:outline-none">
             <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">{currentStep ? <Compass className="h-5 w-5" /> : <Lightbulb className="h-5 w-5" />}</span>
                 <div>
                   <h2 id="aura-help-title" className="text-base font-semibold sm:text-lg">{currentStep ? "Экскурсия по Aura" : "Помощь по Aura"}</h2>
-                  <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">{currentStep ? <span>Шаг {tourIndex! + 1} из {tourSteps.length}</span> : "Что находится в разделах и как начать работу"}</p>
+                  <p id="aura-help-description" aria-live="polite" className="mt-0.5 text-xs text-muted-foreground sm:text-sm">{currentStep ? <span>Шаг {tourIndex! + 1} из {tourSteps.length}</span> : "Что находится в разделах и как начать работу"}</p>
                 </div>
               </div>
               <button type="button" onClick={closeHelp} aria-label="Закрыть помощь" className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><X className="h-4 w-4" /></button>
@@ -90,8 +270,10 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
               {currentStep ? (
                 <div>
                   <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true"><div className="h-full rounded-full bg-primary transition-all" style={{ width: (((tourIndex! + 1) / tourSteps.length) * 100) + "%" }} /></div>
-                  <h3 className="text-lg font-semibold">{currentStep.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{currentStep.description}</p>
+                  <div aria-live="polite" aria-atomic="true">
+                    <h3 className="text-lg font-semibold">{currentStep.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{currentStep.description}</p>
+                  </div>
                   {currentStep.actions?.length ? <ul className="mt-4 space-y-2">{currentStep.actions.map((action) => <li key={action} className="flex gap-2.5 text-sm leading-6"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" /><span>{action}</span></li>)}</ul> : null}
                 </div>
               ) : (
@@ -100,7 +282,7 @@ export function SiteHelp({ screen, onNavigate, isAdmin, isSuperAdmin }: { screen
                   <div className="mb-5 rounded-xl border border-border bg-muted/30 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Текущий раздел</div><h3 className="mt-1 text-base font-semibold">{currentGuide?.title ?? "Разделы Aura"}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{currentGuide?.description ?? "Разделы и действия видны согласно вашей роли."}</p>{currentGuide?.actions.length ? <ul className="mt-3 space-y-2">{currentGuide.actions.map((action) => <li key={action} className="flex gap-2.5 text-sm leading-6"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" /><span>{action}</span></li>)}</ul> : null}</div>
                   <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Все разделы</h3><button type="button" onClick={startTour} className="text-xs font-semibold text-primary underline-offset-4 hover:underline">Пройти тур</button></div>
                   <div className="grid gap-2 sm:grid-cols-2">{sections.map((section) => <button key={section.id} type="button" onClick={() => { onNavigate(section.id); closeHelp() }} className="rounded-xl border border-border p-3 text-left transition hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="block text-sm font-semibold">{section.title}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{section.description}</span></button>)}</div>
-                  <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Подсказки в боковом меню объясняют назначение разделов. В этой справке собраны назначения главных действий на каждом экране.</div>
+                  <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">Наведите курсор на кнопку или перейдите к ней клавишей Tab, чтобы увидеть подсказку. Для экранного диктора описание действия доступно вместе с названием кнопки.</div>
                 </>
               )}
             </div>
