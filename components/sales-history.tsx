@@ -29,15 +29,13 @@ type UnitRow = {
  * История продаж с поштучной декомпозицией: каждая единица товара — отдельная
  * строка с собственным ID, связанная с ID чека. Поиск, период, фильтр по продавцу.
  */
-export function SalesHistory({
-  sales,
-  canSeeProfit,
-  sellers,
-}: {
+export type SalesHistoryProps = {
   sales: Sale[]
   canSeeProfit: boolean
   sellers: { id: string; name: string }[]
-}) {
+}
+
+export function SalesHistory({ sales, canSeeProfit, sellers }: SalesHistoryProps) {
   const [visible, setVisible] = useState(PAGE)
   const [query, setQuery] = useState("")
   const [period, setPeriod] = useState<PeriodId>("all")
