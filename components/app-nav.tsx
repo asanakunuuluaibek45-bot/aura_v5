@@ -27,6 +27,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  CircleHelp,
   Eye,
   LayoutGrid,
   Wallet,
@@ -107,6 +108,7 @@ interface AppNavProps {
   isSuperAdmin?: boolean
   onNavigate: (screen: ScreenId) => void
   onOpenCabinet?: () => void
+  onOpenHelp?: () => void
   mobileOpen?: boolean
   onClose?: () => void
   collapsed?: boolean
@@ -121,6 +123,7 @@ export function AppNav({
   isAdmin,
   isSuperAdmin = false,
   onNavigate,
+  onOpenHelp,
   mobileOpen = false,
   onClose,
   collapsed = false,
@@ -307,6 +310,22 @@ export function AppNav({
 
         {/* Bottom area */}
         <div className="shrink-0 border-t border-border p-2">
+          <button
+            type="button"
+            onClick={() => {
+              onOpenHelp?.()
+              onClose?.()
+            }}
+            aria-label="Открыть помощь по Aura"
+            title="Помощь по сайту"
+            className={cn(
+              "mb-1 flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              collapsed && "lg:justify-center lg:px-1"
+            )}
+          >
+            <CircleHelp aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-primary" />
+            <span className={cn("truncate", collapsed && "lg:hidden")}>Помощь</span>
+          </button>
           {profile ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

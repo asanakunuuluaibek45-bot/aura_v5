@@ -140,6 +140,11 @@ export function Dashboard({
   const [showExitModal, setShowExitModal] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [siteHelpOpener, setSiteHelpOpener] = useState<(() => void) | null>(null)
+  const registerSiteHelpOpener = useCallback((openHelp: () => void) => {
+    setSiteHelpOpener(() => openHelp)
+  }, [])
+  const openSiteHelp = useCallback(() => siteHelpOpener?.(), [siteHelpOpener])
 
   // Счётчик нажатий «Назад» с главного экрана (0 или 1)
   const backCountRef = useRef(0)
@@ -356,6 +361,7 @@ export function Dashboard({
   isSuperAdmin={isSuperAdmin}
   onNavigate={handleScreenChange}
   onOpenCabinet={() => handleScreenChange("kabinet")} 
+  onOpenHelp={openSiteHelp}
   mobileOpen={mobileNavOpen}
   onClose={() => setMobileNavOpen(false)}
   collapsed={sidebarCollapsed}
@@ -455,7 +461,7 @@ export function Dashboard({
         )}
         </main>
       </div>
-      <SiteHelp screen={activeScreen} onNavigate={handleScreenChange} isAdmin={isAdmin} isSuperAdmin={isSuperAdmin} />
+      <SiteHelp screen={activeScreen} onNavigate={handleScreenChange} isAdmin={isAdmin} isSuperAdmin={isSuperAdmin} onRegisterOpenHelp={registerSiteHelpOpener} />
     </div>
   )
 }
