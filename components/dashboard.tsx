@@ -4,6 +4,7 @@ import { memo, useMemo, useState, useTransition, useEffect, useRef, useCallback 
 import dynamic from "next/dynamic"
 import type { Customer, Product, Profile, Role, Sale, SaleReturn } from "@/lib/types"
 import { AppHeader } from "@/components/app-header"
+import { SiteHelp } from "@/components/site-help"
 import { AppNav, SCREEN_PATHS, type ScreenId } from "@/components/app-nav"
 import { KassaScreen } from "@/components/screens/kassa/index"
 import { CashPanel } from "@/components/screens/kassa/cash-panel"
@@ -454,6 +455,7 @@ export function Dashboard({
         )}
         </main>
       </div>
+      <SiteHelp screen={activeScreen} onNavigate={handleScreenChange} isAdmin={isAdmin} isSuperAdmin={isSuperAdmin} />
     </div>
   )
 }

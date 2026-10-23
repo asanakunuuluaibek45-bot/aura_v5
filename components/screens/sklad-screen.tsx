@@ -167,7 +167,7 @@ export function SkladScreen({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(p)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Редактировать товар" title="Открыть карточку товара для изменения" onClick={() => onEdit(p)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       {isAdmin && (
@@ -175,6 +175,8 @@ export function SkladScreen({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          aria-label="Удалить товар"
+                          title="Удалить товар со склада"
                           onClick={() => onDelete(p)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />

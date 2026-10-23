@@ -462,6 +462,7 @@ export function ClientsScreen({
                           <Button
                             variant="ghost" size="icon"
                             className="h-8 w-8 text-muted-foreground hover:text-primary"
+                            aria-label={`История покупок клиента ${c.name ?? "без имени"}`}
                             title="История покупок"
                             onClick={() => setHistoryClient(c)}
                           >
@@ -471,6 +472,7 @@ export function ClientsScreen({
                         <Button
                           variant="ghost" size="icon"
                           className={cn("h-8 w-8", c.is_blacklisted ? "text-destructive hover:text-foreground" : "text-muted-foreground hover:text-destructive")}
+                          aria-label={c.is_blacklisted ? "Убрать из чёрного списка" : "Добавить в чёрный список"}
                           title={c.is_blacklisted ? "Убрать из чёрного списка" : "Добавить в чёрный список"}
                           onClick={() => handleToggleBlacklist(c)}
                           disabled={isPending}
@@ -480,6 +482,7 @@ export function ClientsScreen({
                         <Button
                           variant="ghost" size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-primary"
+                          aria-label={`Редактировать клиента ${c.name ?? "без имени"}`}
                           title="Редактировать"
                           onClick={() => openEdit(c)}
                         >
@@ -488,6 +491,7 @@ export function ClientsScreen({
                         <Button
                           variant="ghost" size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          aria-label={`Удалить клиента ${c.name ?? "без имени"}`}
                           title="Удалить"
                           onClick={() => handleDelete(c)}
                         >
@@ -612,7 +616,7 @@ export function ClientsScreen({
                 {filtered.length} клиентов · стр. {currentPage}/{totalPages}
               </span>
               <div className="flex items-center gap-1">
-                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setPage(Math.max(1, currentPage - 1))}>
+                <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Предыдущая страница" title="Показать предыдущую страницу клиентов" disabled={currentPage === 1} onClick={() => setPage(Math.max(1, currentPage - 1))}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -622,12 +626,12 @@ export function ClientsScreen({
                       {idx > 0 && arr[idx - 1] !== n - 1 && (
                         <span className="px-1 text-xs text-muted-foreground">…</span>
                       )}
-                      <Button variant={n === currentPage ? "default" : "outline"} size="icon" className="h-8 w-8 text-xs" onClick={() => setPage(n)}>
+                      <Button variant={n === currentPage ? "default" : "outline"} size="icon" className="h-8 w-8 text-xs" aria-label={`Перейти на страницу ${n}`} title={`Перейти на страницу ${n}`} onClick={() => setPage(n)}>
                         {n}
                       </Button>
                     </span>
                   ))}
-                <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setPage(Math.min(totalPages, currentPage + 1))}>
+                <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Следующая страница" title="Показать следующую страницу клиентов" disabled={currentPage === totalPages} onClick={() => setPage(Math.min(totalPages, currentPage + 1))}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
