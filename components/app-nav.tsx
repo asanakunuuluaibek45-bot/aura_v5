@@ -75,19 +75,20 @@ type NavItem = {
   adminOnly?: boolean
   superAdminOnly?: boolean
   group: NavGroup
+  description: string
 }
 
 const ITEMS: NavItem[] = [
-  { id: "kassa", label: "Касса", icon: ShoppingCart, group: "work" },
-  { id: "money", label: "Деньги", icon: Wallet, group: "work" },
-  { id: "vitrina", label: "Витрина", icon: LayoutGrid, group: "work" },
-  { id: "sklad", label: "Склад", icon: Warehouse, group: "work" },
-  { id: "clients", label: "Клиенты", icon: Users, group: "work" },
-  { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management" },
-  { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics" },
-  { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system" },
-  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system" },
-  { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system" },
+  { id: "kassa", label: "Касса", icon: ShoppingCart, group: "work", description: "Оформление продаж" },
+  { id: "money", label: "Деньги", icon: Wallet, group: "work", description: "Движение денег и операции кассы" },
+  { id: "vitrina", label: "Витрина", icon: LayoutGrid, group: "work", description: "Каталог ассортимента магазина" },
+  { id: "sklad", label: "Склад", icon: Warehouse, group: "work", description: "Карточки товаров и складской ассортимент" },
+  { id: "clients", label: "Клиенты", icon: Users, group: "work", description: "Карточки клиентов и история покупок" },
+  { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management", description: "Поставщики, долги и расчёты" },
+  { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
+  { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
+  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления Aura" },
+  { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
 ]
 
 const GROUPS: { id: NavGroup; label: string }[] = [
@@ -267,7 +268,7 @@ export function AppNav({
                           key={item.id}
                           type="button"
                           onClick={() => handleNavigate(item.id)}
-                          title={collapsed ? item.label : undefined}
+                          title={collapsed ? `${item.label} — ${item.description}` : item.description}
                           aria-current={active ? "page" : undefined}
                           className={cn(
                             "group relative flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
