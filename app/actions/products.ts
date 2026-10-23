@@ -157,6 +157,28 @@ export async function getProductsPage(
 }
 
 
+/** Exact, case-insensitive SKU lookup across the active shop, including older catalog pages. */
+export async function findProductBySku(rawSku: string): Promise<Product | null> {
+  const sku = String(rawSku ?? "").trim().toUpperCase()
+  if (!/^[A-Z]{2}\d{1,8}$/.test(sku)) return null
+
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) return null
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_COLUMNS)
+    .eq("shop_id", shopId)
+    .ilike("sku", sku)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) return null
+  const [product] = await withShopSeqId(supabase, [data as unknown as Product])
+  return product ?? null
+}
+
 export type ProductInput = {
   name: string
   category: string

@@ -38,12 +38,24 @@ export type CheckoutInput = {
   amount_electronic?: number
   customer_name: string
   customer_phone: string
+  customer_id?: string | null
+  credit_due_date?: string
   bonus_used: number
   /** Generate once on the client and reuse when retrying an uncertain result. */
   client_op_id?: string
 }
 
-const PAYMENTS = new Set(["cash", "card", "transfer", "mixed"])
+function getBishkekToday() {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Bishkek",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date())
+  return ["year", "month", "day"].map((key) => parts.find((part) => part.type === key)?.value ?? "").join("-")
+}
+
+const PAYMENTS = new Set(["cash", "card", "transfer", "mixed", "credit"])
 
 export async function checkout(input: CheckoutInput) {
   const { supabase, shopId } = await requireProfile()
@@ -56,6 +68,20 @@ export async function checkout(input: CheckoutInput) {
     throw new Error("Количество каждой позиции должно быть равно 1")
   }
   const phone = (input.customer_phone ?? "").trim()
+  const customerId = (input.customer_id ?? "").trim() || null
+  if (input.payment_method === "credit" && !customerId) {
+    throw new Error("Для продажи в долг выберите клиента из списка")
+  }
+  const creditDueDate = (input.credit_due_date ?? "").trim()
+  if (input.payment_method === "credit") {
+    const parsedDueDate = /^\d{4}-\d{2}-\d{2}$/.test(creditDueDate)
+      ? Date.parse(creditDueDate + "T00:00:00Z")
+      : Number.NaN
+    if (!Number.isFinite(parsedDueDate) || new Date(parsedDueDate).toISOString().slice(0, 10) !== creditDueDate) {
+      throw new Error("Укажите срок оплаты долга")
+    }
+    if (creditDueDate < getBishkekToday()) throw new Error("Срок оплаты не может быть в прошлом")
+  }
   if (phone && !/^[\d+()\s-]{5,20}$/.test(phone)) throw new Error("Проверьте номер телефона клиента")
 
   // Resolve all scrap prices in one round trip instead of querying once per
@@ -104,19 +130,33 @@ export async function checkout(input: CheckoutInput) {
     }
   }
 
-  const { data: result, error } = await supabase.rpc("commit_offline_sale", {
-    _client_op_id: clientOpId,
-    _sale: {
-      items: validated,
-      payment_method: input.payment_method,
-      amount_cash: input.amount_cash,
-      amount_electronic: input.amount_electronic,
-      bonus_used: input.bonus_used,
-      customer_name: (input.customer_name ?? "").trim() || null,
-      customer_phone: phone || null,
-    },
-  })
-  if (error) throw new Error(`Не удалось провести продажу: ${error.message}`)
+  const salePayload = {
+    items: validated,
+    payment_method: input.payment_method,
+    customer_id: customerId,
+    amount_cash: input.amount_cash,
+    amount_electronic: input.amount_electronic,
+    bonus_used: input.bonus_used,
+    customer_name: (input.customer_name ?? "").trim() || null,
+    customer_phone: phone || null,
+  }
+  const rpcResponse = input.payment_method === "credit"
+    ? await supabase.rpc("commit_offline_credit_sale", {
+        _client_op_id: clientOpId,
+        _sale: salePayload,
+        _due_date: creditDueDate,
+      })
+    : await supabase.rpc("commit_offline_sale", {
+        _client_op_id: clientOpId,
+        _sale: salePayload,
+      })
+  const { data: result, error } = rpcResponse
+  if (error) {
+    if (input.payment_method === "credit" && (["42883", "42P01", "42703", "PGRST202", "PGRST204", "PGRST205"].includes(error.code ?? "") || error.message.includes("Некорректный способ оплаты"))) {
+      throw new Error("Сначала примените SQL-миграции продаж в долг и сроков: supabase/migrations/20261019_customer_credit_sales.sql и supabase/migrations/20261022_customer_credit_due_dates.sql")
+    }
+    throw new Error(`Не удалось провести продажу: ${error.message}`)
+  }
   if (result?.accepted === false) {
     const product = result.product_name ? ` «${result.product_name}»` : ""
     throw new Error(`Конфликт остатков: товар${product} уже продан или недоступен. Обновите склад и проверьте чек.`)
