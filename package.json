@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:atomic": "node --test scripts/test-atomic-actions.mjs",
-    "test:atomic:postgres": "node scripts/test-atomic-postgres.mjs"
+    "test:atomic:postgres": "node scripts/test-atomic-postgres.mjs",
+    "test:history:postgres": "node scripts/test-action-history-postgres.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
