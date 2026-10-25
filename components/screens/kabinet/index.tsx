@@ -310,37 +310,39 @@ function TeamSales({
           {rows.map((r) => (
             <div
               key={r.profile.id}
-              className="flex flex-wrap items-center gap-3 border-b border-border/60 py-3 last:border-0"
+              className="grid grid-cols-2 items-center gap-x-3 gap-y-3 border-b border-border/60 py-3 last:border-0 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:gap-3"
             >
-              <Avatar className="h-9 w-9 border border-border">
-                <AvatarFallback className="bg-primary/15 text-xs text-primary">
-                  {initialsOf(r.profile.full_name)}
-                </AvatarFallback>
-              </Avatar>
+              <div className="col-span-2 flex min-w-0 items-center gap-3 sm:col-span-1">
+                <Avatar className="h-9 w-9 shrink-0 border border-border">
+                  <AvatarFallback className="bg-primary/15 text-xs text-primary">
+                    {initialsOf(r.profile.full_name)}
+                  </AvatarFallback>
+                </Avatar>
 
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{r.profile.full_name ?? "Без имени"}</span>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {roleLabel(r.profile.role)}
-                  </Badge>
-                  {r.profile.id === profile.id && (
-                    <span className="text-[10px] text-muted-foreground">это вы</span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  чеков: {r.receipts} · штук: {r.units} · прибыль {formatSom(r.profit)}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="min-w-0 truncate text-sm font-medium">{r.profile.full_name ?? "Без имени"}</span>
+                    <Badge variant="secondary" className="shrink-0 text-[10px]">
+                      {roleLabel(r.profile.role)}
+                    </Badge>
+                    {r.profile.id === profile.id && (
+                      <span className="text-[10px] text-muted-foreground">это вы</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    чеков: {r.receipts} · штук: {r.units} · прибыль {formatSom(r.profit)}
+                  </div>
                 </div>
               </div>
 
-              <div className="text-right">
+              <div className="min-w-0 rounded-lg border border-border/60 px-2 py-1.5 sm:border-0 sm:p-0 sm:text-right">
                 <div className="text-[11px] text-muted-foreground">Выручка</div>
-                <div className="font-mono text-sm font-semibold text-primary">{formatSom(r.revenue)}</div>
+                <div className="break-words font-mono text-sm font-semibold text-primary">{formatSom(r.revenue)}</div>
               </div>
 
-              <div className="text-right">
+              <div className="min-w-0 rounded-lg border border-border/60 px-2 py-1.5 text-right sm:border-0 sm:p-0">
                 <div className="text-[11px] text-muted-foreground">Бонусы</div>
-                <div className="font-mono text-sm font-semibold">{r.bonus.toFixed(0)}</div>
+                <div className="font-mono text-sm font-semibold tabular-nums">{r.bonus.toFixed(0)}</div>
               </div>
 
               <BonusPointsEditor
@@ -348,6 +350,7 @@ function TeamSales({
                 busy={busy}
                 onSetBonus={onSetBonus}
                 onResetBonus={onResetBonus}
+                className="col-span-2 min-w-0 sm:col-span-1"
               />
             </div>
           ))}
@@ -366,11 +369,13 @@ function BonusPointsEditor({
   busy,
   onSetBonus,
   onResetBonus,
+  className,
 }: {
   member: Profile
   busy: boolean
   onSetBonus: (id: string, points: number) => void
   onResetBonus: (id: string, name: string) => void
+  className?: string
 }) {
   const [points, setPoints] = useState(String(Number(member.bonus_points ?? 0).toFixed(0)))
 
@@ -379,19 +384,19 @@ function BonusPointsEditor({
   }, [member.bonus_points])
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className={cn("grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1.5 sm:flex sm:w-auto", className)}>
       <Input
         type="number"
         min={0}
         value={points}
         onChange={(e) => setPoints(e.target.value)}
-        className="h-8 w-20"
+        className="h-8 w-full min-w-0 sm:w-20"
         aria-label="Бонусные баллы"
       />
       <Button
         size="sm"
         variant="outline"
-        className="h-8 bg-transparent"
+        className="h-8 whitespace-nowrap bg-transparent"
         disabled={busy}
         onClick={() => onSetBonus(member.id, Number(points))}
       >
