@@ -14,6 +14,7 @@ import {
   touchPresence,
   type CabinetData,
 } from "@/app/actions/cabinet"
+import { getProductUnitUsageCount } from "@/app/actions/product-units"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -31,7 +32,7 @@ import {
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { BadgeCheck, Coins, LogOut, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
+import { BadgeCheck, Coins, LogOut, Package, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
 import { ActionHistory } from "./action-history"
@@ -517,6 +518,10 @@ export function KabinetScreen({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [defaultRate, setDefaultRate] = useState(String(data.defaultBonusRate))
+  const [productUnitUsage, setProductUnitUsage] = useState<{ shopId: string | null; count: number | null }>({
+    shopId: null,
+    count: null,
+  })
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -547,6 +552,16 @@ export function KabinetScreen({
 
   const isSuper = viewRole === "super_admin"
   const isAdmin = viewRole === "admin" || isSuper
+  const usageShopId = historyShopId ?? profile.shop_id ?? null
+
+  useEffect(() => {
+    if (!isAdmin || !usageShopId) return
+    let active = true
+    void getProductUnitUsageCount().then((count) => {
+      if (active) setProductUnitUsage({ shopId: usageShopId, count })
+    })
+    return () => { active = false }
+  }, [isAdmin, usageShopId])
 
   // Отметка присутствия для виджета «онлайн».
   useEffect(() => {
@@ -576,6 +591,28 @@ export function KabinetScreen({
     <div className="space-y-6">
       {/* Профиль */}
       <CabinetProfileCard profile={profile} email={email} />
+
+      {/* Счётчик новых товарных карточек */}
+      {isAdmin && usageShopId && (
+        <Card>
+          <CardContent className="flex min-w-0 items-start gap-3 pt-4">
+            <Package className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <span className="text-sm font-medium">Новые карточки товаров</span>
+                <span className="font-mono text-lg font-semibold tabular-nums" aria-live="polite">
+                  {productUnitUsage.shopId === usageShopId && productUnitUsage.count !== null
+                    ? productUnitUsage.count.toLocaleString("ru-RU")
+                    : "—"}
+                </span>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Одна единица — одна новая карточка с момента запуска. Продажа, удаление, редактирование и повторная синхронизация не меняют счётчик. Это учёт карточек, не объёма файлов; добавление товаров не блокируется.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <ActionHistory
         key={historyShopId ?? profile.shop_id ?? "no-shop"}

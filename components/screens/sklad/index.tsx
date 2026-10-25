@@ -386,7 +386,6 @@ export function SkladScreen({
         <SkladStats
           products={products}
           canSeePurchasePrice={canSeePurchasePrice}
-          isAdmin={isAdmin}
         />
       )}
 
