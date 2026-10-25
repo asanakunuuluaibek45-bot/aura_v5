@@ -7,9 +7,11 @@ import { formatSom, formatWeight } from "@/lib/format"
 import { purityFromMetal } from "@/lib/purity"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { ChevronLeft, ChevronRight, Eye, EyeOff, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { updateProduct } from "@/app/actions/products"
+import { setOwnShopPublicEnabled } from "@/app/actions/shops"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { ProductSearch } from "@/components/product-search"
@@ -32,15 +34,23 @@ export function VitrinaScreen({
   products,
   canSeePurchasePrice,
   isAdmin,
+  isShopAdmin,
+  publicEnabled,
+  canManagePublicStorefront,
 }: {
   products: Product[]
   canSeePurchasePrice: boolean
   isAdmin: boolean
+  isShopAdmin: boolean
+  publicEnabled: boolean
+  canManagePublicStorefront: boolean
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [selected, setSelected] = useState<Product | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [storefrontVisible, setStorefrontVisible] = useState(publicEnabled)
+  const [visibilityPending, setVisibilityPending] = useState(false)
   const [query, setQuery] = useState("")
   const debouncedQuery = useDebouncedValue(query)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
@@ -59,6 +69,34 @@ export function VitrinaScreen({
   }, [products, debouncedQuery, category, statusFilter, isAdmin])
 
   const visibleProducts = filtered.slice(0, visibleCount)
+
+  useEffect(() => {
+    setStorefrontVisible(publicEnabled)
+  }, [publicEnabled])
+
+  const handleTogglePublicStorefront = async (enabled: boolean) => {
+    if (enabled === storefrontVisible || visibilityPending) return
+    if (
+      !enabled &&
+      !window.confirm(
+        "Отключить публичную витрину? Магазин исчезнет из каталога Aura, а публичные страницы и QR-ссылки перестанут открываться. Товары не удалятся.",
+      )
+    ) {
+      return
+    }
+
+    setVisibilityPending(true)
+    try {
+      await setOwnShopPublicEnabled(enabled)
+      setStorefrontVisible(enabled)
+      toast.success(enabled ? "Публичная витрина включена" : "Публичная витрина отключена")
+      startTransition(() => router.refresh())
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось изменить публичность витрины")
+    } finally {
+      setVisibilityPending(false)
+    }
+  }
 
   const handleToggleVisibility = async (p: Product) => {
     setTogglingId(p.id)
@@ -80,6 +118,32 @@ export function VitrinaScreen({
           <h1 className="font-serif text-2xl">Витрина</h1>
           <p className="text-sm text-muted-foreground">Каталог украшений магазина</p>
         </div>
+        {isShopAdmin && (
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Публичная витрина Aura</p>
+              <p className="text-xs text-muted-foreground">
+                {storefrontVisible
+                  ? "Магазин виден покупателям в каталоге Aura"
+                  : "Магазин скрыт, публичные ссылки недоступны"}
+              </p>
+              {!canManagePublicStorefront && (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                  Переключатель станет доступен после обновления базы данных.
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-xs text-muted-foreground">{storefrontVisible ? "Публичная" : "Скрыта"}</span>
+              <Switch
+                checked={storefrontVisible}
+                onCheckedChange={handleTogglePublicStorefront}
+                disabled={!canManagePublicStorefront || visibilityPending}
+                aria-label="Публичная витрина магазина"
+              />
+            </div>
+          </div>
+        )}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <ProductSearch
             value={query}

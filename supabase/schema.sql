@@ -1370,10 +1370,11 @@ CREATE FUNCTION public.public_product(_shop_id uuid, _article text) RETURNS TABL
          p.metal_color, p.weight, p.size, p.sku, p.stones, p.description,
          p.sale_price, p.status::text, p.images, p.image_url, p.created_at
     FROM public.products p
-    LEFT JOIN public.shop_settings s ON s.shop_id = p.shop_id
+    JOIN public.shop_settings s ON s.shop_id = p.shop_id
    WHERE p.shop_id = _shop_id
      AND p.sku = upper(btrim(_article))
      AND coalesce(p.is_hidden, false) = false
+     AND s.public_enabled = true
    LIMIT 1;
 $$;
 
@@ -1400,6 +1401,25 @@ $$;
 
 
 --
+-- Name: public_shop_is_enabled(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.public_shop_is_enabled(_shop_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.shop_settings AS ss
+     WHERE ss.shop_id = _shop_id
+       AND ss.public_enabled = true
+  );
+ $;
+
+REVOKE ALL ON FUNCTION public.public_shop_is_enabled(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.public_shop_is_enabled(uuid) TO anon, authenticated;
+
+
 -- Name: public_shop_products(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1411,10 +1431,11 @@ CREATE FUNCTION public.public_shop_products(_shop_id uuid, _limit integer DEFAUL
          p.metal_color, p.weight, p.size, p.sku, p.stones, p.description,
          p.sale_price, p.status::text, p.images, p.image_url, p.created_at
     FROM public.products p
-    LEFT JOIN public.shop_settings s ON s.shop_id = p.shop_id
+    JOIN public.shop_settings s ON s.shop_id = p.shop_id
    WHERE p.shop_id = _shop_id
      AND p.status = 'in_stock'
      AND coalesce(p.is_hidden, false) = false
+     AND s.public_enabled = true
    ORDER BY p.created_at DESC
    LIMIT _limit;
 $$;
