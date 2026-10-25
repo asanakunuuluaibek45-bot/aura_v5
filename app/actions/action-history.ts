@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getActiveShopId } from "@/lib/supabase/current-shop"
 import {
   ACTION_HISTORY_LIMIT,
+  ACTION_HISTORY_PAGE_SIZE,
   type ActionHistoryItem,
   type UndoActionResult,
 } from "@/lib/action-history"
@@ -49,6 +50,37 @@ export async function getActionHistory(): Promise<ActionHistoryItem[]> {
     .limit(ACTION_HISTORY_LIMIT)
   if (error) throw historyError(error)
   return (data ?? []) as ActionHistoryItem[]
+}
+
+export async function getActionHistoryPage(page: number): Promise<{
+  items: ActionHistoryItem[]
+  hasMore: boolean
+}> {
+  const pageCount = Math.ceil(ACTION_HISTORY_LIMIT / ACTION_HISTORY_PAGE_SIZE)
+  if (!Number.isInteger(page) || page < 0 || page >= pageCount) {
+    throw new Error("Некорректный номер страницы истории")
+  }
+
+  const { supabase, shopId } = await requireContext()
+  if (!shopId) return { items: [], hasMore: false }
+
+  const offset = page * ACTION_HISTORY_PAGE_SIZE
+  // Fetch one extra row (except on the final page) to know whether a next page exists.
+  const end = Math.min(offset + ACTION_HISTORY_PAGE_SIZE, ACTION_HISTORY_LIMIT - 1)
+  const { data, error } = await supabase
+    .from("action_history")
+    .select("id, shop_id, entity_type, entity_id, created_at, employee_id, employee_name, description, status, undone_at, undone_by")
+    .eq("shop_id", shopId)
+    .order("seq", { ascending: false })
+    .range(offset, end)
+  if (error) throw historyError(error)
+
+  const fetched = (data ?? []) as ActionHistoryItem[]
+  return {
+    items: fetched.slice(0, ACTION_HISTORY_PAGE_SIZE),
+    hasMore: offset + ACTION_HISTORY_PAGE_SIZE < ACTION_HISTORY_LIMIT
+      && fetched.length > ACTION_HISTORY_PAGE_SIZE,
+  }
 }
 
 /** The RPC owns authorization, locking, conflict detection and restoration. */
