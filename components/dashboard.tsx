@@ -117,6 +117,7 @@ export function Dashboard({
   clients = [],
   superAdminShops,
   impersonatedShop,
+  publicStorefrontState = { enabled: true, canToggle: false },
 }: {
   /** Текущий экран определяется URL-роутом, а не внутренним состоянием. */
   screen: ScreenId
@@ -133,6 +134,7 @@ export function Dashboard({
   clients?: Customer[]
   superAdminShops?: ShopBillingRow[]
   impersonatedShop?: { shop_id: string; shop_name: string | null }
+  publicStorefrontState?: { enabled: boolean; canToggle: boolean }
 }) {
   const router = useRouter()
   const [activeScreen, setActiveScreen] = useState<ScreenId>(screen)
@@ -406,7 +408,15 @@ export function Dashboard({
           />
         )}
         {activeScreen === "vitrina" && (
-          <VitrinaScreen products={currentProducts} canSeePurchasePrice={canSeePurchasePrice} isAdmin={isAdmin} />
+          <VitrinaScreen
+            products={currentProducts}
+            canSeePurchasePrice={canSeePurchasePrice}
+            isAdmin={isAdmin}
+            isShopAdmin={profile.role === "admin" && !isImpersonating}
+            storeId={profile.shop_id ?? ""}
+            publicEnabled={publicStorefrontState.enabled}
+            canManagePublicStorefront={publicStorefrontState.canToggle}
+          />
         )}
         {activeScreen === "sklad" && (
           <SkladScreen
