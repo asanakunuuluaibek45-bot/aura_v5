@@ -6,6 +6,7 @@ const root = process.cwd()
 const migration = readFileSync(join(root, "supabase/migrations/20261025_product_unit_usage.sql"), "utf8")
 const usageAction = readFileSync(join(root, "app/actions/product-units.ts"), "utf8")
 const stockStats = readFileSync(join(root, "components/screens/sklad/sklad-stats.tsx"), "utf8")
+const cabinetScreen = readFileSync(join(root, "components/screens/kabinet/index.tsx"), "utf8")
 
 const checks = [
   [
@@ -35,11 +36,14 @@ const checks = [
     },
   ],
   [
-    "the application reads the meter and never blocks product creation",
+    "the meter is shown in the cabinet, not the stock screen, and never blocks product creation",
     () => {
       assert.match(usageAction, /\.select\("product_id", \{ count: "exact", head: true \}\)/)
       assert.doesNotMatch(usageAction, /\.insert\(|\.update\(|\.delete\(/)
-      assert.match(stockStats, /сейчас добавление товаров не блокируется/i)
+      assert.match(cabinetScreen, /getProductUnitUsageCount/)
+      assert.match(cabinetScreen, /Новые карточки товаров/)
+      assert.match(cabinetScreen, /добавление товаров не блокируется/i)
+      assert.doesNotMatch(stockStats, /getProductUnitUsageCount|Новые карточки после запуска счётчика/)
     },
   ],
 ]

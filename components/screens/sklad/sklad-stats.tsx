@@ -1,29 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import type { Product } from "@/lib/types"
 import { formatSom, formatWeight } from "@/lib/format"
 import { purityFromMetal } from "@/lib/purity"
-import { getProductUnitUsageCount } from "@/app/actions/product-units"
 
 interface SkladStatsProps {
   products: Product[]
   canSeePurchasePrice: boolean
-  isAdmin: boolean
 }
 
-export function SkladStats({ products, canSeePurchasePrice, isAdmin }: SkladStatsProps) {
-  const [productUnitsUsed, setProductUnitsUsed] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!isAdmin) return
-    let active = true
-    void getProductUnitUsageCount().then((count) => {
-      if (active) setProductUnitsUsed(count)
-    })
-    return () => { active = false }
-  }, [isAdmin, products.length])
-
+export function SkladStats({ products, canSeePurchasePrice }: SkladStatsProps) {
   const stats = useMemo(() => {
     let count = 0
     let weight = 0
@@ -66,19 +53,6 @@ export function SkladStats({ products, canSeePurchasePrice, isAdmin }: SkladStat
 
   return (
     <div className="mb-5 space-y-4">
-      {isAdmin && (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <span className="text-sm font-medium">Новые карточки после запуска счётчика</span>
-            <span className="font-mono text-lg font-semibold tabular-nums" aria-live="polite">
-              {productUnitsUsed === null ? "—" : productUnitsUsed.toLocaleString("ru-RU")}
-            </span>
-          </div>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            Одна единица — одна новая карточка с момента запуска. Продажа, удаление, редактирование и повторная синхронизация не возвращают и не добавляют единицы. Это счётчик карточек, не измерение объёма файлов; сейчас добавление товаров не блокируется.
-          </p>
-        </div>
-      )}
       {/* Главные карточки показателей */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Позиций" value={String(stats.count)} />
