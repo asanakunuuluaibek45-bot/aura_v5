@@ -68,7 +68,7 @@ export default async function StorePage({ params }: { params: Promise<Params> })
                     <div className="text-xs text-muted-foreground">
                       {p.metal ?? "—"} · {formatWeight(p.weight)}
                     </div>
-                    <div className="mt-1 font-mono text-sm font-semibold text-primary">
+                    <div className="mt-1 min-w-0 break-words font-mono text-sm font-semibold text-primary [overflow-wrap:anywhere]">
                       {formatSom(p.sale_price)}
                     </div>
                   </div>

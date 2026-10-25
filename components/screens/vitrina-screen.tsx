@@ -132,15 +132,21 @@ export function VitrinaScreen({
                     {p.metal} · {formatWeight(p.weight)}
                     {p.size ? ` · р.${p.size}` : ""}
                   </p>
-                  <div className="flex items-baseline justify-between pt-1">
-                    <span className="font-mono text-base font-semibold text-primary">{formatSom(p.sale_price)}</span>
+                  <div className="min-w-0 space-y-1 pt-1">
+                    <span className="block break-words font-mono text-sm font-semibold leading-tight text-primary [overflow-wrap:anywhere] sm:text-base">
+                      {formatSom(p.sale_price)}
+                    </span>
                     {canSeePurchasePrice && (
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="block break-words font-mono text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
                         закуп {formatSom(p.purchase_price)}
                       </span>
                     )}
                   </div>
-                  {canSeePurchasePrice && <div className="text-[11px] text-success">маржа {formatSom(margin)}</div>}
+                  {canSeePurchasePrice && (
+                    <div className="break-words text-[11px] text-success [overflow-wrap:anywhere]">
+                      маржа {formatSom(margin)}
+                    </div>
+                  )}
                 </div>
               </button>
             )
@@ -246,7 +252,9 @@ function Info({ label, value, accent }: { label: string; value: string; accent?:
   return (
     <div className="rounded-xl border border-border bg-card px-3 py-2">
       <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className={cn("truncate font-mono text-sm font-medium", accent && "text-primary")}>{value}</div>
+      <div className={cn("break-words font-mono text-sm font-medium [overflow-wrap:anywhere]", accent && "text-primary")}>
+        {value}
+      </div>
     </div>
   )
 }
