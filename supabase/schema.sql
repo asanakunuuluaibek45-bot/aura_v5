@@ -1699,6 +1699,17 @@ CREATE TABLE public.products (
 
 
 --
+-- Name: product_unit_usage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_unit_usage (
+    product_id uuid NOT NULL,
+    shop_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL
+);
+
+
+--
 -- Name: sell_product(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1904,6 +1915,50 @@ CREATE FUNCTION public.superadmin_list_shops() RETURNS TABLE(shop_id uuid, shop_
   ) mc ON mc.shop_id = ss.shop_id
   WHERE public.is_super_admin()
   ORDER BY ss.shop_name;
+$$;
+
+
+--
+-- Name: superadmin_list_product_units(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.superadmin_list_product_units() RETURNS TABLE(shop_id uuid, units_used bigint)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+BEGIN
+  IF NOT public.is_super_admin() THEN
+    RAISE EXCEPTION 'Forbidden: requires super_admin role'
+      USING errcode = '42501';
+  END IF;
+
+  RETURN QUERY
+  SELECT ss.shop_id, COALESCE(unit_counts.units_used, 0)::bigint
+  FROM public.shop_settings AS ss
+  LEFT JOIN (
+    SELECT product_unit_usage.shop_id, count(*)::bigint AS units_used
+    FROM public.product_unit_usage
+    GROUP BY product_unit_usage.shop_id
+  ) AS unit_counts ON unit_counts.shop_id = ss.shop_id
+  ORDER BY ss.shop_id;
+END;
+$$;
+
+
+--
+-- Name: record_new_product_unit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_new_product_unit() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+BEGIN
+  INSERT INTO public.product_unit_usage (product_id, shop_id)
+  VALUES (NEW.id, NEW.shop_id)
+  ON CONFLICT (product_id) DO NOTHING;
+  RETURN NEW;
+END;
 $$;
 
 
@@ -3130,6 +3185,14 @@ ALTER TABLE ONLY public.product_deletion_tombstones
 
 
 --
+-- Name: product_unit_usage product_unit_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_unit_usage
+    ADD CONSTRAINT product_unit_usage_pkey PRIMARY KEY (product_id);
+
+
+--
 -- Name: products products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3397,6 +3460,13 @@ CREATE INDEX products_shop_weight_idx ON public.products USING btree (shop_id, w
 
 
 --
+-- Name: product_unit_usage_shop_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX product_unit_usage_shop_id_idx ON public.product_unit_usage USING btree (shop_id);
+
+
+--
 -- Name: profiles_impersonated_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3616,6 +3686,13 @@ EXECUTE FUNCTION public.capture_action_history_update('product');
 --
 
 CREATE TRIGGER products_capture_action_history_insert AFTER INSERT ON public.products FOR EACH ROW EXECUTE FUNCTION public.capture_action_history_insert('product_create');
+
+
+--
+-- Name: products products_record_new_unit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER products_record_new_unit AFTER INSERT ON public.products FOR EACH ROW EXECUTE FUNCTION public.record_new_product_unit();
 
 
 --
@@ -3908,10 +3985,25 @@ CREATE POLICY "product deletion tombstones: shop read" ON public.product_deletio
 
 
 --
+-- Name: product_unit_usage product_unit_usage_read_own_shop; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY product_unit_usage_read_own_shop ON public.product_unit_usage FOR SELECT TO authenticated USING (((shop_id = public.current_shop_id()) AND public.is_approved()));
+
+
+--
 -- Name: product_deletion_tombstones; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.product_deletion_tombstones ENABLE ROW LEVEL SECURITY;
+
+
+--
+-- Name: product_unit_usage; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.product_unit_usage ENABLE ROW LEVEL SECURITY;
+
 
 --
 -- Name: products; Type: ROW SECURITY; Schema: public; Owner: -
