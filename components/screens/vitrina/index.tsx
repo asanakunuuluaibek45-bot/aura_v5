@@ -8,10 +8,12 @@ import { purityFromMetal } from "@/lib/purity"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { ChevronLeft, ChevronRight, Eye, EyeOff, Sparkles, X } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, EyeOff, QrCode, Sparkles, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { updateProduct } from "@/app/actions/products"
 import { setOwnShopPublicEnabled } from "@/app/actions/shops"
+import QRCode from "qrcode"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { ProductSearch } from "@/components/product-search"
@@ -35,6 +37,7 @@ export function VitrinaScreen({
   canSeePurchasePrice,
   isAdmin,
   isShopAdmin,
+  storeId,
   publicEnabled,
   canManagePublicStorefront,
 }: {
@@ -42,6 +45,7 @@ export function VitrinaScreen({
   canSeePurchasePrice: boolean
   isAdmin: boolean
   isShopAdmin: boolean
+  storeId: string
   publicEnabled: boolean
   canManagePublicStorefront: boolean
 }) {
@@ -51,6 +55,10 @@ export function VitrinaScreen({
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [storefrontVisible, setStorefrontVisible] = useState(publicEnabled)
   const [visibilityPending, setVisibilityPending] = useState(false)
+  const [storeQrOpen, setStoreQrOpen] = useState(false)
+  const [storeQrPending, setStoreQrPending] = useState(false)
+  const [storeQrUrl, setStoreQrUrl] = useState("")
+  const [storeQrDataUrl, setStoreQrDataUrl] = useState("")
   const [query, setQuery] = useState("")
   const debouncedQuery = useDebouncedValue(query)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
@@ -98,6 +106,45 @@ export function VitrinaScreen({
     }
   }
 
+  const handleOpenStoreQr = async () => {
+    if (!storeId || !storefrontVisible || storeQrPending) return
+    setStoreQrOpen(true)
+    setStoreQrPending(true)
+    try {
+      const url = new URL("/store/" + encodeURIComponent(storeId), window.location.origin).toString()
+      const dataUrl = await QRCode.toDataURL(url, {
+        margin: 2,
+        width: 480,
+        errorCorrectionLevel: "M",
+      })
+      setStoreQrUrl(url)
+      setStoreQrDataUrl(dataUrl)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось сформировать QR-код витрины")
+      setStoreQrOpen(false)
+    } finally {
+      setStoreQrPending(false)
+    }
+  }
+
+  const handleCopyStoreUrl = async () => {
+    if (!storeQrUrl) return
+    try {
+      await navigator.clipboard.writeText(storeQrUrl)
+      toast.success("Ссылка на витрину скопирована")
+    } catch {
+      toast.error("Не удалось скопировать ссылку")
+    }
+  }
+
+  const handleDownloadStoreQr = () => {
+    if (!storeQrDataUrl) return
+    const link = document.createElement("a")
+    link.href = storeQrDataUrl
+    link.download = "aura-storefront-qr.png"
+    link.click()
+  }
+
   const handleToggleVisibility = async (p: Product) => {
     setTogglingId(p.id)
     try {
@@ -133,7 +180,19 @@ export function VitrinaScreen({
                 </p>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleOpenStoreQr()}
+                disabled={!storefrontVisible || !storeId || storeQrPending}
+                aria-label="Показать QR-код публичной витрины"
+                title={storefrontVisible ? "Открыть QR-код ссылки на витрину" : "Включите публичную витрину, чтобы QR-ссылка работала"}
+              >
+                <QrCode className="mr-1.5 h-4 w-4" />
+                QR витрины
+              </Button>
               <span className="text-xs text-muted-foreground">{storefrontVisible ? "Публичная" : "Скрыта"}</span>
               <Switch
                 checked={storefrontVisible}
@@ -324,6 +383,33 @@ export function VitrinaScreen({
           togglingId={togglingId}
         />
       )}
+      <Dialog open={storeQrOpen} onOpenChange={setStoreQrOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>QR-код публичной витрины</DialogTitle>
+            <DialogDescription>Покупатель откроет публичную страницу вашего магазина.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-3">
+            {storeQrPending ? (
+              <div className="flex h-56 w-56 items-center justify-center rounded-xl border border-border text-sm text-muted-foreground" role="status">
+                Создаём QR-код…
+              </div>
+            ) : storeQrDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={storeQrDataUrl} alt="QR-код публичной витрины магазина" className="h-56 w-56 rounded-lg border border-border bg-white p-2" />
+            ) : null}
+            {storeQrUrl && <p className="w-full break-all text-center text-xs text-muted-foreground">{storeQrUrl}</p>}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="button" variant="outline" className="flex-1" onClick={() => void handleCopyStoreUrl()} disabled={!storeQrUrl}>
+              <Copy className="mr-2 h-4 w-4" /> Скопировать ссылку
+            </Button>
+            <Button type="button" className="flex-1" onClick={handleDownloadStoreQr} disabled={!storeQrDataUrl}>
+              <Download className="mr-2 h-4 w-4" /> Скачать QR
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

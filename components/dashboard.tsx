@@ -413,6 +413,7 @@ export function Dashboard({
             canSeePurchasePrice={canSeePurchasePrice}
             isAdmin={isAdmin}
             isShopAdmin={profile.role === "admin" && !isImpersonating}
+            storeId={profile.shop_id ?? ""}
             publicEnabled={publicStorefrontState.enabled}
             canManagePublicStorefront={publicStorefrontState.canToggle}
           />
