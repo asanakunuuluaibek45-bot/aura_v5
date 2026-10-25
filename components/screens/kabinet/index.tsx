@@ -31,11 +31,12 @@ import {
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { BadgeCheck, Coins, Gift, LogOut, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
+import { BadgeCheck, Coins, LogOut, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
 import { ActionHistory } from "./action-history"
 import { InstallAppButton } from "@/components/install-app-button"
+import { CabinetProfileCard } from "./profile-card"
 import type { UndoActionResult } from "@/lib/action-history"
 import type { UndoLocalBaseline } from "@/lib/local-db/undo-cache"
 
@@ -574,31 +575,7 @@ export function KabinetScreen({
   return (
     <div className="space-y-6">
       {/* Профиль */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-4 pt-6">
-          <Avatar className="h-14 w-14 border border-border">
-            <AvatarFallback className="bg-primary/15 text-base text-primary">
-              {initialsOf(profile.full_name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <div className="font-serif text-xl">{profile.full_name ?? "Без имени"}</div>
-            <div className="truncate text-sm text-muted-foreground">{email}</div>
-            <Badge variant="secondary" className="mt-1 text-[10px]">
-              {roleLabel(profile.role)}
-            </Badge>
-          </div>
-          <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-right">
-            <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-              <Gift className="h-3.5 w-3.5" /> Бонусные баллы
-            </div>
-            <div className="font-mono text-2xl font-semibold text-primary">
-              {Number(profile.bonus_points ?? 0).toFixed(0)}
-            </div>
-            <div className="text-[11px] text-muted-foreground">ставка {Number(profile.bonus_rate ?? 2)}% от прибыли</div>
-          </div>
-        </CardContent>
-      </Card>
+      <CabinetProfileCard profile={profile} email={email} />
 
       <ActionHistory
         key={historyShopId ?? profile.shop_id ?? "no-shop"}
