@@ -25,6 +25,7 @@ import { useLabelPrint }      from "./hooks/use-label-print"
 import { cropPrintArea }      from "./canvas/print"
 
 import { CanvasArea }         from "./components/canvas-area"
+import { LiveFormatPanel }    from "./components/live-format-panel"
 import { LabelEditorToolbar, LabelBackgroundControls } from "./components/toolbar"
 
 const STAGE_PAD    = 32
@@ -61,9 +62,16 @@ function getStoredSizeKey(fallback: JewelryLabelSizeKey, storageKey: string): Je
 }
 
 export function LabelEditor({
-  product, autoPrint, initialSizeKey, printerProfile = NIIMBOT_MODEL,
+  product: originalProduct, canSeePurchasePrice = false, autoPrint, initialSizeKey, printerProfile = NIIMBOT_MODEL,
   copies = 1, density, onSizeChange, onClose, backgroundControlsHost,
 }: LabelEditorProps) {
+  const product = useMemo(() => canSeePurchasePrice ? originalProduct : {
+    ...originalProduct,
+    purchase_price: Number.NaN,
+    price_per_gram_purchase: null,
+    purchase_price_visible: null,
+    price_per_gram_purchase_visible: null,
+  }, [originalProduct, canSeePurchasePrice])
   const sizeStorageKey = `${SIZE_STORAGE}:${printerProfile.key}`
   const [sizeKey, setSizeKey] = useState<JewelryLabelSizeKey>(
     () => getStoredSizeKey(initialSizeKey ?? printerProfile.defaultLabelKey ?? DEFAULT_SIZE_KEY, sizeStorageKey),
@@ -585,15 +593,22 @@ export function LabelEditor({
 
       {/* Компактная верхняя строка: формат, статус и закрытие. */}
         <div className="relative z-20 shrink-0 border-b bg-background/95 backdrop-blur-md">
-          <div className="flex min-h-10 items-center gap-1 px-2 py-1">
-            <LabelEditorToolbar zone="header" {...toolbarCommon} />
-            <span className="flex-1" />
-            <span
-              className="max-w-[22vw] shrink truncate text-[10px] text-muted-foreground sm:max-w-[180px]"
-              aria-live="polite"
-            >
-              {printStatus || (loaded ? "Готово" : "Загрузка…")}
-            </span>
+          <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1 px-2 py-1 sm:flex">
+            <div className="min-w-0 [&>div]:max-w-full sm:[&>div]:max-w-none">
+              <LabelEditorToolbar zone="header" {...toolbarCommon} />
+            </div>
+            <span className="hidden flex-1 sm:block" />
+            {(printStatus || !loaded) && (
+              <span
+                className={(loaded ? "hidden sm:block " : "") + "min-w-0 truncate text-[10px] text-muted-foreground sm:max-w-[180px]"}
+                aria-live="polite"
+              >
+                {printStatus || "Загрузка…"}
+              </span>
+            )}
+            {loaded && (
+              <LiveFormatPanel fabricRef={fabricRef} ready={loaded} canSeePurchasePrice={canSeePurchasePrice} />
+            )}
             {onClose && (
               <button
                 type="button"
@@ -606,6 +621,7 @@ export function LabelEditor({
             )}
           </div>
         </div>
+
 
 
       {/* ── ОБЛАСТЬ ХОЛСТА ── */}

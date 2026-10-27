@@ -840,6 +840,7 @@ export function SkladScreen({
               <LabelEditor
                 key={`${labelProduct.id}:${printerProfile.key}`}
                 product={labelProduct}
+                canSeePurchasePrice={canSeePurchasePrice}
                 autoPrint={labelAutoPrint}
                 initialSizeKey={labelSizeKey}
                 printerProfile={printerProfile}
