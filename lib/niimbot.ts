@@ -1,5 +1,6 @@
 import { connectDejen, printDejenRaster, type DejenPrinterInfo, type DejenModelName } from "./dejen"
 import { dejenPageWidthPx } from "./dejen-protocol.mjs"
+import { isStaleBluetoothLinkError } from "./printer-errors"
 
 /**
  * Ювелирные форматы бирок.
@@ -117,6 +118,14 @@ let activePrinterDevice: BluetoothDeviceLike | null = null
 let disconnectListener: (() => void) | null = null
 let monitorStarted = false
 let operationQueue: Promise<unknown> = Promise.resolve()
+/**
+ * True when the BLE link was dropped or re-opened outside the Niimbot driver.
+ * The driver keeps its GATT characteristic between prints; iOS Web Bluetooth
+ * browsers (Bluefy) invalidate those handles on reconnect and then reject every
+ * write with a bare CoreBluetooth code such as "2" (invalid handle). The next
+ * print must rebuild the driver session from the remembered device first.
+ */
+let niimbotLinkStale = false
 const printerStateListeners = new Set<(snapshot: PrinterConnectionSnapshot) => void>()
 
 function readStoredPrinterModel(): string {
@@ -258,6 +267,7 @@ function watchPrinterDevice(device: BluetoothDeviceLike) {
 
   activePrinterDevice = device
   disconnectListener = () => {
+    niimbotLinkStale = true
     if (readStoredDeviceId() !== device.id) return
     publishPrinterSnapshot({ status: "disconnected", error: null })
     retryPrinterConnection(device, 0)
@@ -274,6 +284,7 @@ function retryPrinterConnection(device: BluetoothDeviceLike, attempt: number) {
       publishPrinterSnapshot({ status: "connecting", error: null })
       try {
         await device.gatt.connect()
+        niimbotLinkStale = true
         publishPrinterSnapshot({ status: "connected", error: null })
       } catch {
         publishPrinterSnapshot({ status: "disconnected", error: null })
@@ -315,6 +326,7 @@ async function restoreRememberedPrinter() {
   publishPrinterSnapshot({ status: "connecting", error: null })
   try {
     await device.gatt?.connect()
+    niimbotLinkStale = true
     publishPrinterSnapshot({ status: device.gatt?.connected ? "connected" : "disconnected", error: null })
   } catch {
     publishPrinterSnapshot({ status: "disconnected", error: null })
@@ -338,6 +350,63 @@ export function startPrinterConnectionMonitor() {
       void enqueuePrinterOperation(restoreRememberedPrinter).catch(() => undefined)
     }
   })
+}
+
+/**
+ * Resolve the saved printer without opening the browser chooser.
+ * Prefers the live device object from this page (works even where getDevices()
+ * is missing, e.g. some iOS Bluetooth browsers), then the permitted-device list
+ * by id, then by advertised name (iOS can hand out a new id for the same printer).
+ */
+async function findRememberedDevice(
+  bluetooth: BluetoothAccessLike,
+  deviceId: string,
+): Promise<BluetoothDeviceLike | null> {
+  if (activePrinterDevice?.id === deviceId) return activePrinterDevice
+  if (!bluetooth.getDevices) return null
+  const devices = await bluetooth.getDevices().catch(() => [] as BluetoothDeviceLike[])
+  const byId = devices.find((item) => item.id === deviceId)
+  if (byId) return byId
+  const name = readStoredDeviceName()
+  if (!name) return null
+  const byName = devices.filter((item) => item.name === name)
+  return byName.length === 1 ? byName[0] : null
+}
+
+function hasGetDevices(): boolean {
+  if (typeof navigator === "undefined") return false
+  const bluetooth = (navigator as Navigator & { bluetooth?: BluetoothAccessLike }).bluetooth
+  return typeof bluetooth?.getDevices === "function"
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+function isAppleBluetoothBrowser(): boolean {
+  if (typeof navigator === "undefined") return false
+  const ua = navigator.userAgent || ""
+  return /Bluefy|iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
+}
+
+/**
+ * Drop the driver's cached GATT session so the next call rediscovers fresh handles.
+ * `freshDevice` also discards this page's device object (only when getDevices()
+ * can hand out a new one), for browsers whose device wrapper itself goes stale.
+ */
+async function resetNiimbotLink(api: NiimbotApi, freshDevice = false) {
+  if (freshDevice && activePrinterDevice && hasGetDevices()) {
+    if (disconnectListener) activePrinterDevice.removeEventListener?.("gattserverdisconnected", disconnectListener)
+    disconnectListener = null
+    try { activePrinterDevice.gatt?.disconnect?.() } catch { /* Already disconnected. */ }
+    activePrinterDevice = null
+  }
+  try {
+    await api.disconnect()
+  } catch {
+    // The link may already be gone; the next connect starts from scratch anyway.
+  }
+  niimbotLinkStale = false
+  // CoreBluetooth needs a moment between disconnect and reconnect.
+  await sleep(isAppleBluetoothBrowser() ? 900 : 400)
 }
 
 async function withPrinterDeviceSelection<T>(
@@ -368,22 +437,9 @@ async function withPrinterDeviceSelection<T>(
       return chooseAndRememberDevice(_options)
     }
 
-    if (!bluetooth.getDevices) {
-      const liveDevice = activePrinterDevice?.id === deviceId ? activePrinterDevice : null
-      if (liveDevice) return liveDevice
-      return chooseAndRememberDevice(_options)
-    }
-
-    const devices = await bluetooth.getDevices().catch(() => [])
-    const device = devices.find((item) => item.id === deviceId)
-    if (!device) {
-      if (activePrinterDevice?.id === deviceId && activePrinterDevice.gatt?.connected) {
-        watchPrinterDevice(activePrinterDevice)
-        return activePrinterDevice
-      }
-      return chooseAndRememberDevice(_options)
-    }
-
+    const device = await findRememberedDevice(bluetooth, deviceId)
+    if (!device) return chooseAndRememberDevice(_options)
+    if (device.id !== deviceId) savePrinterDevice(device, modelKey)
     watchPrinterDevice(device)
     return device
   }
@@ -408,6 +464,7 @@ async function withPrinterDeviceSelection<T>(
       if (!device.gatt?.connected) {
         try {
           await device.gatt?.connect()
+          niimbotLinkStale = true
         } catch {
           // Printing may have succeeded even if the printer powered down immediately afterwards.
         }
@@ -454,7 +511,16 @@ async function identifyPrinterOperation(
   }
   const api = await loadNiimbot()
   return withPrinterDeviceSelection(selected.key, mode, async () => {
-    const info = await api.identify(selected)
+    if (niimbotLinkStale) await resetNiimbotLink(api)
+    let info: NiimbotPrinterInfo
+    try {
+      info = await api.identify(selected)
+    } catch (error) {
+      if (!isStaleBluetoothLinkError(error)) throw error
+      await resetNiimbotLink(api)
+      info = await api.identify(selected)
+    }
+    niimbotLinkStale = false
     const printer = api.printer ?? info
     const matches = PRINTER_PROFILES.filter((profile): profile is NiimbotPrinterProfile => profile.driver !== "dejen" && profile.supportedIds.includes(printer.modelId))
     const profile = matches.find((item) => item.key === selected.key) ?? (matches.length === 1 ? matches[0] : undefined)
@@ -711,50 +777,50 @@ export async function printCanvas(
   const offsetXpx = alignLeftOffsetXpx + printerOffsetXpx + horizontalB3sMarginPx
   const dataUrl = canvasToLabelDataUrl(source, contentSize, pageW, offsetXpx)
 
+  const baseWriteMode: NiimbotApi["WRITE_MODE"] = model.task === "b1" ? "paced" : null
+  const printOnce = () =>
+    api.printImage(dataUrl, {
+      model,
+      size: targetSize,
+      copies: Math.max(1, opts.copies ?? 1),
+      density: opts.density ?? model.density,
+      onProgress: (p: number | string) => {
+        if (typeof p === "number") {
+          opts.onProgress?.(`Печать: ${Math.round(p * 100)}%`)
+        } else {
+          opts.onProgress?.(String(p))
+        }
+      },
+    })
+
   await enqueuePrinterOperation(() =>
     withPrinterDeviceSelection(model.key, "remembered", async () => {
       opts.onProgress?.(`Подключение к ${model.displayName}...`)
+      // A link that dropped or was re-opened outside the driver leaves stale
+      // GATT handles; rebuild the session before sending the first byte.
+      if (niimbotLinkStale) await resetNiimbotLink(api)
 
-      try {
-        await api.printImage(dataUrl, {
-          model,
-          size: targetSize,
-          copies: Math.max(1, opts.copies ?? 1),
-          density: opts.density ?? model.density,
-          onProgress: (p: number | string) => {
-            if (typeof p === "number") {
-              opts.onProgress?.(`Печать: ${Math.round(p * 100)}%`)
-            } else {
-              opts.onProgress?.(String(p))
-            }
-          },
-        })
-      } catch (err) {
-        const errorMsg = (err as Error)?.message || ""
-
-        // Перехват переполнения буфера и переключение на медленный режим с подтверждением (acked)
-        if (
-          errorMsg.includes("GATT") ||
-          errorMsg.includes("buffer full") ||
-          errorMsg.includes("paced") ||
-          errorMsg.includes("unknown reason")
-        ) {
-          opts.onProgress?.("Переключение на медленный безопасный режим (acked)...")
-          await new Promise((resolve) => setTimeout(resolve, 400))
-
-          api.WRITE_MODE = "acked"
-
-          await api.printImage(dataUrl, {
-            model,
-            size: targetSize,
-            copies: Math.max(1, opts.copies ?? 1),
-            density: opts.density ?? model.density,
-            onProgress: (progress) => opts.onProgress?.(progress),
-          })
-        } else {
-          throw err
+      // Attempt 1: normal mode. Attempt 2: fresh BLE session (fixes iOS/Bluefy
+      // "2" = invalid handle). Attempt 3: fresh session + slow acked writes.
+      const attempts: Array<NiimbotApi["WRITE_MODE"]> = [baseWriteMode, baseWriteMode, "acked"]
+      let lastError: unknown = null
+      for (let index = 0; index < attempts.length; index++) {
+        api.WRITE_MODE = attempts[index]
+        try {
+          await printOnce()
+          niimbotLinkStale = false
+          return
+        } catch (error) {
+          lastError = error
+          if (!isStaleBluetoothLinkError(error) || index === attempts.length - 1) break
+          opts.onProgress?.(
+            index === 0 ? "Переподключение к принтеру..." : "Переключение на медленный безопасный режим...",
+          )
+          await resetNiimbotLink(api, index > 0)
         }
       }
+      api.WRITE_MODE = baseWriteMode
+      throw lastError
     }),
   )
 }

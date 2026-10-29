@@ -18,6 +18,11 @@ function getPrintErrorMessage(error: unknown): string {
 
   if (name === "DejenPrintError") return message
 
+  // iOS Bluetooth browsers (Bluefy) report bare CoreBluetooth codes like "2".
+  if (/^-?\d+$/.test(message.trim())) {
+    return `Связь с принтером прервалась (код ${message.trim()}). Выключите и включите принтер, затем повторите печать.`
+  }
+
   if (
     name === "NotFoundError" ||
     /user cancelled the requestdevice(?:\(\))? chooser|no device selected|device selection.*cancel/i.test(message)
