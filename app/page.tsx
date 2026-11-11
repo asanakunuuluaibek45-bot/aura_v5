@@ -1,18 +1,18 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { getPublicShops } from "@/app/actions/shops"
-import { AuraMark } from "@/components/brand/aura-mark"
+import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Gem, ShieldCheck, Store } from "lucide-react"
 
 export const revalidate = 300
 
 export const metadata: Metadata = {
-  title: "Aura — маркетплейс ювелирных магазинов и CRM",
+  title: "GOLDUCHET — маркетплейс ювелирных магазинов и CRM",
   description:
-    "Aura объединяет витрины ювелирных магазинов и CRM для учёта: склад, касса, этикетки и бонусы продавцов.",
+    "GOLDUCHET объединяет витрины ювелирных магазинов и CRM для учёта: склад, касса, этикетки и бонусы продавцов.",
   openGraph: {
-    title: "Aura — маркетплейс ювелирных магазинов и CRM",
+    title: "GOLDUCHET — маркетплейс ювелирных магазинов и CRM",
     description: "Витрины ювелирных магазинов и CRM для учёта: склад, касса, этикетки, бонусы.",
     type: "website",
   },
@@ -26,8 +26,7 @@ export default async function LandingPage() {
     <main className="min-h-screen bg-background">
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-2">
-          <AuraMark className="h-7 w-7" />
-          <span className="font-serif text-lg">Aura</span>
+          <GoldUchetLogo className="block w-40 sm:w-48" />
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
@@ -76,7 +75,7 @@ export default async function LandingPage() {
 
       <section className="mx-auto max-w-5xl px-5 pb-20">
         <h2 className="font-serif text-2xl">Магазины</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Публичные витрины участников Aura</p>
+        <p className="mt-1 text-sm text-muted-foreground">Публичные витрины участников GOLDUCHET</p>
 
         {shops.length === 0 ? (
           <p className="mt-8 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
@@ -105,7 +104,7 @@ export default async function LandingPage() {
       </section>
 
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} Aura · app + crm
+        © {new Date().getFullYear()} GOLDUCHET.com · app + crm
       </footer>
     </main>
   )

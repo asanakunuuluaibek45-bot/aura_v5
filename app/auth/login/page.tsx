@@ -137,7 +137,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthShell title="Вход в систему" subtitle="Введите данные, чтобы войти в личный кабинет Aura">
+    <AuthShell title="Вход в систему" subtitle="Введите данные, чтобы войти в личный кабинет GOLDUCHET">
       {savedSession && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-sm dark:border-amber-800/80 dark:bg-amber-950/40 shadow-xs">
           <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
@@ -167,7 +167,7 @@ export default function LoginPage() {
           <Input
             id="email"
             type="email"
-            placeholder="mail@aura.gold.kg"
+            placeholder="you@example.com"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}

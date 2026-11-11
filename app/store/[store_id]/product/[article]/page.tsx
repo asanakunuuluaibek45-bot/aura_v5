@@ -12,7 +12,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const { store_id, article } = await params
   const product = await getPublicProduct(store_id, article)
   return {
-    title: product ? `${product.name} — Aura` : "Изделие — Aura",
+    title: product ? `${product.name} — GOLDUCHET` : "Изделие — GOLDUCHET",
     description: product?.description ?? "Карточка ювелирного изделия",
   }
 }
@@ -29,7 +29,7 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <Link href={`/store/${store_id}`} className="flex items-center gap-2">
           <AuraMark className="h-7 w-7" />
-          <span className="font-serif text-lg">Aura</span>
+          <span className="font-sans text-base font-extrabold tracking-tight">GOLDUCHET</span>
         </Link>
         <Link href={`/store/${store_id}`} className="text-sm text-muted-foreground hover:text-foreground">
           Назад к витрине

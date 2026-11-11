@@ -87,7 +87,7 @@ export function VitrinaScreen({
     if (
       !enabled &&
       !window.confirm(
-        "Отключить публичную витрину? Магазин исчезнет из каталога Aura, а публичные страницы и QR-ссылки перестанут открываться. Товары не удалятся.",
+        "Отключить публичную витрину? Магазин исчезнет из каталога GOLDUCHET, а публичные страницы и QR-ссылки перестанут открываться. Товары не удалятся.",
       )
     ) {
       return
@@ -168,10 +168,10 @@ export function VitrinaScreen({
         {isShopAdmin && (
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-medium">Публичная витрина Aura</p>
+              <p className="text-sm font-medium">Публичная витрина GOLDUCHET</p>
               <p className="text-xs text-muted-foreground">
                 {storefrontVisible
-                  ? "Магазин виден покупателям в каталоге Aura"
+                  ? "Магазин виден покупателям в каталоге GOLDUCHET"
                   : "Магазин скрыт, публичные ссылки недоступны"}
               </p>
               {!canManagePublicStorefront && (
