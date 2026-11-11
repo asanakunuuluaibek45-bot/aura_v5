@@ -1,6 +1,6 @@
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { bulkPut, bulkDelete, getMeta, setMeta, getLocalDB, ensureShopScope, localDatabaseWasRebuilt } from '../local-db/db'
+import { bulkPut, bulkDelete, getMeta, setMeta, getLocalDB, ensureShopScope, localDatabaseWasRebuilt, trimLocalSales, purgeSoldProducts, LOCAL_SALES_LIMIT } from '../local-db/db'
 import {
   getDueOutboxItems,
   getOutboxPendingCount,
@@ -109,6 +109,7 @@ interface PullSpec {
 
 class SyncEngine {
   private isRunning = false
+  private outboxFlushing = false
   private isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
   private activeShopId: string | null = null
   private syncTimer: any = null
@@ -173,6 +174,18 @@ class SyncEngine {
     }
 
     updateSyncState({ scopeShopId: shopId })
+
+    // Одноразово освобождаем место от данных старых версий: проданные товары
+    // и история продаж сверх последних LOCAL_SALES_LIMIT чеков.
+    if (!(await getMeta<boolean>(`slim_local_v1:${shopId}`, false))) {
+      try {
+        await purgeSoldProducts(shopId)
+        await trimLocalSales(shopId, LOCAL_SALES_LIMIT)
+        await setMeta(`slim_local_v1:${shopId}`, true)
+      } catch (err) {
+        console.warn('[Sync] Local cleanup failed, will retry next start:', err)
+      }
+    }
 
     this.startPeriodicSync()
     this.startStalenessWatch()
@@ -431,8 +444,12 @@ class SyncEngine {
       if (!data || data.length === 0) break
 
       // Split the page: live rows are written, soft-deleted rows are purged locally.
-      const live = data.filter((row: any) => !row.deleted_at)
-      const removed = data.filter((row: any) => row.deleted_at).map((row: any) => row.id)
+      // Проданные товары не храним в локальном каталоге — для устройства они
+      // равносильны удалённым (история продаж читается с сервера).
+      const isGone = (row: any) =>
+        Boolean(row.deleted_at) || (spec.table === 'products' && row.status === 'sold')
+      const live = data.filter((row: any) => !isGone(row))
+      const removed = data.filter((row: any) => isGone(row)).map((row: any) => row.id)
 
       if (live.length > 0) await bulkPut(spec.table, live)
       if (removed.length > 0) {
@@ -525,6 +542,40 @@ class SyncEngine {
     return { fetched, deleted }
   }
 
+  /**
+   * Загружает только последние LOCAL_SALES_LIMIT чеков (новые сверху) и ставит
+   * курсор дельты на самый свежий updated_at — дальше подтягиваются только
+   * изменения. Старые чеки остаются на сервере и читаются постранично.
+   */
+  private async pullRecentSales(): Promise<number> {
+    const shopId = this.activeShopId
+    if (!shopId) return 0
+    const supabase = createSupabaseClient()
+    const rows = await withTimeout(async (signal) => {
+      const res = await supabase
+        .from('sales')
+        .select('*')
+        .eq('shop_id', shopId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(LOCAL_SALES_LIMIT)
+        .abortSignal(signal)
+      return unwrap(res as any, 'sales') as any[] | null
+    }, 'sales')
+
+    const list = rows ?? []
+    if (list.length > 0) await bulkPut('sales', list)
+    await trimLocalSales(shopId, LOCAL_SALES_LIMIT)
+
+    let latest: string | null = null
+    for (const row of list) {
+      const stamp = row.updated_at || row.created_at
+      if (stamp && (!latest || Date.parse(stamp) > Date.parse(latest))) latest = stamp
+    }
+    if (latest) await this.setCursor('sales', latest)
+    return list.length
+  }
+
   // Stage 1: minimum needed to start working (shop, rates, in-stock products)
   // Stage 2: customers, presets, cash operations
   // Stage 3: sales and returns history
@@ -559,7 +610,8 @@ class SyncEngine {
       // 1.2 Products, fully paginated
       updateSyncState({ percent: 25, currentTask: 'Загрузка товаров в наличии...' })
       await this.pullTable(
-        { table: 'products' },
+        // Первичная загрузка: проданные товары даже не скачиваем.
+        { table: 'products', initialFilter: (query) => query.neq('status', 'sold') },
         {
           incremental: false,
           onProgress: (count) =>
@@ -609,7 +661,8 @@ class SyncEngine {
         currentTask: 'Фоновая загрузка истории чеков...',
       })
 
-      await this.pullTable({ table: 'sales' }, { incremental: false })
+      // Только последние LOCAL_SALES_LIMIT чеков; полная история — на сервере.
+      await this.pullRecentSales()
       await this.pullTable({ table: 'sale_returns' }, { incremental: false })
       await this.pullTable({ table: 'supplier_debt_operations' }, { incremental: false })
 
@@ -675,6 +728,9 @@ class SyncEngine {
         if (this.activeShopId !== shopId || this.stopped) return
         const r = await this.pullTable({ table }, { incremental: true })
         changed += r.fetched + r.deleted
+        if (table === 'sales' && r.fetched > 0) {
+          changed += await trimLocalSales(shopId, LOCAL_SALES_LIMIT)
+        }
         if (table === 'products') {
           const tombstones = await this.pullProductDeletionTombstones()
           changed += tombstones.deleted
@@ -792,6 +848,17 @@ class SyncEngine {
    * landed before the connection dropped cannot create a second row.
    */
   public async flushOutbox() {
+    // Timer, online events and enqueue events can overlap within the same tab.
+    if (this.outboxFlushing) return
+    this.outboxFlushing = true
+    try {
+      await this.flushOutboxBatch()
+    } finally {
+      this.outboxFlushing = false
+    }
+  }
+
+  private async flushOutboxBatch() {
     if (!this.isOnline || !this.activeShopId || this.stopped) return
     const shopId = this.activeShopId
 
@@ -820,9 +887,12 @@ class SyncEngine {
       } catch (err: any) {
         // The cash RPC handles actual idempotent retries itself. A remaining
         // unique violation is a conflicting payload/id, not a successful send.
-        const kind = item.op_type === 'atomic_cash' && String(err?.code) === '23505'
+        // A unique constraint/HTTP 409 is not proof that THIS operation
+        // committed. Idempotent RPCs/upserts handle real replays themselves.
+        const classified = classifyError(err)
+        const kind = classified === 'conflict'
           ? 'permanent'
-          : classifyError(err)
+          : classified
 
         if (err?.code === 'OFFLINE_SALE_CONFLICT') {
           await markOutboxFailed(item.id, err.message, { permanent: true })
@@ -830,13 +900,6 @@ class SyncEngine {
             description: 'Чек исключён из итогов. Обновите каталог перед следующей продажей.',
             duration: 8000,
           })
-          continue
-        }
-
-        if (kind === 'conflict') {
-          // The operation already exists on the server (idempotency key matched).
-          await markOutboxCompleted(item.id)
-          syncedCount++
           continue
         }
 
@@ -939,12 +1002,27 @@ class SyncEngine {
         sync_error,
         ...salePayload
       } = item.payload
-      const result = await this.run(supabase, (client, signal) =>
-        client.rpc('commit_offline_sale', {
-          _client_op_id: item.client_op_id,
-          _sale: salePayload,
-        }).abortSignal(signal)
-      )
+      // Миграция 007: та же продажа + тип чека (фискальный / нефискальный).
+      // Если миграция ещё не применена, очередь не застревает — продажа уходит
+      // в прежнюю функцию, тип чека при этом не сохраняется.
+      let result: any
+      try {
+        result = await this.run(supabase, (client, signal) =>
+          client.rpc('commit_sale_with_receipt', {
+            _client_op_id: item.client_op_id,
+            _sale: salePayload,
+            _due_date: null,
+          }).abortSignal(signal)
+        )
+      } catch (error: any) {
+        if (error?.code !== 'PGRST202' && error?.code !== '42883') throw error
+        result = await this.run(supabase, (client, signal) =>
+          client.rpc('commit_offline_sale', {
+            _client_op_id: item.client_op_id,
+            _sale: salePayload,
+          }).abortSignal(signal)
+        )
+      }
 
       if (result?.accepted !== true) {
         await setLocalSaleSyncState(item.payload.id, 'rejected', {
@@ -966,65 +1044,57 @@ class SyncEngine {
 
     if (item.op_type === 'atomic_return') {
       const payload = item.payload
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = payload.created_by || userData?.user?.id
-      let cashOpId = payload.cash_operation_id
-
-      if (!cashOpId && payload.amount && Number(payload.amount) > 0) {
-        const cashClientOpId = `${item.client_op_id}:cash`
-        const refundAmt = Number(payload.amount)
-        const { data: cashOp } = await supabase
-          .from('cash_operations')
-          .upsert(
-            {
-              shop_id: item.shop_id,
-              created_by: userId,
-              author_name: payload.author_name || null,
-              type: 'outcome',
-              amount: refundAmt,
-              source: 'cash',
-              amount_cash: refundAmt,
-              amount_electronic: 0,
-              reason: payload.reason || `Возврат: ${payload.item_name || 'Товар'}`,
-              client_op_id: cashClientOpId,
-              updated_at: nowIso,
-            },
-            { onConflict: 'client_op_id', ignoreDuplicates: true }
-          )
-          .select('id')
-          .maybeSingle()
-        if (cashOp?.id) cashOpId = cashOp.id
-      }
-
-      const returnPayload = {
-        ...payload,
-        item_name: payload.item_name || payload.product_name || 'Товар',
-        created_by: userId,
-        cash_operation_id: cashOpId || payload.cash_operation_id || null,
-        client_op_id: item.client_op_id,
-        shop_id: item.shop_id,
-        updated_at: nowIso,
-      }
-      delete (returnPayload as any).product_name
-      delete (returnPayload as any).return_amount
-      delete (returnPayload as any).original_updated_at
-
-      await this.run(supabase, (client, signal) =>
-        client
-          .from('sale_returns')
-          .upsert(returnPayload, { onConflict: 'client_op_id', ignoreDuplicates: true })
-          .abortSignal(signal)
-      )
-
-      if (payload.product_id) {
-        await this.run(supabase, (client, signal) =>
-          client
-            .from('products')
-            .update({ status: 'in_stock', updated_at: nowIso })
-            .eq('id', payload.product_id)
-            .abortSignal(signal)
+      let result: any
+      try {
+        // The existing database function calculates the refund and updates cash,
+        // stock and customer totals together, under the sale's row lock.
+        result = await this.run(supabase, (client, signal) =>
+          client.rpc('return_sale_item', {
+            _sale_id: payload.sale_id,
+            _item_index: payload.item_index,
+            _reason: payload.reason || null,
+          }).abortSignal(signal)
         )
+      } catch (error: any) {
+        if (error?.code !== 'P0001' && error?.code !== '23505') throw error
+        // The response may have been lost after commit. A confirmed row for
+        // this exact shop/sale/item proves completion; an arbitrary 409 does not.
+        result = await this.run(supabase, (client, signal) =>
+          client.from('sale_returns').select('*')
+            .eq('shop_id', item.shop_id)
+            .eq('sale_id', payload.sale_id)
+            .eq('item_index', payload.item_index)
+            .is('deleted_at', null)
+            .abortSignal(signal).maybeSingle()
+        )
+        if (!result) throw error
       }
+      const confirmed = Array.isArray(result) ? result[0] : result
+      if (!confirmed?.id || confirmed.shop_id !== item.shop_id ||
+          confirmed.sale_id !== payload.sale_id || confirmed.item_index !== payload.item_index) {
+        throw new Error('Возврат не подтверждён сервером')
+      }
+      const cash = confirmed.cash_operation_id
+        ? await this.run(supabase, (client, signal) =>
+            client.from('cash_operations').select('*')
+              .eq('shop_id', item.shop_id).eq('id', confirmed.cash_operation_id)
+              .abortSignal(signal).single()
+          )
+        : null
+
+      // Replace optimistic rows rather than counting both local and server IDs.
+      const db = await getLocalDB()
+      const tx = db.transaction(['sale_returns', 'cash_operations'], 'readwrite')
+      const returns = tx.objectStore('sale_returns')
+      const cashStore = tx.objectStore('cash_operations')
+      const localCash = await cashStore.index('shop_id').getAll(item.shop_id)
+      for (const row of localCash) {
+        if (row.client_op_id === `${item.client_op_id}:cash`) await cashStore.delete(row.id)
+      }
+      if (payload.id && payload.id !== confirmed.id) await returns.delete(payload.id)
+      await returns.put(confirmed)
+      if (cash) await cashStore.put(cash)
+      await tx.done
       return
     }
 

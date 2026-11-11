@@ -1,7 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { getRequestCrmContext } from "@/lib/supabase/request-context"
+import { requireApprovedContext } from "@/lib/supabase/request-context"
 import { revalidatePath } from "next/cache"
 import type { Product } from "@/lib/types"
 
@@ -39,12 +39,7 @@ const PRODUCT_COLUMNS = [
   "created_at",
 ].join(", ")
 
-async function requireProfile() {
-  const { supabase, user, profile, shopId } = await getRequestCrmContext()
-  if (!user) throw new Error("Требуется вход в систему")
-  if (!profile || profile.status !== "approved") throw new Error("Аккаунт не подтверждён")
-  return { supabase, user, profile, shopId }
-}
+const requireProfile = requireApprovedContext
 
 /**
  * Возвращает АКТИВНЫЙ shop_id так, как его видят RLS-политики.
@@ -143,6 +138,9 @@ export async function getProductsPage(
     .select(PRODUCT_COLUMNS)
     .eq("shop_id", shopId)
     .is("deleted_at", null)
+    // Проданные товары не отправляем в каталог: они не нужны кассе/складу
+    // и только раздувают локальную базу на слабых устройствах.
+    .neq("status", "sold")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit)
 

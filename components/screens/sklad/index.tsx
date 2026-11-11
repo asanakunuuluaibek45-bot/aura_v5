@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation"
 import { ProductDialog } from "@/components/screens/sklad/add-edit-Product/product-dialog"
 import { SkladStats } from "./sklad-stats"
 import { filterProducts } from "@/lib/product-search"
+import { cn } from "@/lib/utils"
 import { ProductSearch } from "@/components/product-search"
 import { VirtualizedSkladTable } from "./virtualized-sklad-table"
 import { usePrinterConnection } from "./use-printer-connection"
@@ -81,6 +82,8 @@ export function SkladScreen({
   onProductSaved,
   onProductDeleted,
   onOfflineDeleteProduct,
+  focusProduct = null,
+  onFocusProductHandled,
 }: {
   products: Product[]
   sales?: Sale[]
@@ -94,6 +97,8 @@ export function SkladScreen({
   onProductSaved?: (product: Product) => void
   onProductDeleted?: (productId: string) => void | Promise<void>
   onOfflineDeleteProduct?: (product: Product) => void | Promise<void>
+  focusProduct?: Pick<Product, "id" | "name" | "sku"> | null
+  onFocusProductHandled?: (productId: string) => void
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -106,6 +111,9 @@ export function SkladScreen({
   const [labelDialogOpen, setLabelDialogOpen] = useState(false)
   const [labelAutoPrint, setLabelAutoPrint] = useState(false)
   const [labelSizeKey, setLabelSizeKey] = useState<JewelryLabelSizeKey>(DEFAULT_SIZE_KEY)
+  const [backgroundPrintQueue, setBackgroundPrintQueue] = useState<Product[]>([])
+  const [backgroundPrintProduct, setBackgroundPrintProduct] = useState<Product | null>(null)
+  const [backgroundPrintReady, setBackgroundPrintReady] = useState(false)
   const [isTopControlsCollapsed, setIsTopControlsCollapsed] = useState(true)
   const [labelBackgroundControlsHost, setLabelBackgroundControlsHost] = useState<HTMLDivElement | null>(null)
   const labelReturnScrollY = useRef<number | null>(null)
@@ -118,6 +126,7 @@ export function SkladScreen({
   const debouncedQuery = useDebouncedValue(query)
   const [remoteSkuMatch, setRemoteSkuMatch] = useState<{ query: string; product: Product } | null>(null)
   const [page, setPage] = useState(1)
+  const [focusedSupplierProductId, setFocusedSupplierProductId] = useState<string | null>(null)
   const printerProfile = getPrinterProfile(printerConnection.modelKey)
   const nativeWidth = Math.round(getLabelSizeDef(labelSizeKey).w_px * printerProfile.dpi / 203)
   const fitsPrinthead = nativeWidth <= printerProfile.printheadPx
@@ -170,6 +179,25 @@ export function SkladScreen({
 
   const filtered = useMemo(() => filterProducts(productsForSearch, debouncedQuery), [productsForSearch, debouncedQuery])
 
+  useEffect(() => {
+    if (!focusProduct) return
+    const product = products.find((item) => item.id === focusProduct.id)
+    if (!product) return
+    setFocusedSupplierProductId(product.id)
+    setQuery(product.sku?.trim() || product.name || focusProduct.name)
+    setPage(1)
+    onFocusProductHandled?.(product.id)
+  }, [focusProduct, onFocusProductHandled, products])
+
+  useEffect(() => {
+    if (!focusedSupplierProductId) return
+    const matchIndex = filtered.findIndex((product) => product.id === focusedSupplierProductId)
+    if (matchIndex >= 0) {
+      const neededPage = Math.floor(matchIndex / PAGE_SIZE) + 1
+      if (page !== neededPage) setPage(neededPage)
+    }
+  }, [filtered, focusedSupplierProductId, page])
+
   const handleProductSaved = (savedProduct: Product, isNew: boolean) => {
     onProductSaved?.(savedProduct)
     if (isNew) {
@@ -180,6 +208,7 @@ export function SkladScreen({
 
   // Сбрасываем страницу при смене фильтра
   const handleQueryChange = (v: string) => {
+    setFocusedSupplierProductId(null)
     setQuery(v)
     setPage(1)
   }
@@ -187,6 +216,18 @@ export function SkladScreen({
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  useEffect(() => {
+    if (!focusedSupplierProductId) return
+    const frame = window.requestAnimationFrame(() => {
+      const target = [...document.querySelectorAll<HTMLElement>("[data-inventory-product-id]")]
+        .find((element) =>
+          element.dataset.inventoryProductId === focusedSupplierProductId && element.getClientRects().length > 0,
+        )
+      target?.scrollIntoView({ behavior: "smooth", block: "center" })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [focusedSupplierProductId, paginated])
 
   const salesByProduct = useMemo(() => {
     const map = new Map<string, ActualSaleSummary>()
@@ -230,6 +271,45 @@ export function SkladScreen({
         setLabelLoadError(error instanceof Error ? error.message : "Не удалось подготовить QR-код для этикетки")
       })
   }
+
+  const closeBackgroundPrint = useCallback(() => {
+    setBackgroundPrintReady(false)
+    setBackgroundPrintProduct(null)
+  }, [])
+
+  useEffect(() => {
+    if (backgroundPrintProduct || backgroundPrintQueue.length === 0) return
+    const [next, ...remaining] = backgroundPrintQueue
+    setBackgroundPrintQueue(remaining)
+    setBackgroundPrintProduct(next)
+    setBackgroundPrintReady(false)
+  }, [backgroundPrintProduct, backgroundPrintQueue])
+
+  useEffect(() => {
+    if (!backgroundPrintProduct) return
+    let active = true
+    if (isValidShopSeqId(backgroundPrintProduct.shop_seq_id)) {
+      setBackgroundPrintReady(true)
+      return () => { active = false }
+    }
+
+    void getShopSeqIdForLabel(backgroundPrintProduct.shop_id)
+      .then((shopSeqId) => {
+        if (!isValidShopSeqId(shopSeqId)) {
+          throw new Error("Не удалось подготовить QR-код для печати")
+        }
+        if (!active) return
+        setBackgroundPrintProduct((current) => current?.id === backgroundPrintProduct.id
+          ? { ...current, shop_seq_id: shopSeqId }
+          : current)
+      })
+      .catch((error) => {
+        if (!active) return
+        toast.error(error instanceof Error ? error.message : "Не удалось подготовить этикетку")
+        closeBackgroundPrint()
+      })
+    return () => { active = false }
+  }, [backgroundPrintProduct?.id, backgroundPrintProduct?.shop_id, backgroundPrintProduct?.shop_seq_id, closeBackgroundPrint])
 
   const openLabel = (p: Product, autoPrint: boolean) => {
     const requestId = ++labelOpenRequestRef.current
@@ -305,8 +385,18 @@ export function SkladScreen({
   }
 
   /** Автопечать при сохранении товара из модального окна. */
-  const onAutoPrintLabel = (p: Product) => {
-    void openLabel(p, true)
+  /** Печатает в фоне, чтобы после сохранения сразу заполнить карточку следующего товара. */
+  const queueAutoPrintLabel = (p: Product) => {
+    const defaultSize = getLabelSizeDef(printerProfile.defaultLabelKey)
+    const width = Math.round(defaultSize.w_px * printerProfile.dpi / 203)
+    if (printerProfile.supportsDirectBluetooth === false || width > printerProfile.printheadPx) {
+      toast.error("Товар сохранён, но выбранный профиль не поддерживает прямую печать этой этикетки.")
+      return
+    }
+    void preloadLabelEditor().catch(() => {
+      toast.error("Не удалось загрузить модуль печати этикеток")
+    })
+    setBackgroundPrintQueue((queue) => [...queue, p])
   }
 
   const onAdd = () => {
@@ -450,7 +540,11 @@ export function SkladScreen({
               </TableRow>
             ) : (
               paginated.map((p) => (
-                <TableRow key={p.id}>
+                <TableRow
+                  key={p.id}
+                  data-inventory-product-id={p.id}
+                  className={p.id === focusedSupplierProductId ? "bg-primary/10 ring-1 ring-primary/40" : undefined}
+                >
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
@@ -515,7 +609,11 @@ export function SkladScreen({
           paginated.map((p) => (
             <div
               key={p.id}
-              className="rounded-xl border border-border bg-card p-3 space-y-2"
+              data-inventory-product-id={p.id}
+              className={cn(
+                "rounded-xl border border-border bg-card p-3 space-y-2",
+                p.id === focusedSupplierProductId && "border-primary bg-primary/10 ring-1 ring-primary/40",
+              )}
             >
               {/* Строка 1: фото + название + артикул */}
               <div className="flex items-start gap-3">
@@ -855,6 +953,24 @@ export function SkladScreen({
       )}
       </Dialog>
 
+      {backgroundPrintProduct && backgroundPrintReady && (
+        <div
+          aria-hidden="true"
+          inert
+          className="pointer-events-none fixed -left-[10000px] top-0 h-[720px] w-[480px] overflow-hidden"
+        >
+          <LabelEditor
+            key={`background:${backgroundPrintProduct.id}`}
+            product={backgroundPrintProduct}
+            canSeePurchasePrice={canSeePurchasePrice}
+            autoPrint
+            initialSizeKey={printerProfile.defaultLabelKey}
+            printerProfile={printerProfile}
+            onClose={closeBackgroundPrint}
+          />
+        </div>
+      )}
+
       <ProductDialog
         open={productDialogOpen}
         onOpenChange={setProductDialogOpen}
@@ -862,7 +978,7 @@ export function SkladScreen({
         canSeePurchasePrice={canSeePurchasePrice}
         allowOffline={allowOffline}
         onProductSaved={handleProductSaved}
-        onPrintLabel={onAutoPrintLabel}
+        onPrintLabel={queueAutoPrintLabel}
       />
     </div>
   )

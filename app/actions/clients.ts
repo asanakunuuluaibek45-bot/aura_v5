@@ -3,14 +3,9 @@
 import { revalidatePath } from "next/cache"
 import type { Customer, CustomerDebtOperation } from "@/lib/types"
 import { resolveClientOperationId } from "@/lib/client-operation"
-import { getRequestCrmContext } from "@/lib/supabase/request-context"
+import { requireApprovedContext } from "@/lib/supabase/request-context"
 
-async function requireProfile() {
-  const { supabase, user, profile, shopId } = await getRequestCrmContext()
-  if (!user) throw new Error("Требуется вход в систему")
-  if (!profile || profile.status !== "approved") throw new Error("Аккаунт не подтверждён")
-  return { supabase, user, profile, shopId }
-}
+const requireProfile = requireApprovedContext
 
 export async function getClients(): Promise<Customer[]> {
   const { supabase, shopId } = await requireProfile()
@@ -174,7 +169,7 @@ export async function payCustomerDebt(input: {
 
   if (error) {
     if (["42883", "42P01", "42703", "PGRST202", "PGRST204", "PGRST205"].includes(error.code ?? "")) {
-      throw new Error("Сначала примените SQL-миграцию supabase/migrations/20261019_customer_credit_sales.sql")
+      throw new Error("Сначала примените SQL-миграцию supabase/migrations/001_customer_credit_sales.sql")
     }
     throw new Error(`Не удалось принять оплату долга: ${error.message}`)
   }
@@ -201,7 +196,7 @@ export async function extendCustomerCreditDueDate(input: {
   })
   if (error) {
     if (["42883", "42P01", "42703", "PGRST202", "PGRST204", "PGRST205"].includes(error.code ?? "")) {
-      throw new Error("Сначала примените SQL-миграцию supabase/migrations/20261022_customer_credit_due_dates.sql")
+      throw new Error("Сначала примените SQL-миграцию supabase/migrations/002_customer_credit_due_dates.sql")
     }
     throw new Error("Не удалось продлить срок долга: " + error.message)
   }

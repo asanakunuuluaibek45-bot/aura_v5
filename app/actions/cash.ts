@@ -2,25 +2,30 @@
 
 import { revalidatePath } from "next/cache"
 import type { CashOperation, CashReasonPreset, CashSource } from "@/lib/types"
+import type { CashBalances } from "@/lib/cash"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"
 import { resolveClientOperationId } from "@/lib/client-operation"
 
+// Local guard (not the shared helpers) so scripts/test-atomic-actions.mjs can
+// mock only getRequestCrmContext. Messages match the shared guards.
 async function requireProfile() {
   const { supabase, user, profile, shopId } = await getRequestCrmContext()
-  if (!user) throw new Error("Unauthorized")
-  if (!profile || profile.status !== "approved") throw new Error("Not approved")
+  if (!user) throw new Error("Требуется вход в систему")
+  if (!profile || profile.status !== "approved") throw new Error("Аккаунт не подтверждён")
   return { supabase, user, profile, shopId }
 }
 
 async function requireAdmin() {
   const ctx = await requireProfile()
-  if (ctx.profile.role !== "admin" && ctx.profile.role !== "super_admin") throw new Error("Forbidden")
+  if (ctx.profile.role !== "admin" && ctx.profile.role !== "super_admin") throw new Error("Недостаточно прав")
   return ctx
 }
 
 export type CashData = {
   operations: CashOperation[]
   presets: CashReasonPreset[]
+  /** Точный баланс из агрегирующей SQL-функции; null — если функция недоступна. */
+  ledgerBalance?: CashBalances | null
 }
 
 /** Операции с кассой и шаблоны причин текущего магазина. */
@@ -28,10 +33,12 @@ export async function getCashData(): Promise<CashData> {
   const { supabase, shopId } = await requireProfile()
   if (!shopId) return { operations: [], presets: [] }
 
-  const [ops, presets] = await Promise.all([
+  const [ops, presets, ledger] = await Promise.all([
     supabase
       .from("cash_operations")
-      .select("*")
+      .select(
+        "id, shop_id, created_by, author_name, type, amount, source, amount_cash, amount_electronic, reason, created_at, updated_at, deleted_at, client_op_id",
+      )
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .range(0, 199),
@@ -40,12 +47,24 @@ export async function getCashData(): Promise<CashData> {
       .select("*")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false }),
+    supabase.rpc("cash_ledger_balances", { _shop: shopId }),
   ])
+
+  const rawBalance = Array.isArray(ledger.data) ? ledger.data[0] : ledger.data
+  const ledgerBalance =
+    !ledger.error && rawBalance
+      ? {
+          cash: Number(rawBalance.cash) || 0,
+          electronic: Number(rawBalance.electronic) || 0,
+          total: (Number(rawBalance.cash) || 0) + (Number(rawBalance.electronic) || 0),
+        }
+      : null
 
   // Таблиц может ещё не быть, пока не выполнена миграция 003 — не роняем экран.
   return {
     operations: (ops.data as CashOperation[]) ?? [],
     presets: (presets.data as CashReasonPreset[]) ?? [],
+    ledgerBalance,
   }
 }
 

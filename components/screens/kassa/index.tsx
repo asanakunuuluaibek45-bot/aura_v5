@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation"
 import { PageLoader } from "@/components/ui/page-loader"
 import { filterProducts, isSearchReady } from "@/lib/product-search"
 import { getClientOperationAttempt, type ClientOperationAttempt } from "@/lib/client-operation"
+import { initialReceiptType, type ReceiptType, type ReceiptTypeSetting } from "@/lib/receipt-type"
 
 import { KassaSearch } from "./kassa-search"
 import { KassaCart } from "./kassa-cart"
@@ -97,24 +98,29 @@ export function KassaScreen({
   viewRole,
   sales,
   cash,
+  ledgerBalance,
   rates = [],
   clients = [],
   returns = [],
   onLocalCheckout,
   onlineOnly = false,
   shopId,
+  defaultReceiptType = "ask",
 }: {
   products: Product[]
   profile: Profile
   viewRole: Role
   sales: Sale[]
   cash: CashData
+  ledgerBalance?: CashData["ledgerBalance"]
   rates?: MetalRate[]
   clients?: Customer[]
   returns?: SaleReturn[]
   onLocalCheckout?: (input: any) => Promise<any>
   onlineOnly?: boolean
   shopId?: string | null
+  /** Настройка администратора: спрашивать тип чека или подставлять по умолчанию. */
+  defaultReceiptType?: ReceiptTypeSetting
 }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -131,6 +137,8 @@ export function KassaScreen({
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
   const [customerId, setCustomerId] = useState<string | null>(null)
+  // Тип чека выбирается для каждой продажи; null — кассир ещё не выбрал.
+  const [receiptType, setReceiptType] = useState<ReceiptType | null>(() => initialReceiptType(defaultReceiptType))
   
   const [submitting, setSubmitting] = useState(false)
   const checkoutAttempt = useRef<ClientOperationAttempt | null>(null)
@@ -148,6 +156,11 @@ export function KassaScreen({
   const isAdmin = viewRole !== "seller"
 
   const rateMap = useMemo(() => buildRateMap(rates), [rates])
+
+  // Администратор поменял настройку по умолчанию — применяем её к текущему чеку.
+  useEffect(() => {
+    setReceiptType(initialReceiptType(defaultReceiptType))
+  }, [defaultReceiptType])
 
   const sellers = useMemo(() => {
     const map = new Map<string, string>()
@@ -366,6 +379,7 @@ export function KassaScreen({
     setCustomerId(null)
     setPayment("cash")
     setCreditDueDate(dateAfterDays(30))
+    setReceiptType(initialReceiptType(defaultReceiptType))
     setQuery("")
     if (!onlineOnly) localStorage.removeItem(cartStorageKey)
     toast.info("Чек полностью сброшен")
@@ -424,6 +438,7 @@ export function KassaScreen({
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_id: customerId,
+        receipt_type: receiptType,
       }
 
       if (onLocalCheckout && payment !== "credit") {
@@ -454,6 +469,10 @@ export function KassaScreen({
 
   const submit = () => {
     if (cart.length === 0) return
+    if (!receiptType) {
+      toast.error("Выберите тип чека: фискальный или нефискальный")
+      return
+    }
     if (payment === "credit" && !customerId) {
       toast.error("Для продажи в долг выберите клиента из списка")
       return
@@ -497,6 +516,7 @@ export function KassaScreen({
             sales={sales}
             operations={cash.operations}
             presets={cash.presets}
+            ledgerBalance={ledgerBalance}
             isAdmin={isAdmin}
             balanceOnly
           />
@@ -546,6 +566,8 @@ export function KassaScreen({
             bonusUsed={bonusUsed}
             setBonusUsed={setBonusUsed}
             payment={payment}
+            receiptType={receiptType}
+            setReceiptType={setReceiptType}
             creditDueDate={creditDueDate}
             setCreditDueDate={setCreditDueDate}
             payCash={payCash}

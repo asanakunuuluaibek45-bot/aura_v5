@@ -12,7 +12,11 @@ import type { CabinetData } from "@/app/actions/cabinet"
 import type { MetalRate } from "@/lib/types"
 import type { CashData } from "@/app/actions/cash"
 import type { ShopBillingRow } from "@/app/actions/superadmin"
-import type { SupplierDebtData } from "@/app/actions/suppliers"
+import {
+  getSupplierDebtData,
+  type SupplierDebtData,
+  type SupplierProfile,
+} from "@/app/actions/suppliers"
 import { impersonateShop } from "@/app/actions/superadmin"
 import { useRouter } from "next/navigation"
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client"
@@ -20,6 +24,7 @@ import { toast } from "sonner"
 import { useLocalCrm } from "@/lib/local-db/use-local-crm"
 import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
 import { saveUserSession } from "@/lib/local-db/db"
+import { supplierIdentityKey } from "@/lib/supplier-identity"
 
 const SectionLoading = () => (
   <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground" role="status">
@@ -139,6 +144,26 @@ export function Dashboard({
   const router = useRouter()
   const [activeScreen, setActiveScreen] = useState<ScreenId>(screen)
   const [viewRole, setViewRole] = useState<Role>(profile.role ?? "seller")
+  const [supplierDebtData, setSupplierDebtData] = useState(supplierDebts)
+  const [supplierDebtLoaded, setSupplierDebtLoaded] = useState(screen === "suppliers")
+  const [supplierDebtLoading, setSupplierDebtLoading] = useState(false)
+  const [supplierDebtLoadError, setSupplierDebtLoadError] = useState<string | null>(null)
+  const [supplierInventoryTarget, setSupplierInventoryTarget] = useState<Pick<Product, "id" | "name" | "sku"> | null>(null)
+
+  const handleSupplierProfileUpdated = useCallback((profile: SupplierProfile) => {
+    const key = supplierIdentityKey(profile.supplier_name, profile.supplier_phone)
+    setSupplierDebtData((current) => ({
+      ...current,
+      profiles: [...current.profiles.filter(
+        (item) => supplierIdentityKey(item.supplier_name, item.supplier_phone) !== key,
+      ), profile],
+      suppliers: profile.deleted_at
+        ? current.suppliers.filter(
+            (item) => supplierIdentityKey(item.supplier_name, item.supplier_phone) !== key,
+          )
+        : current.suppliers,
+    }))
+  }, [])
   const [showExitModal, setShowExitModal] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -180,6 +205,40 @@ export function Dashboard({
   useEffect(() => {
     setActiveScreen(screen)
   }, [screen])
+
+  // This ledger can contain the store's full history. Keep it off the first
+  // POS/cash-screen response and request it only when an admin opens Suppliers.
+  // Do not depend on supplierDebtLoading: setting it would run cleanup and
+  // cancel this very request before its result can clear the spinner.
+  useEffect(() => {
+    if (
+      activeScreen !== "suppliers" ||
+      !isAdmin ||
+      supplierDebtLoaded ||
+      supplierDebtLoadError
+    ) return
+    let cancelled = false
+    setSupplierDebtLoading(true)
+    getSupplierDebtData()
+      .then((data) => {
+        if (!cancelled) {
+          setSupplierDebtData(data)
+          setSupplierDebtLoaded(true)
+          setSupplierDebtLoading(false)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setSupplierDebtLoadError(
+            error instanceof Error ? error.message : "Не удалось загрузить долги поставщиков",
+          )
+          setSupplierDebtLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeScreen, isAdmin, supplierDebtLoaded, supplierDebtLoadError])
 
   // Local-first data is disabled while the super admin views another store.
   const localCrm = useLocalCrm({
@@ -392,10 +451,12 @@ export function Dashboard({
             sales={currentSales}
             returns={currentReturns}
             cash={currentCash}
+            ledgerBalance={isOnline ? cash.ledgerBalance : null}
             rates={currentRates}
             clients={currentClients}
             onlineOnly={isImpersonating}
             shopId={activeShopId}
+            defaultReceiptType={cabinet.defaultReceiptType}
             onLocalCheckout={isImpersonating ? undefined : localCrm.localCheckout}
           />
         )}
@@ -404,6 +465,7 @@ export function Dashboard({
             sales={currentSales}
             operations={currentCash.operations}
             presets={currentCash.presets}
+            ledgerBalance={isOnline ? cash.ledgerBalance : null}
             isAdmin={isAdmin}
           />
         )}
@@ -428,18 +490,42 @@ export function Dashboard({
             onProductSaved={!isImpersonating ? localCrm.cacheSavedProduct : undefined}
             onProductDeleted={!isImpersonating ? localCrm.cacheDeletedProduct : undefined}
             onOfflineDeleteProduct={!isImpersonating ? localCrm.localDeleteProduct : undefined}
+            focusProduct={supplierInventoryTarget}
+            onFocusProductHandled={(productId: string) =>
+              setSupplierInventoryTarget((current) => current?.id === productId ? null : current)
+            }
           />
         )}
         {activeScreen === "clients" && (
           <ClientsScreen clients={currentClients} allowOffline={!isImpersonating} />
         )}
         {activeScreen === "suppliers" && isAdmin && (
-          <SuppliersScreen
-            supplierDebts={supplierDebts}
-            products={currentProducts}
-            sales={confirmedSales}
-            isAdmin={isAdmin}
-          />
+          supplierDebtLoading && !supplierDebtLoaded ? (
+            <SectionLoading />
+          ) : supplierDebtLoadError ? (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm" role="alert">
+              <p>{supplierDebtLoadError}</p>
+              <button
+                type="button"
+                onClick={() => setSupplierDebtLoadError(null)}
+                className="mt-3 rounded-lg border border-border px-3 py-1.5 font-medium"
+              >
+                Повторить
+              </button>
+            </div>
+          ) : (
+            <SuppliersScreen
+              supplierDebts={supplierDebtData}
+              products={currentProducts}
+              sales={confirmedSales}
+              isAdmin={isAdmin}
+              onSupplierProfileUpdated={handleSupplierProfileUpdated}
+              onOpenProduct={(product: Product) => {
+                setSupplierInventoryTarget({ id: product.id, name: product.name, sku: product.sku })
+                handleScreenChange("sklad")
+              }}
+            />
+          )
         )}
         {activeScreen === "kabinet" && (
           <KabinetScreen

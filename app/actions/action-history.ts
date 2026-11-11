@@ -1,8 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createClient } from "@/lib/supabase/server"
-import { getActiveShopId } from "@/lib/supabase/current-shop"
+import { requireApprovedContext } from "@/lib/supabase/request-context"
 import {
   ACTION_HISTORY_LIMIT,
   ACTION_HISTORY_PAGE_SIZE,
@@ -11,21 +10,7 @@ import {
 } from "@/lib/action-history"
 
 async function requireContext() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error("Требуется вход в систему")
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("status, role, shop_id, impersonated_shop_id")
-    .eq("id", user.id)
-    .single()
-  if (error || !profile || profile.status !== "approved") {
-    throw new Error("Аккаунт не подтверждён")
-  }
-  const fallback = profile.role === "super_admin"
-    ? profile.impersonated_shop_id ?? profile.shop_id
-    : profile.shop_id
-  const shopId = await getActiveShopId(supabase, fallback ?? null)
+  const { supabase, shopId } = await requireApprovedContext()
   return { supabase, shopId }
 }
 
