@@ -196,9 +196,16 @@ export function PrinterSettings({ connection }: { connection: PrinterConnectionS
                 data-testid="button-change-printer"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                Сменить устройство
+                Выбрать заново / разрешить
               </Button>
             </div>
+
+            <p className="text-[11px] leading-5 text-muted-foreground">
+              На iPhone в Web BLE Browser или Bluefy нажмите «Выбрать заново / разрешить» и выберите принтер.
+              Если iOS запретила Bluetooth самому браузеру, включите доступ в настройках iPhone:
+              «Конфиденциальность и безопасность → Bluetooth». Сайт не может сам сбросить системный запрет.
+              Перед подключением закройте приложение производителя принтера.
+            </p>
 
             <div className="border-t border-border/70 pt-4">
               <Button

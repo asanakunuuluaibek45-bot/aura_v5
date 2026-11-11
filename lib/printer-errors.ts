@@ -7,10 +7,9 @@ function readError(error: unknown): { message: string; name: string } {
 
 /**
  * iOS Web Bluetooth browsers (Bluefy) reject GATT calls with the bare
- * CoreBluetooth error code, e.g. "2" (CBError.invalidHandle) when the cached
- * characteristic belongs to an older connection. Such a code — or any
- * dropped-link error — means the BLE session must be rebuilt and the print can
- * be retried safely: nothing was sent to the printhead yet.
+ * native error code, e.g. "2". A numeric code alone does not identify its domain
+ * or prove that no data was printed. Rebuild the session, but automatically
+ * retry only connection setup, never an entire partially sent print job.
  */
 export function isStaleBluetoothLinkError(error: unknown): boolean {
   const { message, name } = readError(error)
@@ -33,7 +32,7 @@ export function getPrintErrorMessage(error: unknown): string {
     return "Принтер не выбран. Включите Bluetooth, выберите принтер в окне браузера и повторите печать."
   }
   if (/^-?\d+$/.test(message)) {
-    return `Связь с принтером прервалась (код ${message}). Выключите и включите принтер, затем повторите печать.`
+    return `Связь с принтером прервалась (код ${message}). Откройте настройки принтера в Aura и нажмите «Выбрать заново / разрешить». Выберите принтер в окне браузера. Перед повторной печатью проверьте, не вышла ли уже этикетка.`
   }
   if (name === "NotFoundError") {
     return `Не найден Bluetooth-ресурс принтера. Это не обязательно отмена выбора устройства. ${message}`.trim()
