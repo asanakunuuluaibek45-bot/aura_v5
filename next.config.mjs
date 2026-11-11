@@ -36,11 +36,16 @@ const nextConfig = {
     ]
   },
 
-  // async redirects() {
-  //   return [
-  //     { source: '/', destination: '/crm', permanent: false },
-  //   ]
-  // },
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: '^aura-crm-five\\.vercel\\.app$' }],
+        destination: 'https://golduchet.com/:path*',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 export default nextConfig
