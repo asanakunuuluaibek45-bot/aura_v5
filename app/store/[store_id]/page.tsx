@@ -38,7 +38,7 @@ export default async function StorePage({ params }: { params: Promise<Params> })
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <Link href="/" className="flex items-center gap-2">
           <AuraMark className="h-7 w-7" />
-          <span className="font-sans text-base font-extrabold tracking-tight">GOLDUCHET</span>
+          <span className="font-serif text-lg">GOLDUCHET</span>
         </Link>
         <span className="text-sm text-muted-foreground">{shop}</span>
       </header>

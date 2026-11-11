@@ -1,7 +1,7 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { getPublicShops } from "@/app/actions/shops"
-import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
+import { AuraMark } from "@/components/brand/aura-mark"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Gem, ShieldCheck, Store } from "lucide-react"
 
@@ -26,7 +26,8 @@ export default async function LandingPage() {
     <main className="min-h-screen bg-background">
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <div className="flex items-center gap-2">
-          <GoldUchetLogo className="block w-40 sm:w-48" />
+          <AuraMark className="h-7 w-7" />
+          <span className="font-serif text-lg">GOLDUCHET</span>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
@@ -104,7 +105,7 @@ export default async function LandingPage() {
       </section>
 
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} GOLDUCHET.com · app + crm
+        © {new Date().getFullYear()} GOLDUCHET · app + crm
       </footer>
     </main>
   )

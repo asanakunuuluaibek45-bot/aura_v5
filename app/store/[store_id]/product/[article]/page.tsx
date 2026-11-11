@@ -29,7 +29,7 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <Link href={`/store/${store_id}`} className="flex items-center gap-2">
           <AuraMark className="h-7 w-7" />
-          <span className="font-sans text-base font-extrabold tracking-tight">GOLDUCHET</span>
+          <span className="font-serif text-lg">GOLDUCHET</span>
         </Link>
         <Link href={`/store/${store_id}`} className="text-sm text-muted-foreground hover:text-foreground">
           Назад к витрине

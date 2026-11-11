@@ -11,27 +11,14 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono"
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" })
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.golduchet.com"),
-  title: "GOLDUCHET — Управление ювелирным магазином",
+  title: "GOLDUCHET — Управление ювелирным магазином (Local-First)",
   description: "GOLDUCHET — касса, витрина, склад и отчёты для ювелирного бизнеса. Полная работа без интернета.",
-  applicationName: "GOLDUCHET",
-  manifest: "/manifest.webmanifest",
-  icons: {
-    icon: [
-      { url: "/favicon.svg?v=golduchet-1", type: "image/svg+xml" },
-      { url: "/favicon-32x32.png?v=golduchet-1", sizes: "32x32", type: "image/png" },
-      { url: "/favicon-16x16.png?v=golduchet-1", sizes: "16x16", type: "image/png" },
-    ],
-    shortcut: "/favicon.ico?v=golduchet-1",
-    apple: [{ url: "/apple-touch-icon.png?v=golduchet-1", sizes: "180x180", type: "image/png" }],
-  },
-  appleWebApp: { capable: true, title: "GOLDUCHET", statusBarStyle: "black-translucent" },
-  openGraph: { siteName: "GOLDUCHET", locale: "ru_RU", type: "website" },
+  generator: "v0.app",
 }
 
 export const viewport: Viewport = {
   colorScheme: "dark light",
-  themeColor: "#000000",
+  themeColor: "#1c1830",
 }
 
 export default function RootLayout({

@@ -80,7 +80,7 @@ export default function SignUpPage() {
           <Label htmlFor="shopName">Название магазина</Label>
           <Input
             id="shopName"
-            placeholder="Например: Ювелирный магазин Бишкек"
+            placeholder="Например: GOLDUCHET Бишкек"
             required
             value={shopName}
             onChange={(e) => setShopName(e.target.value)}

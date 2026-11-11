@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
+import { AuraMark } from "@/components/brand/aura-mark"
 
 export function AuthShell({
   title,
@@ -23,7 +23,11 @@ export function AuthShell({
       />
       <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <GoldUchetLogo className="block w-64 max-w-full" />
+          <AuraMark className="h-12 w-12" />
+          <div>
+            <h1 className="font-serif text-3xl tracking-tight">GOLDUCHET</h1>
+            <p className="text-xs uppercase tracking-[0.3em] text-primary">GOLDUCHET.com</p>
+          </div>
         </div>
         <div className="rounded-2xl border border-border bg-card/80 p-6 shadow-xl backdrop-blur">
           <div className="mb-6 space-y-1">

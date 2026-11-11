@@ -88,7 +88,7 @@ const ITEMS: NavItem[] = [
   { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management", description: "Поставщики, долги и расчёты" },
   { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
   { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
-  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления GOLDUCHET" },
+  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления Aura" },
   { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
 ]
 
@@ -213,7 +213,7 @@ export function AppNav({
                    <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-lg bg-primary/15">
                     <AuraMark className="h-7 w-7 shrink-0" />
                   </div>
-            <span className={cn("font-sans text-sm font-extrabold tracking-tight", collapsed && "lg:hidden")}>
+            <span className={cn("font-serif text-lg tracking-tight", collapsed && "lg:hidden")}>
               GOLDUCHET
             </span>
           </button>
