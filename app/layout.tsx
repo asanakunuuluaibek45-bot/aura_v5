@@ -14,6 +14,10 @@ export const metadata: Metadata = {
   title: "GOLDUCHET — Управление ювелирным магазином (Local-First)",
   description: "GOLDUCHET — касса, витрина, склад и отчёты для ювелирного бизнеса. Полная работа без интернета.",
   generator: "v0.app",
+  icons: {
+    icon: [{ url: "/favicon.svg?v=golduchet-1", type: "image/svg+xml" }, { url: "/favicon.ico" }],
+    apple: [{ url: "/apple-touch-icon.png?v=golduchet-1", sizes: "180x180", type: "image/png" }],
+  },
 }
 
 export const viewport: Viewport = {

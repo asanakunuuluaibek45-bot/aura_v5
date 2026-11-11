@@ -1,7 +1,7 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { getPublicShops } from "@/app/actions/shops"
-import { AuraMark } from "@/components/brand/aura-mark"
+import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Gem, ShieldCheck, Store } from "lucide-react"
 
@@ -25,10 +25,7 @@ export default async function LandingPage() {
   return (
     <main className="min-h-screen bg-background">
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
-        <div className="flex items-center gap-2">
-          <AuraMark className="h-7 w-7" />
-          <span className="font-serif text-lg">GOLDUCHET</span>
-        </div>
+        <GoldUchetLogo className="block w-24 max-w-full sm:w-28" />
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
             <Link href="/auth/login">Вход</Link>
