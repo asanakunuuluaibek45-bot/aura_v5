@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
+import { getPrintErrorMessage } from "@/lib/printer-errors"
 import {
   changePrinterDevice,
   getPrinterConnectionSnapshot,
@@ -54,7 +55,7 @@ export function usePrinterConnection() {
     try {
       return await action()
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Не удалось выполнить действие с принтером."
+      const message = getPrintErrorMessage(error)
       setSnapshot(getPrinterConnectionSnapshot())
       toast.error(message, { duration: 6000 })
       return undefined
