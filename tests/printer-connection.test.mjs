@@ -171,3 +171,11 @@ test("unconfirmed output and chooser cancellation are not retryable link errors"
   assert.equal(h.isStaleBluetoothLinkError(new Error("print not confirmed")), false)
   assert.equal(h.isStaleBluetoothLinkError(new Error("User cancelled the requestDevice() chooser")), false)
 })
+
+test("Vercel uses npm consistently with the project manifest", () => {
+  const config = JSON.parse(readFileSync(new URL("../vercel.json", import.meta.url), "utf8"))
+  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
+  assert.match(manifest.packageManager, /^npm@/)
+  assert.equal(config.installCommand, "npm ci")
+  assert.equal(config.buildCommand, "npm run build")
+})
