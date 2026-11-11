@@ -403,7 +403,7 @@ export function LabelEditor({
   })
 
   // ── Печать ────────────────────────────────────────────────────────────────
-  const { handlePrint } = useLabelPrint(
+  const { handlePrint, handleReconnect } = useLabelPrint(
     fabricRef, sizeDef, loaded, Boolean(autoPrint && canPrint),
     printerProfile, copies, density ?? printerProfile.density,
     setIsPrinting, setPrintStatus, autoPrint ? onClose : undefined,
@@ -544,6 +544,7 @@ export function LabelEditor({
     onTogglePanMode:  handleTogglePan,
     onRotateCanvas:   handleRotateCanvas,
     onPrint:          handlePrint,
+    onReconnectPrinter: handleReconnect,
     onScaleUp:        handleScaleUp,
     onScaleDown:      handleScaleDown,
     onLoadSvgFrame:   actions.loadSvgFrame,
