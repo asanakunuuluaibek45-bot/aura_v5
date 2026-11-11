@@ -64,6 +64,7 @@ export interface LabelEditorToolbarProps {
   onTogglePanMode:    () => void
   onRotateCanvas:     () => void
   onPrint:            () => void
+  onReconnectPrinter?: () => void
   // Масштаб элементов
   onScaleUp?:         () => void
   onScaleDown?:       () => void
@@ -407,6 +408,7 @@ function BottomZone({
   onScaleUp, onScaleDown,
   onLoadSvgFrame,
   onPrint,
+  onReconnectPrinter,
 }: LabelEditorToolbarProps) {
   const [borderMenuOpen, setBorderMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -477,6 +479,22 @@ function BottomZone({
           className="hidden"
           onChange={handleSvgFileChange}
         />
+      )}
+
+      {onReconnectPrinter && (
+        <div className="px-2 pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onReconnectPrinter}
+            disabled={isPrinting || !canPrint}
+            className="h-9 w-full gap-2 text-xs"
+            data-testid="button-label-reselect-printer"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Выбрать заново / разрешить
+          </Button>
+        </div>
       )}
 
       {/* Компактный ряд: инструменты прокручиваются, печать всегда остаётся видимой. */}

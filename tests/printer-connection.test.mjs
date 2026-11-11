@@ -179,3 +179,55 @@ test("Vercel uses npm consistently with the project manifest", () => {
   assert.equal(config.installCommand, "npm ci")
   assert.equal(config.buildCommand, "npm run build")
 })
+
+test("label editor exposes printer reselection in the always-visible toolbar", () => {
+  const editor = readFileSync(new URL("../components/screens/sklad/label/label-editor.tsx", import.meta.url), "utf8")
+  const toolbar = readFileSync(new URL("../components/screens/sklad/label/components/toolbar.tsx", import.meta.url), "utf8")
+  assert.match(editor, /onReconnectPrinter:\s*handleReconnect/)
+  const button = toolbar.indexOf('data-testid="button-label-reselect-printer"')
+  assert.ok(button > toolbar.indexOf("function BottomZone("))
+  assert.ok(button < toolbar.indexOf("{settingsOpen && (", toolbar.indexOf("function BottomZone(")))
+  assert.match(toolbar.slice(toolbar.lastIndexOf("<Button", button), button), /onClick=\{onReconnectPrinter\}/)
+})
+
+test("label printing uses shared error text and reselection calls the real connection manager", () => {
+  const source = readFileSync(new URL("../components/screens/sklad/label/hooks/use-label-print.ts", import.meta.url), "utf8")
+  assert.match(source, /import \{ getPrintErrorMessage \} from "@\/lib\/printer-errors"/)
+  assert.doesNotMatch(source, /function getPrintErrorMessage/)
+  assert.match(source, /const selection = changePrinterDevice\(printerProfile\.key\)/)
+  assert.match(source, /return \{ handlePrint, handleReconnect \}/)
+})
+
+function loadLabelPrint(h) {
+  const source = readFileSync(new URL("../components/screens/sklad/label/hooks/use-label-print.ts", import.meta.url), "utf8")
+    .replace(/^import .*$/gm, "").replace(/^export /gm, "")
+  const toasts = []
+  const context = vm.createContext({
+    useRef: () => ({ current: false }), useCallback: (fn) => fn, useEffect() {},
+    changePrinterDevice: h.changePrinterDevice,
+    getPrintErrorMessage: h.getPrintErrorMessage,
+    toast: { success: (message) => toasts.push(message), error: (message) => toasts.push(message) },
+  })
+  vm.runInContext(stripTypeScriptTypes(source, { mode: "strip" }) + "\nglobalThis.useLabelPrint = useLabelPrint", context)
+  const hook = context.useLabelPrint({ current: null }, {}, true, false, h.getPrinterProfile("b3s"), 1, 3, () => {}, () => {})
+  return { hook, toasts }
+}
+
+test("actual editor reconnect handler opens chooser immediately and never prints automatically", async () => {
+  const h = harness()
+  const { hook, toasts } = loadLabelPrint(h)
+  const pending = hook.handleReconnect()
+  assert.equal(h.calls.chooser, 1, "chooser must run in the original click stack")
+  await pending
+  assert.equal(h.calls.print, 0)
+  assert.match(toasts[0], /Принтер подключён/)
+})
+
+test("actual editor reconnect handler displays chooser cancellation without printing", async () => {
+  const h = harness()
+  h.cancelChooser()
+  const { hook, toasts } = loadLabelPrint(h)
+  await hook.handleReconnect()
+  assert.match(toasts[0], /Принтер не выбран/)
+  assert.equal(h.calls.print, 0)
+})
