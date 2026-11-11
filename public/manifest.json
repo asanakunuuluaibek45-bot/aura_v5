@@ -1,6 +1,6 @@
 {
-  "name": "Aura CRM — Ювелирный магазин",
-  "short_name": "Aura CRM",
+  "name": "GOLDUCHET",
+  "short_name": "GOLDUCHET",
   "description": "Автономная Local-First CRM-система для ювелирного ритейла",
   "start_url": "/crm/pos",
   "display": "standalone",

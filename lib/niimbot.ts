@@ -241,7 +241,7 @@ function getBluetoothAccess(): BluetoothAccessLike {
   if (typeof navigator === "undefined") throw new Error("Bluetooth доступен только в браузере.")
   if (typeof window !== "undefined" && !window.isSecureContext) {
     markUnavailable()
-    throw new Error("Web Bluetooth работает только по HTTPS или на localhost. Откройте Aura в Chrome или Edge на устройстве с Bluetooth.")
+    throw new Error("Web Bluetooth работает только по HTTPS или на localhost. Откройте GOLDUCHET в Chrome или Edge на устройстве с Bluetooth.")
   }
   const bluetooth = (navigator as Navigator & { bluetooth?: BluetoothAccessLike }).bluetooth
   if (!bluetooth?.requestDevice) {

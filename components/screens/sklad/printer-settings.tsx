@@ -90,7 +90,7 @@ export function PrinterSettings({ connection }: { connection: PrinterConnectionS
               Настройки принтера
             </DialogTitle>
             <DialogDescription className="text-xs leading-5">
-              Выберите модель и подключите устройство для печати этикеток напрямую из Aura.
+              Выберите модель и подключите устройство для печати этикеток напрямую из GOLDUCHET.
             </DialogDescription>
           </DialogHeader>
 
@@ -155,7 +155,7 @@ export function PrinterSettings({ connection }: { connection: PrinterConnectionS
 
             {!connection.bluetoothSupported && (
               <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5 text-xs leading-5 text-destructive" role="alert">
-                Web Bluetooth требует защищённого соединения. Откройте Aura по HTTPS (или localhost) в Chrome или Edge на устройстве с Bluetooth.
+                Web Bluetooth требует защищённого соединения. Откройте GOLDUCHET по HTTPS (или localhost) в Chrome или Edge на устройстве с Bluetooth.
               </p>
             )}
 

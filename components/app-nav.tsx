@@ -203,7 +203,7 @@ export function AppNav({
           <button
             type="button"
             onClick={() => handleNavigate("kabinet")}
-            aria-label="Открыть кабинет Aura"
+            aria-label="Открыть кабинет GOLDUCHET"
             className={cn(
               "flex items-center rounded-lg transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               collapsed ? "p-1.5" : "gap-2 px-1.5 py-1"
@@ -214,7 +214,7 @@ export function AppNav({
                     <AuraMark className="h-7 w-7 shrink-0" />
                   </div>
             <span className={cn("font-serif text-lg tracking-tight", collapsed && "lg:hidden")}>
-              Aura CRM
+              GOLDUCHET
             </span>
           </button>
              <ThemeToggle />
@@ -316,7 +316,7 @@ export function AppNav({
               onOpenHelp?.()
               onClose?.()
             }}
-            aria-label="Открыть помощь по Aura"
+            aria-label="Открыть помощь по GOLDUCHET"
             title="Помощь по сайту"
             className={cn(
               "mb-1 flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

@@ -69,7 +69,7 @@ export function PwaProvider({ profile }: { profile?: Profile | null }) {
       if (reloading || !hadController) return
       reloading = true
       // Без автоматической перезагрузки: пользователь сам решает, когда обновить.
-      toast.info("Доступна новая версия Aura CRM", {
+      toast.info("Доступна новая версия GOLDUCHET", {
         duration: Infinity,
         action: { label: "Обновить", onClick: () => window.location.reload() },
       })

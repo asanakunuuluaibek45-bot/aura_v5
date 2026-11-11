@@ -24,10 +24,10 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const { shopId, sku } = await params
   const product = await getPublicProductBySeqId(shopId, sku)
   return {
-    title: product ? `${product.name} — Aura` : "Изделие — Aura",
+    title: product ? `${product.name} — GOLDUCHET` : "Изделие — GOLDUCHET",
     description: product?.description ?? "Карточка ювелирного изделия",
     openGraph: {
-      title: product ? `${product.name} — Aura` : "Изделие — Aura",
+      title: product ? `${product.name} — GOLDUCHET` : "Изделие — GOLDUCHET",
       description: product?.description ?? "Карточка ювелирного изделия",
       type: "website",
       images: product?.images?.[0] ?? product?.image_url ?? undefined,
@@ -49,7 +49,7 @@ export default async function QrProductPage({ params }: { params: Promise<Params
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <Link href={storeHref} className="flex items-center gap-2">
           <AuraMark className="h-7 w-7" />
-          <span className="font-serif text-lg">Aura</span>
+          <span className="font-serif text-lg">GOLDUCHET</span>
         </Link>
         <Link
           href={storeHref}

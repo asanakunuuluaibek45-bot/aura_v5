@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Aura CRM — Ювелирный магазин",
-    short_name: "Aura CRM",
+    name: "GOLDUCHET — Ювелирный магазин",
+    short_name: "GOLDUCHET",
     description: "Автономная Local-First CRM-система для ювелирного ритейла",
     start_url: "/crm/pos",
     display: "standalone",

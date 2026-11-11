@@ -25,8 +25,8 @@ export function AuthShell({
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <AuraMark className="h-12 w-12" />
           <div>
-            <h1 className="font-serif text-3xl tracking-tight">Aura</h1>
-            <p className="text-xs uppercase tracking-[0.3em] text-primary">gold.kg</p>
+            <h1 className="font-serif text-3xl tracking-tight">GOLDUCHET</h1>
+            <p className="text-xs uppercase tracking-[0.3em] text-primary">GOLDUCHET.com</p>
           </div>
         </div>
         <div className="rounded-2xl border border-border bg-card/80 p-6 shadow-xl backdrop-blur">
