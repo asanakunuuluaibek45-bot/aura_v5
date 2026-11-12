@@ -10,14 +10,25 @@ import { playScanBeep } from "@/lib/sound"
 interface BarcodeScannerProps {
   onClose: () => void
   onScan: (code: string) => void
+  continuousScan?: boolean
 }
 
-export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
+export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }: BarcodeScannerProps) {
+  const onScanRef = useRef(onScan)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onScanRef.current = onScan
+    onCloseRef.current = onClose
+  }, [onScan, onClose])
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const activeStreamRef = useRef<MediaStream | null>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const closedRef = useRef(false)
+  const lastContinuousCodeRef = useRef<string | null>(null)
+  const lastContinuousSeenAtRef = useRef(0)
   const animFrameRef = useRef<number | null>(null)
 
   const camerasRef = useRef<MediaDeviceInfo[]>([])
@@ -106,14 +117,30 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
   const close = useCallback(() => {
     closedRef.current = true
     stopEverything()
-    onClose()
-  }, [onClose, stopEverything])
+    onCloseRef.current()
+  }, [stopEverything])
+
+  const releaseContinuousScanLock = useCallback(() => {
+    if (!continuousScan || Date.now() - lastContinuousSeenAtRef.current <= 700) return
+    lastContinuousCodeRef.current = null
+  }, [continuousScan])
 
   const handleResult = useCallback(
     (text: string) => {
       const clean = text.trim()
       if (clean.length < 3 || closedRef.current) return
-      closedRef.current = true
+
+      if (continuousScan) {
+        const now = Date.now()
+        if (lastContinuousCodeRef.current === clean) {
+          lastContinuousSeenAtRef.current = now
+          return
+        }
+        lastContinuousCodeRef.current = clean
+        lastContinuousSeenAtRef.current = now
+      } else {
+        closedRef.current = true
+      }
 
       // «Пик» кассового аппарата при успешном распознавании кода.
       playScanBeep()
@@ -122,11 +149,11 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
         navigator.vibrate(80)
       }
 
-      stopEverything()
-      onScan(clean)
-      onClose()
+      if (!continuousScan) stopEverything()
+      onScanRef.current(clean)
+      if (!continuousScan) onCloseRef.current()
     },
-    [onClose, onScan, stopEverything],
+    [continuousScan, stopEverything],
   )
 
   useEffect(() => {
@@ -290,10 +317,12 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
                 if (barcodes.length > 0 && barcodes[0].rawValue) {
                   setIsBadQuality(false)
                   handleResult(barcodes[0].rawValue)
-                  return
+                  if (!continuousScan) return
+                } else {
+                  releaseContinuousScanLock()
                 }
               } catch {
-                /* ignore */
+                releaseContinuousScanLock()
               }
             }
             animFrameRef.current = requestAnimationFrame(processFrame)
@@ -317,6 +346,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
             return
           }
 
+          releaseContinuousScanLock()
           if (err) {
             const errName = err.name || err.constructor?.name
             if (errName === "ChecksumException" || errName === "FormatException") {
@@ -348,7 +378,7 @@ export function BarcodeScannerModal({ onClose, onScan }: BarcodeScannerProps) {
       cancelled = true
       stopEverything()
     }
-  }, [deviceIndex, facing, handleResult, stopEverything])
+  }, [continuousScan, deviceIndex, facing, handleResult, releaseContinuousScanLock, stopEverything])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

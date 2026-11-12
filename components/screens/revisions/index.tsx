@@ -2,22 +2,34 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Product } from "@/lib/types"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ProductSearch } from "@/components/product-search"
+import { RevisionLabelScanner } from "@/components/screens/revisions/revision-label-scanner"
+import { createRevisionScanTracker, type RevisionScanTransaction } from "@/lib/revision-label-scan"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
-import { filterProducts } from "@/lib/product-search"
+import { filterProducts, normalizeText, parseProductSearchQuery } from "@/lib/product-search"
 import {
   getRevisionProducts,
   groupRevisionProducts,
+  filterRevisionCategory,
+  filterRevisionMetal,
   parseRevisionSession,
   recordRevisionScan,
+  toggleRevisionCheck,
 } from "@/lib/inventory-revision"
-import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { CheckCircle2, ClipboardCheck, RotateCcw } from "lucide-react"
+import { Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, RotateCcw, Undo2 } from "lucide-react"
 
 const SESSION_PREFIX = "inventory-revision-v1"
+const PAGE_SIZE = 10
+
+type CategorySection = {
+  category: string
+  total: number
+  checked: number
+  remaining: number
+  products: Product[]
+}
 
 export function RevisionsScreen({
   products,
@@ -28,16 +40,24 @@ export function RevisionsScreen({
   shopId: string | null
   productsReady?: boolean
 }) {
-  const storageKey = shopId ? `${SESSION_PREFIX}:${shopId}` : ""
+  const storageKey = shopId ? SESSION_PREFIX + ":" + shopId : ""
   const [loadedKey, setLoadedKey] = useState("")
   const [checkedIds, setCheckedIds] = useState<string[]>([])
-  const checkedIdsRef = useRef<Set<string>>(new Set())
+  const checkedIdsRef = useRef<string[]>([])
+  const scanTrackerRef = useRef(createRevisionScanTracker())
+  const autoHandledQueryRef = useRef("")
   const [finished, setFinished] = useState(false)
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("")
+  const [metal, setMetal] = useState("")
+  const [pageByCategory, setPageByCategory] = useState<Record<string, number>>({})
+  const [autoMarkNotice, setAutoMarkNotice] = useState("")
+  const [showUnverified, setShowUnverified] = useState(true)
+  const [showChecked, setShowChecked] = useState(false)
   const debouncedQuery = useDebouncedValue(query)
 
   useEffect(() => {
+    scanTrackerRef.current.reset()
     if (!storageKey) return
     setLoadedKey("")
 
@@ -48,17 +68,21 @@ export function RevisionsScreen({
       console.warn("[revisions] Could not restore local progress:", error)
     }
 
-    checkedIdsRef.current = new Set(session.checkedProductIds)
+    checkedIdsRef.current = session.checkedProductIds
     setCheckedIds(session.checkedProductIds)
     setFinished(session.finished)
     setLoadedKey(storageKey)
   }, [storageKey])
 
+  useEffect(() => () => scanTrackerRef.current.reset(), [])
+
   useEffect(() => {
     if (!storageKey || loadedKey !== storageKey) return
     try {
       window.localStorage.setItem(storageKey, JSON.stringify({
-        checkedProductIds: checkedIds,
+        // Tentative marks are visible immediately, but survive reload only
+        // after the server confirms the label's store.
+        checkedProductIds: checkedIds.filter((id) => !scanTrackerRef.current.isPending(id)),
         finished,
       }))
     } catch (error) {
@@ -67,61 +91,185 @@ export function RevisionsScreen({
   }, [checkedIds, finished, loadedKey, storageKey])
 
   const stockProducts = useMemo(() => getRevisionProducts(products), [products])
+  const stockById = useMemo(() => new Map(stockProducts.map((product) => [product.id, product])), [stockProducts])
   const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds])
-  const totalCount = stockProducts.length
-  const checkedCount = stockProducts.reduce((count, product) => count + Number(checkedSet.has(product.id)), 0)
+  const pendingScanCount = scanTrackerRef.current.pendingCount
+  const categoryProducts = useMemo(
+    () => filterRevisionMetal(filterRevisionCategory(stockProducts, category), metal),
+    [category, metal, stockProducts],
+  )
+  const checkedProducts = useMemo(
+    () => checkedIds.slice().reverse().map((id) => stockById.get(id)).filter((product): product is Product => Boolean(product)),
+    [checkedIds, stockById],
+  )
+  const selectedCheckedProducts = useMemo(
+    () => filterRevisionMetal(filterRevisionCategory(checkedProducts, category), metal),
+    [category, metal, checkedProducts],
+  )
+  const totalCount = categoryProducts.length
+  const checkedCount = selectedCheckedProducts.length
   const remainingCount = Math.max(0, totalCount - checkedCount)
   const allGroups = useMemo(
     () => groupRevisionProducts(stockProducts, checkedSet),
     [stockProducts, checkedSet],
   )
+  const debouncedMatches = useMemo(
+    () => filterProducts(categoryProducts, debouncedQuery),
+    [categoryProducts, debouncedQuery],
+  )
+  const categorySections = useMemo<CategorySection[]>(() => {
+    const totals = new Map<string, CategorySection>()
+    for (const group of allGroups) {
+      if (category && group.category !== category) continue
+      if (metal && group.metal !== metal) continue
+      const current = totals.get(group.category) ?? {
+        category: group.category,
+        total: 0,
+        checked: 0,
+        remaining: 0,
+        products: [],
+      }
+      current.total += group.total
+      current.checked += group.checked
+      current.remaining += group.remaining
+      totals.set(group.category, current)
+    }
+
+    for (const product of debouncedMatches) {
+      const productCategory = product.category?.trim() || "Прочее"
+      if (checkedSet.has(product.id)) continue
+      const current = totals.get(productCategory)
+      if (current) current.products.push(product)
+    }
+
+    return [...totals.values()]
+      .filter((section) => !category || section.category === category)
+      .filter((section) => section.products.length > 0)
+      .sort((a, b) => a.category.localeCompare(b.category, "ru"))
+  }, [allGroups, category, checkedSet, debouncedMatches, metal])
   const categories = useMemo(
     () => [...new Set(allGroups.map((group) => group.category))].sort((a, b) => a.localeCompare(b, "ru")),
     [allGroups],
   )
-  const visibleGroups = useMemo(() => {
-    const searched = filterProducts(stockProducts, debouncedQuery).filter(
-      (product) => !category || (product.category?.trim() || "Прочее") === category,
-    )
-    return groupRevisionProducts(searched, checkedSet)
-  }, [category, checkedSet, debouncedQuery, stockProducts])
-  const unverifiedGroups = useMemo(
-    () => groupRevisionProducts(stockProducts.filter((product) => !checkedSet.has(product.id)), new Set()),
-    [checkedSet, stockProducts],
+  const metals = useMemo(
+    () => [...new Set(filterRevisionCategory(stockProducts, category).map((product) => product.metal?.trim() || "Металл не указан"))]
+      .sort((a, b) => a.localeCompare(b, "ru")),
+    [category, stockProducts],
   )
 
-  const handleScan = useCallback((sku: string) => {
-    if (finished) return
+  const markProduct = useCallback((product: Product, announce = true) => {
+    if (finished) return false
+    const wasPending = scanTrackerRef.current.invalidate(product.id)
+    if (checkedIdsRef.current.includes(product.id)) {
+      if (wasPending) setCheckedIds([...checkedIdsRef.current])
+      return false
+    }
+    const next = toggleRevisionCheck(checkedIdsRef.current, product.id, true)
+    checkedIdsRef.current = next
+    setCheckedIds(next)
+    if (announce) toast.success("Проверено: " + product.name)
+    return true
+  }, [finished])
 
-    const result = recordRevisionScan(products, [...checkedIdsRef.current], sku)
+  const undoProduct = useCallback((product: Product) => {
+    scanTrackerRef.current.invalidate(product.id)
+    const next = toggleRevisionCheck(checkedIdsRef.current, product.id, false)
+    if (next.length === checkedIdsRef.current.length) return
+    checkedIdsRef.current = next
+    setCheckedIds(next)
+    setFinished(false)
+    toast("Отметка отменена: " + product.name)
+  }, [])
+
+  const handleScan = useCallback((sku: string): RevisionScanTransaction => {
+    setQuery("")
+    setAutoMarkNotice("")
+    const result = recordRevisionScan(products, checkedIdsRef.current, sku)
+    if (result.status === "checked") markProduct(result.product, false)
     if (result.status === "not_found") {
-      toast.error("Изделие не найдено среди товаров в наличии")
+      return { result, confirm: () => {}, rollback: () => false }
+    }
+    const ticket = scanTrackerRef.current.begin(result.product.id, result.status === "checked")
+    return {
+      result,
+      confirm: () => {
+        if (ticket.confirm()) setCheckedIds([...checkedIdsRef.current])
+      },
+      rollback: () => {
+        if (!ticket.rollback()) return false
+        const next = toggleRevisionCheck(checkedIdsRef.current, result.product.id, false)
+        checkedIdsRef.current = next
+        setCheckedIds(next)
+        return true
+      },
+    }
+  }, [markProduct, products])
+
+  useEffect(() => {
+    if (query !== debouncedQuery) {
+      autoHandledQueryRef.current = ""
       return
     }
-    if (result.status === "already_checked") {
-      toast.error("Это изделие уже проверено")
-      return
+    const raw = debouncedQuery.trim()
+    if (!raw || finished || !loadedKey || loadedKey !== storageKey) return
+
+    const trigger = normalizeText(raw) + "|" + category + "|" + metal
+    if (autoHandledQueryRef.current === trigger) return
+    autoHandledQueryRef.current = trigger
+
+    const eligible = filterRevisionMetal(filterRevisionCategory(stockProducts, category), metal)
+    const exactSku = raw.toLocaleUpperCase("ru-RU")
+    let match = eligible.find((product) => product.sku?.trim().toLocaleUpperCase("ru-RU") === exactSku) ?? null
+
+    if (!match) {
+      const parsed = parseProductSearchQuery(raw)
+      if (parsed.kind === "weight") {
+        const matches = filterProducts(eligible, raw)
+        if (matches.length === 1) match = matches[0]
+      } else if (parsed.kind === "text" && parsed.value.length >= 3) {
+        const matches = eligible.filter((product) => normalizeText(product.name).includes(parsed.value))
+        if (matches.length === 1) match = matches[0]
+      }
     }
 
-    checkedIdsRef.current = new Set(result.checkedIds)
-    setCheckedIds(result.checkedIds)
-    toast.success(`Проверено: ${result.product.name}`)
-  }, [finished, products])
+    if (match && !checkedIdsRef.current.includes(match.id)) {
+      if (markProduct(match, false)) setAutoMarkNotice("Автоматически отмечено: " + match.name)
+    }
+  }, [category, debouncedQuery, finished, loadedKey, markProduct, metal, query, stockProducts, storageKey])
 
-  const finishRevision = () => setFinished(true)
+  useEffect(() => {
+    setPageByCategory({})
+  }, [category, debouncedQuery, metal])
+
+  const finishRevision = () => {
+    if (scanTrackerRef.current.pendingCount > 0) {
+      toast("Дождитесь проверки этикеток")
+      return
+    }
+    setQuery("")
+    setCategory("")
+    setMetal("")
+    setPageByCategory({})
+    setFinished(true)
+    setShowUnverified(true)
+  }
 
   const startNewRevision = () => {
-    if (checkedIdsRef.current.size > 0 && !window.confirm("Сбросить отметки и начать новую ревизию?")) return
-    checkedIdsRef.current = new Set()
+    if (checkedIdsRef.current.length > 0 && !window.confirm("Сбросить отметки и начать новую ревизию?")) return
+    scanTrackerRef.current.reset()
+    checkedIdsRef.current = []
     setCheckedIds([])
     setFinished(false)
     setQuery("")
     setCategory("")
+    setMetal("")
+    setPageByCategory({})
+    setAutoMarkNotice("")
   }
 
   if (!shopId) {
     return (
-      <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
+      <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
         Сначала выберите магазин, чтобы открыть ревизию его склада.
       </div>
     )
@@ -129,169 +277,261 @@ export function RevisionsScreen({
 
   if (!productsReady || loadedKey !== storageKey) {
     return (
-      <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground" role="status">
-        Загружаем полный склад и прогресс ревизии…
+      <div className="flex min-h-32 items-center justify-center text-sm text-muted-foreground" role="status">
+        Загружаем склад и прогресс ревизии…
       </div>
     )
   }
 
   return (
-    <div className="space-y-5">
-      <header>
-        <div className="flex items-center gap-2">
-          <ClipboardCheck className="h-6 w-6 text-primary" aria-hidden="true" />
-          <h1 className="font-serif text-2xl">Ревизии</h1>
+    <div className="space-y-3 sm:space-y-4">
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <ClipboardCheck className="h-5 w-5 shrink-0 text-primary sm:h-6 sm:w-6" aria-hidden="true" />
+          <div className="min-w-0">
+            <h1 className="font-serif text-xl sm:text-2xl">Ревизии</h1>
+            <p className="truncate text-xs text-muted-foreground sm:text-sm">Проверка склада · отметки не меняют остатки</p>
+          </div>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Сверка изделий по складу. Отметки сохраняются отдельно и не меняют складские остатки.
-        </p>
+        {finished && (
+          <Button type="button" variant="outline" size="sm" onClick={startNewRevision} className="h-9 shrink-0 gap-1.5 px-2.5 sm:px-3">
+            <RotateCcw className="h-4 w-4" />
+            <span>Новая</span>
+          </Button>
+        )}
       </header>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
         <StatCard label="Всего" value={totalCount} />
-        <StatCard label="Проверено" value={checkedCount} />
+        <StatCard label="Отмечено" value={checkedCount} />
         <StatCard label="Осталось" value={remainingCount} />
       </div>
 
-      {finished ? (
-        <section className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="flex items-center gap-2 text-lg font-semibold">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden="true" />
-                Ревизия завершена
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Проверено {checkedCount} из {totalCount}. Непроверенных изделий: {remainingCount}.
-              </p>
-            </div>
-            <Button type="button" variant="outline" onClick={startNewRevision} className="gap-2">
-              <RotateCcw className="h-4 w-4" />
-              Новая ревизия
-            </Button>
-          </div>
-
-          {unverifiedGroups.length === 0 ? (
-            <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm text-emerald-800 dark:text-emerald-300">
-              Все изделия проверены.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">Остаток непроверенных изделий</h3>
-              {unverifiedGroups.map((group) => (
-                <div key={group.key} className="rounded-xl border border-border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="font-medium">{group.category} · {group.metal}</h4>
-                    <Badge variant="outline">{group.remaining} шт. осталось</Badge>
-                  </div>
-                  <ul className="mt-2 divide-y divide-border/60">
-                    {group.products.map((product) => (
-                      <li key={product.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                        <span className="min-w-0 truncate">{product.name}</span>
-                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                          {product.sku || "Без артикула"} · 1 шт.
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      ) : (
-        <>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <label className="sr-only" htmlFor="revision-category">Категория</label>
-            <select
-              id="revision-category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm sm:w-56"
-            >
-              <option value="">Все категории</option>
-              {categories.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
+      {!finished && (
+        <section className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-card p-2.5 sm:flex sm:items-center sm:p-3">
+          <label className="sr-only" htmlFor="revision-category">Категория</label>
+          <select
+            id="revision-category"
+            value={category}
+            onChange={(event) => {
+              setCategory(event.target.value)
+              setMetal("")
+              setAutoMarkNotice("")
+            }}
+            className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-48"
+          >
+            <option value="">Все категории</option>
+            {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="revision-metal">Металл</label>
+          <select
+            id="revision-metal"
+            value={metal}
+            onChange={(event) => {
+              setMetal(event.target.value)
+              setAutoMarkNotice("")
+            }}
+            className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
+          >
+            <option value="">Все металлы</option>
+            {metals.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <div className="col-span-2 flex min-w-0 items-center gap-2 sm:col-span-1">
             <ProductSearch
               value={query}
-              onChange={setQuery}
-              onScan={handleScan}
-              placeholder="Название, артикул или металл…"
+              onChange={(value) => {
+                setQuery(value)
+                setAutoMarkNotice("")
+              }}
+              placeholder="Название, точный артикул или вес…"
+              showScanner={false}
               className="min-w-0 flex-1"
-              inputClassName="h-10"
+              inputClassName="h-9"
             />
+            <RevisionLabelScanner key={storageKey} onScan={handleScan} />
           </div>
+        </section>
+      )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              В группах показаны количество изделий и остаток к проверке.
+      {finished ? (
+        <section className="flex items-start gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">Ревизия завершена</h2>
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              Проверено {checkedCount} из {totalCount}. Непроверенных изделий: {remainingCount}.
             </p>
-            <Button type="button" onClick={finishRevision}>
-              Завершить ревизию
-            </Button>
           </div>
+        </section>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="min-w-0 text-xs text-muted-foreground" aria-live="polite">
+            {autoMarkNotice || (query ? "Совпадений: " + debouncedMatches.length : "Выберите изделие или отсканируйте этикетку")}
+          </p>
+          <Button type="button" onClick={finishRevision} disabled={pendingScanCount > 0} size="sm" className="h-9 shrink-0 px-3">
+            {pendingScanCount > 0 ? "Проверка этикеток…" : "Завершить"}
+          </Button>
+        </div>
+      )}
 
-          {visibleGroups.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              {totalCount === 0 ? "На складе нет изделий для проверки." : "По выбранным фильтрам изделия не найдены."}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {visibleGroups.map((group) => (
-                <section key={group.key} className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-muted/30 px-4 py-3">
-                    <div>
-                      <h2 className="font-semibold">{group.category} · {group.metal}</h2>
-                      <p className="text-xs text-muted-foreground">
-                        {group.total} шт. всего · проверено {group.checked} · осталось {group.remaining} шт.
-                      </p>
-                    </div>
-                    <Badge variant={group.remaining === 0 ? "secondary" : "outline"}>
-                      {group.remaining} к проверке
-                    </Badge>
-                  </header>
-                  <ul className="divide-y divide-border/60">
-                    {group.products.map((product) => {
-                      const isChecked = checkedSet.has(product.id)
+      <details
+        open={showUnverified}
+        onToggle={(event) => setShowUnverified(event.currentTarget.open)}
+        className="overflow-hidden rounded-xl border border-border bg-card"
+      >
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 text-sm font-semibold">Непроверенные товары</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{remainingCount} осталось</span>
+        </summary>
+        <div className="space-y-2 border-t border-border p-2.5 sm:p-3">
+          {categorySections.length === 0 ? (
+            <p className="rounded-lg bg-muted/40 px-3 py-5 text-center text-sm text-muted-foreground">
+              {remainingCount === 0
+                ? "Все изделия проверены."
+                : selectedCheckedProducts.some((product) => filterProducts([product], debouncedQuery).length > 0)
+                  ? "Совпадение уже проверено и находится в отмеченных ниже."
+                  : "По выбранным фильтрам изделия не найдены."}
+            </p>
+          ) : categorySections.map((section, sectionIndex) => {
+            const pageCount = Math.max(1, Math.ceil(section.products.length / PAGE_SIZE))
+            const page = Math.min(pageByCategory[section.category] ?? 0, pageCount - 1)
+            const pageProducts = section.products.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+            const metalGroups = groupRevisionProducts(pageProducts, new Set())
+            const fullGroups = allGroups.filter((group) =>
+              group.category === section.category && (!metal || group.metal === metal),
+            )
+
+            return (
+              <details key={section.category} open={sectionIndex === 0} className="rounded-lg border border-border/80">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 [&::-webkit-details-marker]:hidden">
+                  <span className="min-w-0 truncate text-sm font-medium">{section.category}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {section.checked} / {section.total} · осталось {section.remaining}
+                  </span>
+                </summary>
+                <div className="border-t border-border/70 px-2.5 py-2">
+                  <div className="space-y-3">
+                    {metalGroups.map((metalGroup) => {
+                      const totals = fullGroups.find((group) => group.metal === metalGroup.metal)
                       return (
-                        <li
-                          key={product.id}
-                          className={cn(
-                            "flex min-w-0 items-center justify-between gap-3 px-4 py-3 transition-colors",
-                            isChecked && "bg-emerald-500/5",
-                          )}
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{product.name}</p>
-                            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                              {product.sku || "Без артикула"} · 1 шт.
-                            </p>
+                        <section key={metalGroup.key}>
+                          <div className="mb-1 flex items-baseline justify-between gap-2">
+                            <h3 className="truncate text-xs font-semibold">{metalGroup.metal}</h3>
+                            {totals && <span className="shrink-0 text-[10px] text-muted-foreground">
+                              {totals.checked} / {totals.total} · осталось {totals.remaining}
+                            </span>}
                           </div>
-                          <span className={cn(
-                            "shrink-0 text-xs font-medium",
-                            isChecked ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground",
-                          )}>
-                            {isChecked ? "Проверено" : "К проверке"}
-                          </span>
-                        </li>
+                          <ul className="divide-y divide-border/50">
+                            {metalGroup.products.map((product) => (
+                              <li key={product.id} className="flex min-w-0 items-center justify-between gap-2 py-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium">{product.name}</p>
+                                  <p className="truncate text-[11px] text-muted-foreground">
+                                    {product.sku || "Без артикула"}{product.weight ? " · " + product.weight + " г" : ""}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={finished}
+                                  onClick={() => markProduct(product)}
+                                  className="h-8 shrink-0 gap-1 px-2.5 text-xs"
+                                  aria-label={"Отметить " + product.name}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  <span className="hidden sm:inline">Отметить</span>
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
                       )
                     })}
-                  </ul>
-                </section>
+                  </div>
+                  {pageCount > 1 && (
+                    <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2">
+                      <span className="text-[11px] text-muted-foreground">
+                        {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, section.products.length)} из {section.products.length}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={page === 0}
+                          onClick={() => setPageByCategory((current) => ({ ...current, [section.category]: page - 1 }))}
+                          className="h-8 w-8"
+                          aria-label="Предыдущая страница"
+                        ><ChevronLeft className="h-4 w-4" /></Button>
+                        <span className="min-w-10 text-center text-xs tabular-nums">{page + 1} / {pageCount}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={page >= pageCount - 1}
+                          onClick={() => setPageByCategory((current) => ({ ...current, [section.category]: page + 1 }))}
+                          className="h-8 w-8"
+                          aria-label="Следующая страница"
+                        ><ChevronRight className="h-4 w-4" /></Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      </details>
+
+      <details
+        open={showChecked}
+        onToggle={(event) => setShowChecked(event.currentTarget.open)}
+        className="overflow-hidden rounded-xl border border-emerald-600/20 bg-card"
+      >
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 text-sm font-semibold">Отмеченные товары</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{checkedCount} отмечено / {remainingCount} осталось</span>
+        </summary>
+        <div className="border-t border-border p-2.5 sm:p-3">
+          {checkedProducts.length === 0 ? (
+            <p className="py-3 text-center text-sm text-muted-foreground">Пока нет отмеченных изделий.</p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {selectedCheckedProducts.map((product) => (
+                <li key={product.id} className="flex min-w-0 items-center justify-between gap-2 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-emerald-700 dark:text-emerald-400">{product.name}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {product.category?.trim() || "Прочее"} · {product.metal?.trim() || "Металл не указан"} · {product.sku || "Без артикула"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => undoProduct(product)}
+                    className="h-8 shrink-0 gap-1 px-2 text-xs text-muted-foreground"
+                    aria-label={"Отменить отметку " + product.name}
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Отменить</span>
+                  </Button>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </>
-      )}
+        </div>
+      </details>
     </div>
   )
 }
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-4">
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 font-mono text-lg font-semibold sm:text-xl">{value}</div>
+    <div className="min-w-0 rounded-lg border border-border bg-card px-2.5 py-2 sm:rounded-xl sm:p-3">
+      <div className="truncate text-[11px] text-muted-foreground sm:text-xs">{label}</div>
+      <div className="mt-0.5 font-mono text-base font-semibold tabular-nums sm:text-lg">{value}</div>
     </div>
   )
 }
