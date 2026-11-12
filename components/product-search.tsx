@@ -35,6 +35,7 @@ export function extractSearchValue(raw: string): string {
 type ProductSearchProps = {
   value: string
   onChange: (value: string) => void
+  onScan?: (sku: string) => void
   placeholder?: string
   showScanner?: boolean
   className?: string
@@ -44,6 +45,7 @@ type ProductSearchProps = {
 export function ProductSearch({
   value,
   onChange,
+  onScan,
   placeholder = "Поиск по названию, артикулу, весу, цене или дате...",
   showScanner = true,
   className,
@@ -58,7 +60,7 @@ export function ProductSearch({
     // 1. Сразу запускаем поиск по артикулу — без ожидания проверки магазина.
     onChange(parsed.sku)
 
-    // 2. Проверку магазина выполняем в фоне — не блокируем поиск.
+    // 2. Проверяем магазин до учёта сканирования, если QR содержит его ID.
     if (parsed.shopSeqId !== null) {
       checkQrShop(parsed.shopSeqId)
         .then((check) => {
@@ -70,12 +72,17 @@ export function ProductSearch({
               `Ошибка: QR-код принадлежит другому магазину (ID ${check.scannedSeqId}). Ваш магазин (${own})`,
               { duration: 6000 },
             )
+            return
           }
+          if (check.ok) onScan?.(parsed.sku)
         })
         .catch((e) => {
           console.error("[product-search] checkQrShop error:", e)
         })
+      return
     }
+
+    onScan?.(parsed.sku)
   }
   const parsed = parseProductSearchQuery(value)
   const hint =
