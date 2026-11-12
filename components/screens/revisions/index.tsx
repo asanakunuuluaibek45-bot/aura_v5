@@ -10,6 +10,7 @@ import { filterProducts, normalizeText, parseProductSearchQuery } from "@/lib/pr
 import {
   getRevisionProducts,
   groupRevisionProducts,
+  filterRevisionCategory,
   parseRevisionSession,
   recordRevisionScan,
   toggleRevisionCheck,
@@ -83,20 +84,28 @@ export function RevisionsScreen({
   const stockProducts = useMemo(() => getRevisionProducts(products), [products])
   const stockById = useMemo(() => new Map(stockProducts.map((product) => [product.id, product])), [stockProducts])
   const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds])
-  const totalCount = stockProducts.length
+  const categoryProducts = useMemo(
+    () => filterRevisionCategory(stockProducts, category),
+    [category, stockProducts],
+  )
   const checkedProducts = useMemo(
     () => checkedIds.slice().reverse().map((id) => stockById.get(id)).filter((product): product is Product => Boolean(product)),
     [checkedIds, stockById],
   )
-  const checkedCount = checkedProducts.length
+  const selectedCheckedProducts = useMemo(
+    () => filterRevisionCategory(checkedProducts, category),
+    [category, checkedProducts],
+  )
+  const totalCount = categoryProducts.length
+  const checkedCount = selectedCheckedProducts.length
   const remainingCount = Math.max(0, totalCount - checkedCount)
   const allGroups = useMemo(
     () => groupRevisionProducts(stockProducts, checkedSet),
     [stockProducts, checkedSet],
   )
   const debouncedMatches = useMemo(
-    () => filterProducts(stockProducts, debouncedQuery),
-    [debouncedQuery, stockProducts],
+    () => filterProducts(categoryProducts, debouncedQuery),
+    [categoryProducts, debouncedQuery],
   )
   const categorySections = useMemo<CategorySection[]>(() => {
     const totals = new Map<string, CategorySection>()
@@ -116,7 +125,6 @@ export function RevisionsScreen({
 
     for (const product of debouncedMatches) {
       const productCategory = product.category?.trim() || "Прочее"
-      if (category && productCategory !== category) continue
       if (checkedSet.has(product.id)) continue
       const current = totals.get(productCategory)
       if (current) current.products.push(product)
@@ -130,10 +138,6 @@ export function RevisionsScreen({
   const categories = useMemo(
     () => [...new Set(allGroups.map((group) => group.category))].sort((a, b) => a.localeCompare(b, "ru")),
     [allGroups],
-  )
-  const unverifiedGroups = useMemo(
-    () => groupRevisionProducts(stockProducts.filter((product) => !checkedSet.has(product.id)), new Set()),
-    [checkedSet, stockProducts],
   )
 
   const markProduct = useCallback((product: Product, announce = true) => {
@@ -179,9 +183,7 @@ export function RevisionsScreen({
     if (autoHandledQueryRef.current === trigger) return
     autoHandledQueryRef.current = trigger
 
-    const eligible = stockProducts.filter((product) =>
-      !category || (product.category?.trim() || "Прочее") === category,
-    )
+    const eligible = filterRevisionCategory(stockProducts, category)
     const exactSku = raw.toLocaleUpperCase("ru-RU")
     let match = eligible.find((product) => product.sku?.trim().toLocaleUpperCase("ru-RU") === exactSku) ?? null
 
@@ -328,7 +330,7 @@ export function RevisionsScreen({
             <p className="rounded-lg bg-muted/40 px-3 py-5 text-center text-sm text-muted-foreground">
               {remainingCount === 0
                 ? "Все изделия проверены."
-                : checkedProducts.some((product) => filterProducts([product], debouncedQuery).length > 0)
+                : selectedCheckedProducts.some((product) => filterProducts([product], debouncedQuery).length > 0)
                   ? "Совпадение уже проверено и находится в отмеченных ниже."
                   : "По выбранным фильтрам изделия не найдены."}
             </p>
@@ -373,7 +375,7 @@ export function RevisionsScreen({
                                   size="sm"
                                   variant="outline"
                                   disabled={finished}
-                                  onClick={() => { setAutoMarkNotice(""); markProduct(product) }}
+                                  onClick={() => markProduct(product)}
                                   className="h-8 shrink-0 gap-1 px-2.5 text-xs"
                                   aria-label={"Отметить " + product.name}
                                 >
@@ -436,7 +438,7 @@ export function RevisionsScreen({
             <p className="py-3 text-center text-sm text-muted-foreground">Пока нет отмеченных изделий.</p>
           ) : (
             <ul className="divide-y divide-border/60">
-              {checkedProducts.map((product) => (
+              {selectedCheckedProducts.map((product) => (
                 <li key={product.id} className="flex min-w-0 items-center justify-between gap-2 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-emerald-700 dark:text-emerald-400">{product.name}</p>

@@ -80,6 +80,12 @@ export function recordRevisionScan(
   return { status: "checked", product, checkedIds: [...checkedIds, product.id] }
 }
 
+export function filterRevisionCategory(products: Product[], category: string): Product[] {
+  const selected = category.trim()
+  if (!selected) return products
+  return products.filter((product) => (product.category?.trim() || "Прочее") === selected)
+}
+
 export function toggleRevisionCheck(checkedIds: readonly string[], productId: string, checked: boolean): string[] {
   if (checked) return checkedIds.includes(productId) ? [...checkedIds] : [...checkedIds, productId]
   return checkedIds.filter((id) => id !== productId)

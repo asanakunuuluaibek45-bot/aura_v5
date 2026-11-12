@@ -3,6 +3,7 @@ import test from "node:test"
 import {
   getRevisionProducts,
   groupRevisionProducts,
+  filterRevisionCategory,
   parseRevisionSession,
   recordRevisionScan,
   toggleRevisionCheck,
@@ -70,4 +71,11 @@ test("manual checks append once and undo preserves the newest-first history", ()
   assert.deepEqual(toggleRevisionCheck(second, "a", true), ["a", "b"])
   assert.deepEqual(toggleRevisionCheck(second, "a", false), ["b"])
   assert.deepEqual(second, ["a", "b"])
+})
+
+
+test("selected category filters the product set while all categories stay available", () => {
+  const products = [product("ring"), product("earrings", { category: "Серьги" })]
+  assert.deepEqual(filterRevisionCategory(products, "Серьги").map(({ id }) => id), ["earrings"])
+  assert.deepEqual(filterRevisionCategory(products, "").map(({ id }) => id), ["ring", "earrings"])
 })
