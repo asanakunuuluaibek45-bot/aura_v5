@@ -168,6 +168,8 @@ export function RevisionsScreen({
   }, [])
 
   const handleScan = useCallback((sku: string) => {
+    setQuery("")
+    setAutoMarkNotice("")
     const result = recordRevisionScan(products, checkedIdsRef.current, sku)
     if (result.status === "not_found") {
       toast.error("Изделие не найдено среди товаров в наличии")
@@ -313,6 +315,8 @@ export function RevisionsScreen({
               setAutoMarkNotice("")
             }}
             onScan={handleScan}
+            continuousScan
+            updateOnScan={false}
             placeholder="Название, точный артикул или вес…"
             className="col-span-2 min-w-0 flex-1 sm:col-span-1"
             inputClassName="h-9"
