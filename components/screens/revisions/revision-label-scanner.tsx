@@ -1,12 +1,12 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { parseQrCode } from "@/lib/qr-code"
 import { checkQrShop } from "@/app/actions/qr"
-import type { RevisionScanResult } from "@/lib/inventory-revision"
+import { processRevisionLabel, type RevisionScanTransaction } from "@/lib/revision-label-scan"
 import { toast } from "sonner"
 
 const BarcodeScannerModal = dynamic(
@@ -22,15 +22,16 @@ const BarcodeScannerModal = dynamic(
 )
 
 type RevisionLabelScannerProps = {
-  onScan: (sku: string) => RevisionScanResult
+  onScan: (sku: string) => RevisionScanTransaction
 }
 
 export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState("")
+  const pendingSkusRef = useRef(new Set<string>())
+  const latestScanRef = useRef(0)
 
   const handleScan = useCallback(async (raw: string) => {
-    setStatus("Проверяю этикетку…")
     const parsed = parseQrCode(raw)
     if (!parsed.sku) {
       const message = "В коде этикетки не найден артикул"
@@ -39,45 +40,48 @@ export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
       return
     }
 
-    if (parsed.shopSeqId !== null) {
-      try {
-        const check = await checkQrShop(parsed.shopSeqId)
-        if (!check.ok) {
-          if (check.reason === "foreign_shop") {
-            const own = check.ownShopName
-              ? check.ownShopName + ", ID " + check.ownSeqId
-              : "ID " + check.ownSeqId
-            const message = "Этикетка относится к другому магазину (ID " + check.scannedSeqId + "). Ваш магазин: " + own
-            setStatus(message)
-            toast.error(message, { duration: 6000 })
-          } else {
-            const message = "Не удалось подтвердить магазин. Войдите снова и повторите сканирование."
-            setStatus(message)
-            toast.error(message)
-          }
-          return
-        }
-      } catch {
-        const message = "Не удалось проверить этикетку. Повторите сканирование."
+    const sku = parsed.sku.trim().toLocaleUpperCase("ru-RU")
+    if (pendingSkusRef.current.has(sku)) {
+      setStatus("Эта этикетка ещё проверяется")
+      return
+    }
+    pendingSkusRef.current.add(sku)
+    const scanId = ++latestScanRef.current
+    try {
+      const outcome = await processRevisionLabel(
+        { ...parsed, sku },
+        onScan,
+        checkQrShop,
+        (result, pending) => {
+          const message = result.status === "not_found"
+            ? "Не найдено на складе: " + sku
+            : (result.status === "checked" ? "Отмечено: " : "Уже проверено: ") + result.product.name
+          setStatus(message + (pending ? " · проверка магазина…" : ""))
+        },
+      )
+      if (outcome.kind === "rejected") {
+        const prefix = outcome.rolledBack ? "Отметка отменена. " : ""
+        const message = outcome.reason === "foreign_shop"
+          ? prefix + "Этикетка от другого магазина."
+          : prefix + (outcome.reason === "unauthorized"
+            ? "Сессия не подтверждена. Войдите снова и повторите сканирование."
+            : "Не удалось проверить магазин. Повторите сканирование.")
+        // A late rejection must still be visible; late successes must not
+        // replace the status of a more recently scanned label.
         setStatus(message)
-        toast.error(message)
+        toast.error(message, { duration: 6000 })
         return
       }
-    }
-
-    const result = onScan(parsed.sku)
-    if (result.status === "checked") {
-      const message = "Отмечено: " + result.product.name
-      setStatus(message)
-      toast.success(message)
-    } else if (result.status === "already_checked") {
-      const message = "Уже проверено: " + result.product.name
-      setStatus(message)
-      toast.error(message)
-    } else {
-      const message = "Не найдено на складе: " + parsed.sku
-      setStatus(message)
-      toast.error(message)
+      const result = outcome.result
+      const message = result.status === "not_found"
+        ? "Не найдено на складе: " + sku
+        : (result.status === "checked" ? "Отмечено: " : "Уже проверено: ") + result.product.name
+      if (scanId === latestScanRef.current) setStatus(message)
+      if (result.status === "checked") toast.success(message)
+      else if (result.status === "not_found") toast.error(message)
+      else toast(message)
+    } finally {
+      pendingSkusRef.current.delete(sku)
     }
   }, [onScan])
 

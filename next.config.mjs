@@ -26,6 +26,7 @@ const nextConfig = {
       { source: '/crm/pos', destination: '/pos' },
       { source: '/crm/showcase', destination: '/showcase' },
       { source: '/crm/inventory', destination: '/inventory' },
+      { source: '/crm/revisions', destination: '/revisions' },
       { source: '/crm/customers', destination: '/customers' },
       { source: '/crm/reports', destination: '/reports' },
       { source: '/crm/stores', destination: '/stores' },

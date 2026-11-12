@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Product } from "@/lib/types"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ProductSearch } from "@/components/product-search"
 import { RevisionLabelScanner } from "@/components/screens/revisions/revision-label-scanner"
+import { createRevisionScanTracker, type RevisionScanTransaction } from "@/lib/revision-label-scan"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { filterProducts, normalizeText, parseProductSearchQuery } from "@/lib/product-search"
 import {
@@ -44,6 +44,7 @@ export function RevisionsScreen({
   const [loadedKey, setLoadedKey] = useState("")
   const [checkedIds, setCheckedIds] = useState<string[]>([])
   const checkedIdsRef = useRef<string[]>([])
+  const scanTrackerRef = useRef(createRevisionScanTracker())
   const autoHandledQueryRef = useRef("")
   const [finished, setFinished] = useState(false)
   const [query, setQuery] = useState("")
@@ -56,6 +57,7 @@ export function RevisionsScreen({
   const debouncedQuery = useDebouncedValue(query)
 
   useEffect(() => {
+    scanTrackerRef.current.reset()
     if (!storageKey) return
     setLoadedKey("")
 
@@ -72,11 +74,15 @@ export function RevisionsScreen({
     setLoadedKey(storageKey)
   }, [storageKey])
 
+  useEffect(() => () => scanTrackerRef.current.reset(), [])
+
   useEffect(() => {
     if (!storageKey || loadedKey !== storageKey) return
     try {
       window.localStorage.setItem(storageKey, JSON.stringify({
-        checkedProductIds: checkedIds,
+        // Tentative marks are visible immediately, but survive reload only
+        // after the server confirms the label's store.
+        checkedProductIds: checkedIds.filter((id) => !scanTrackerRef.current.isPending(id)),
         finished,
       }))
     } catch (error) {
@@ -87,6 +93,7 @@ export function RevisionsScreen({
   const stockProducts = useMemo(() => getRevisionProducts(products), [products])
   const stockById = useMemo(() => new Map(stockProducts.map((product) => [product.id, product])), [stockProducts])
   const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds])
+  const pendingScanCount = scanTrackerRef.current.pendingCount
   const categoryProducts = useMemo(
     () => filterRevisionMetal(filterRevisionCategory(stockProducts, category), metal),
     [category, metal, stockProducts],
@@ -151,7 +158,12 @@ export function RevisionsScreen({
   )
 
   const markProduct = useCallback((product: Product, announce = true) => {
-    if (finished || checkedIdsRef.current.includes(product.id)) return false
+    if (finished) return false
+    const wasPending = scanTrackerRef.current.invalidate(product.id)
+    if (checkedIdsRef.current.includes(product.id)) {
+      if (wasPending) setCheckedIds([...checkedIdsRef.current])
+      return false
+    }
     const next = toggleRevisionCheck(checkedIdsRef.current, product.id, true)
     checkedIdsRef.current = next
     setCheckedIds(next)
@@ -160,6 +172,7 @@ export function RevisionsScreen({
   }, [finished])
 
   const undoProduct = useCallback((product: Product) => {
+    scanTrackerRef.current.invalidate(product.id)
     const next = toggleRevisionCheck(checkedIdsRef.current, product.id, false)
     if (next.length === checkedIdsRef.current.length) return
     checkedIdsRef.current = next
@@ -168,12 +181,28 @@ export function RevisionsScreen({
     toast("Отметка отменена: " + product.name)
   }, [])
 
-  const handleScan = useCallback((sku: string) => {
+  const handleScan = useCallback((sku: string): RevisionScanTransaction => {
     setQuery("")
     setAutoMarkNotice("")
     const result = recordRevisionScan(products, checkedIdsRef.current, sku)
     if (result.status === "checked") markProduct(result.product, false)
-    return result
+    if (result.status === "not_found") {
+      return { result, confirm: () => {}, rollback: () => false }
+    }
+    const ticket = scanTrackerRef.current.begin(result.product.id, result.status === "checked")
+    return {
+      result,
+      confirm: () => {
+        if (ticket.confirm()) setCheckedIds([...checkedIdsRef.current])
+      },
+      rollback: () => {
+        if (!ticket.rollback()) return false
+        const next = toggleRevisionCheck(checkedIdsRef.current, result.product.id, false)
+        checkedIdsRef.current = next
+        setCheckedIds(next)
+        return true
+      },
+    }
   }, [markProduct, products])
 
   useEffect(() => {
@@ -213,6 +242,10 @@ export function RevisionsScreen({
   }, [category, debouncedQuery, metal])
 
   const finishRevision = () => {
+    if (scanTrackerRef.current.pendingCount > 0) {
+      toast("Дождитесь проверки этикеток")
+      return
+    }
     setQuery("")
     setCategory("")
     setMetal("")
@@ -223,6 +256,7 @@ export function RevisionsScreen({
 
   const startNewRevision = () => {
     if (checkedIdsRef.current.length > 0 && !window.confirm("Сбросить отметки и начать новую ревизию?")) return
+    scanTrackerRef.current.reset()
     checkedIdsRef.current = []
     setCheckedIds([])
     setFinished(false)
@@ -314,7 +348,7 @@ export function RevisionsScreen({
               className="min-w-0 flex-1"
               inputClassName="h-9"
             />
-            <RevisionLabelScanner onScan={handleScan} />
+            <RevisionLabelScanner key={storageKey} onScan={handleScan} />
           </div>
         </section>
       )}
@@ -334,8 +368,8 @@ export function RevisionsScreen({
           <p className="min-w-0 text-xs text-muted-foreground" aria-live="polite">
             {autoMarkNotice || (query ? "Совпадений: " + debouncedMatches.length : "Выберите изделие или отсканируйте этикетку")}
           </p>
-          <Button type="button" onClick={finishRevision} size="sm" className="h-9 shrink-0 px-3">
-            Завершить
+          <Button type="button" onClick={finishRevision} disabled={pendingScanCount > 0} size="sm" className="h-9 shrink-0 px-3">
+            {pendingScanCount > 0 ? "Проверка этикеток…" : "Завершить"}
           </Button>
         </div>
       )}
