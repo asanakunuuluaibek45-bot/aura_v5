@@ -309,9 +309,10 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
                 if (barcodes.length > 0 && barcodes[0].rawValue) {
                   setIsBadQuality(false)
                   handleResult(barcodes[0].rawValue)
-                  return
+                  if (!continuousScan) return
+                } else {
+                  releaseContinuousScanLock()
                 }
-                releaseContinuousScanLock()
               } catch {
                 releaseContinuousScanLock()
               }
@@ -369,7 +370,7 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
       cancelled = true
       stopEverything()
     }
-  }, [deviceIndex, facing, handleResult, releaseContinuousScanLock, stopEverything])
+  }, [continuousScan, deviceIndex, facing, handleResult, releaseContinuousScanLock, stopEverything])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

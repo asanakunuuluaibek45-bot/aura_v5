@@ -36,8 +36,6 @@ type ProductSearchProps = {
   value: string
   onChange: (value: string) => void
   onScan?: (sku: string) => void
-  continuousScan?: boolean
-  updateOnScan?: boolean
   placeholder?: string
   showScanner?: boolean
   className?: string
@@ -48,8 +46,6 @@ export function ProductSearch({
   value,
   onChange,
   onScan,
-  continuousScan = false,
-  updateOnScan = true,
   placeholder = "Поиск по названию, артикулу, весу, цене или дате...",
   showScanner = true,
   className,
@@ -62,7 +58,7 @@ export function ProductSearch({
     if (!parsed.sku) return
 
     // 1. При необходимости запускаем поиск по артикулу без ожидания проверки магазина.
-    if (updateOnScan) onChange(parsed.sku)
+    onChange(parsed.sku)
 
     // 2. Проверяем магазин до учёта сканирования, если QR содержит его ID.
     if (parsed.shopSeqId !== null) {
@@ -140,7 +136,6 @@ export function ProductSearch({
         <BarcodeScannerModal
           onClose={() => setScannerOpen(false)}
           onScan={handleScan}
-          continuousScan={continuousScan}
         />
       )}
     </>

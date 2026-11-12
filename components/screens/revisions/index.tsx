@@ -5,6 +5,7 @@ import type { Product } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ProductSearch } from "@/components/product-search"
+import { RevisionLabelScanner } from "@/components/screens/revisions/revision-label-scanner"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { filterProducts, normalizeText, parseProductSearchQuery } from "@/lib/product-search"
 import {
@@ -171,15 +172,8 @@ export function RevisionsScreen({
     setQuery("")
     setAutoMarkNotice("")
     const result = recordRevisionScan(products, checkedIdsRef.current, sku)
-    if (result.status === "not_found") {
-      toast.error("Изделие не найдено среди товаров в наличии")
-      return
-    }
-    if (result.status === "already_checked") {
-      toast.error("Это изделие уже проверено")
-      return
-    }
-    markProduct(result.product)
+    if (result.status === "checked") markProduct(result.product, false)
+    return result
   }, [markProduct, products])
 
   useEffect(() => {
@@ -308,19 +302,20 @@ export function RevisionsScreen({
             <option value="">Все металлы</option>
             {metals.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
-          <ProductSearch
-            value={query}
-            onChange={(value) => {
-              setQuery(value)
-              setAutoMarkNotice("")
-            }}
-            onScan={handleScan}
-            continuousScan
-            updateOnScan={false}
-            placeholder="Название, точный артикул или вес…"
-            className="col-span-2 min-w-0 flex-1 sm:col-span-1"
-            inputClassName="h-9"
-          />
+          <div className="col-span-2 flex min-w-0 items-center gap-2 sm:col-span-1">
+            <ProductSearch
+              value={query}
+              onChange={(value) => {
+                setQuery(value)
+                setAutoMarkNotice("")
+              }}
+              placeholder="Название, точный артикул или вес…"
+              showScanner={false}
+              className="min-w-0 flex-1"
+              inputClassName="h-9"
+            />
+            <RevisionLabelScanner onScan={handleScan} />
+          </div>
         </section>
       )}
 
