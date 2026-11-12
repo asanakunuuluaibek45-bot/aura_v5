@@ -36,6 +36,7 @@ const SectionLoading = () => (
 // screen in the first bundle; it is the primary workflow.
 const VitrinaScreen = memo(dynamic(() => import("@/components/screens/vitrina").then((mod) => mod.VitrinaScreen), { loading: SectionLoading }))
 const SkladScreen = memo(dynamic(() => import("@/components/screens/sklad").then((mod) => mod.SkladScreen), { loading: SectionLoading }))
+const RevisionsScreen = memo(dynamic(() => import("@/components/screens/revisions").then((mod) => mod.RevisionsScreen), { loading: SectionLoading }))
 const OtchetyScreen = memo(dynamic(() => import("@/components/screens/otchety").then((mod) => mod.OtchetyScreen), { loading: SectionLoading }))
 const KabinetScreen = memo(dynamic(() => import("@/components/screens/kabinet").then((mod) => mod.KabinetScreen), { loading: SectionLoading }))
 const ClientsScreen = memo(dynamic(() => import("@/components/screens/clients").then((mod) => mod.ClientsScreen), { loading: SectionLoading }))
@@ -494,6 +495,14 @@ export function Dashboard({
             onFocusProductHandled={(productId: string) =>
               setSupplierInventoryTarget((current) => current?.id === productId ? null : current)
             }
+          />
+        )}
+        {activeScreen === "revisions" && (
+          <RevisionsScreen
+            key={activeShopId ?? "no-shop"}
+            products={currentProducts}
+            shopId={activeShopId}
+            productsReady={localCrm.isReady}
           />
         )}
         {activeScreen === "clients" && (

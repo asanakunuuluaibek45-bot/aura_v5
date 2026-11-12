@@ -30,6 +30,7 @@ import {
   CircleHelp,
   Eye,
   LayoutGrid,
+  PackageCheck,
   Wallet,
   LogOut,
   ShoppingCart,
@@ -47,6 +48,7 @@ export type ScreenId =
   | "money"
   | "vitrina"
   | "sklad"
+  | "revisions"
   | "otchety"
   | "kabinet"
   | "clients"
@@ -59,6 +61,7 @@ export const SCREEN_PATHS: Record<ScreenId, string> = {
   money: "/crm/money",
   vitrina: "/crm/showcase",
   sklad: "/crm/inventory",
+  revisions: "/crm/revisions",
   clients: "/crm/customers",
   otchety: "/crm/reports",
   shops: "/crm/stores",
@@ -84,6 +87,7 @@ const ITEMS: NavItem[] = [
   { id: "money", label: "Деньги", icon: Wallet, group: "work", description: "Движение денег и операции кассы" },
   { id: "vitrina", label: "Витрина", icon: LayoutGrid, group: "work", description: "Каталог ассортимента магазина" },
   { id: "sklad", label: "Склад", icon: Warehouse, group: "work", description: "Карточки товаров и складской ассортимент" },
+  { id: "revisions", label: "Ревизии", icon: PackageCheck, group: "work", description: "Проверка изделий по складским остаткам" },
   { id: "clients", label: "Клиенты", icon: Users, group: "work", description: "Карточки клиентов и история покупок" },
   { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management", description: "Поставщики, долги и расчёты" },
   { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
