@@ -86,6 +86,12 @@ export function filterRevisionCategory(products: Product[], category: string): P
   return products.filter((product) => (product.category?.trim() || "Прочее") === selected)
 }
 
+export function filterRevisionMetal(products: Product[], metal: string): Product[] {
+  const selected = metal.trim()
+  if (!selected) return products
+  return products.filter((product) => (product.metal?.trim() || "Металл не указан") === selected)
+}
+
 export function toggleRevisionCheck(checkedIds: readonly string[], productId: string, checked: boolean): string[] {
   if (checked) return checkedIds.includes(productId) ? [...checkedIds] : [...checkedIds, productId]
   return checkedIds.filter((id) => id !== productId)

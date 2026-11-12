@@ -4,6 +4,7 @@ import {
   getRevisionProducts,
   groupRevisionProducts,
   filterRevisionCategory,
+  filterRevisionMetal,
   parseRevisionSession,
   recordRevisionScan,
   toggleRevisionCheck,
@@ -78,4 +79,17 @@ test("selected category filters the product set while all categories stay availa
   const products = [product("ring"), product("earrings", { category: "Серьги" })]
   assert.deepEqual(filterRevisionCategory(products, "Серьги").map(({ id }) => id), ["earrings"])
   assert.deepEqual(filterRevisionCategory(products, "").map(({ id }) => id), ["ring", "earrings"])
+})
+
+
+test("selected category and metal filters compose without losing the all option", () => {
+  const products = [
+    product("gold-ring", { category: "Кольца", metal: "Золото 375" }),
+    product("silver-ring", { category: "Кольца", metal: "Серебро 925" }),
+    product("gold-earring", { category: "Серьги", metal: "Золото 375" }),
+  ]
+  const rings = filterRevisionCategory(products, "Кольца")
+  assert.deepEqual(filterRevisionMetal(rings, "Серебро 925").map(({ id }) => id), ["silver-ring"])
+  assert.equal(filterRevisionMetal(rings, "").length, 2)
+  assert.equal(filterRevisionMetal(filterRevisionCategory(products, ""), "Золото 375").length, 2)
 })

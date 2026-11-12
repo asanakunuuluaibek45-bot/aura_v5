@@ -11,6 +11,7 @@ import {
   getRevisionProducts,
   groupRevisionProducts,
   filterRevisionCategory,
+  filterRevisionMetal,
   parseRevisionSession,
   recordRevisionScan,
   toggleRevisionCheck,
@@ -46,6 +47,7 @@ export function RevisionsScreen({
   const [finished, setFinished] = useState(false)
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("")
+  const [metal, setMetal] = useState("")
   const [pageByCategory, setPageByCategory] = useState<Record<string, number>>({})
   const [autoMarkNotice, setAutoMarkNotice] = useState("")
   const [showUnverified, setShowUnverified] = useState(true)
@@ -85,16 +87,16 @@ export function RevisionsScreen({
   const stockById = useMemo(() => new Map(stockProducts.map((product) => [product.id, product])), [stockProducts])
   const checkedSet = useMemo(() => new Set(checkedIds), [checkedIds])
   const categoryProducts = useMemo(
-    () => filterRevisionCategory(stockProducts, category),
-    [category, stockProducts],
+    () => filterRevisionMetal(filterRevisionCategory(stockProducts, category), metal),
+    [category, metal, stockProducts],
   )
   const checkedProducts = useMemo(
     () => checkedIds.slice().reverse().map((id) => stockById.get(id)).filter((product): product is Product => Boolean(product)),
     [checkedIds, stockById],
   )
   const selectedCheckedProducts = useMemo(
-    () => filterRevisionCategory(checkedProducts, category),
-    [category, checkedProducts],
+    () => filterRevisionMetal(filterRevisionCategory(checkedProducts, category), metal),
+    [category, metal, checkedProducts],
   )
   const totalCount = categoryProducts.length
   const checkedCount = selectedCheckedProducts.length
@@ -110,6 +112,8 @@ export function RevisionsScreen({
   const categorySections = useMemo<CategorySection[]>(() => {
     const totals = new Map<string, CategorySection>()
     for (const group of allGroups) {
+      if (category && group.category !== category) continue
+      if (metal && group.metal !== metal) continue
       const current = totals.get(group.category) ?? {
         category: group.category,
         total: 0,
@@ -134,10 +138,15 @@ export function RevisionsScreen({
       .filter((section) => !category || section.category === category)
       .filter((section) => section.products.length > 0)
       .sort((a, b) => a.category.localeCompare(b.category, "ru"))
-  }, [allGroups, category, checkedSet, debouncedMatches])
+  }, [allGroups, category, checkedSet, debouncedMatches, metal])
   const categories = useMemo(
     () => [...new Set(allGroups.map((group) => group.category))].sort((a, b) => a.localeCompare(b, "ru")),
     [allGroups],
+  )
+  const metals = useMemo(
+    () => [...new Set(filterRevisionCategory(stockProducts, category).map((product) => product.metal?.trim() || "Металл не указан"))]
+      .sort((a, b) => a.localeCompare(b, "ru")),
+    [category, stockProducts],
   )
 
   const markProduct = useCallback((product: Product, announce = true) => {
@@ -179,11 +188,11 @@ export function RevisionsScreen({
     const raw = debouncedQuery.trim()
     if (!raw || finished || !loadedKey || loadedKey !== storageKey) return
 
-    const trigger = normalizeText(raw) + "|" + category
+    const trigger = normalizeText(raw) + "|" + category + "|" + metal
     if (autoHandledQueryRef.current === trigger) return
     autoHandledQueryRef.current = trigger
 
-    const eligible = filterRevisionCategory(stockProducts, category)
+    const eligible = filterRevisionMetal(filterRevisionCategory(stockProducts, category), metal)
     const exactSku = raw.toLocaleUpperCase("ru-RU")
     let match = eligible.find((product) => product.sku?.trim().toLocaleUpperCase("ru-RU") === exactSku) ?? null
 
@@ -201,15 +210,16 @@ export function RevisionsScreen({
     if (match && !checkedIdsRef.current.includes(match.id)) {
       if (markProduct(match, false)) setAutoMarkNotice("Автоматически отмечено: " + match.name)
     }
-  }, [category, debouncedQuery, finished, loadedKey, markProduct, query, stockProducts, storageKey])
+  }, [category, debouncedQuery, finished, loadedKey, markProduct, metal, query, stockProducts, storageKey])
 
   useEffect(() => {
     setPageByCategory({})
-  }, [category, debouncedQuery])
+  }, [category, debouncedQuery, metal])
 
   const finishRevision = () => {
     setQuery("")
     setCategory("")
+    setMetal("")
     setPageByCategory({})
     setFinished(true)
     setShowUnverified(true)
@@ -222,6 +232,7 @@ export function RevisionsScreen({
     setFinished(false)
     setQuery("")
     setCategory("")
+    setMetal("")
     setPageByCategory({})
     setAutoMarkNotice("")
   }
@@ -267,19 +278,33 @@ export function RevisionsScreen({
       </div>
 
       {!finished && (
-        <section className="space-y-2 rounded-xl border border-border bg-card p-2.5 sm:flex sm:items-center sm:gap-2 sm:space-y-0 sm:p-3">
+        <section className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-card p-2.5 sm:flex sm:items-center sm:p-3">
           <label className="sr-only" htmlFor="revision-category">Категория</label>
           <select
             id="revision-category"
             value={category}
             onChange={(event) => {
               setCategory(event.target.value)
+              setMetal("")
               setAutoMarkNotice("")
             }}
             className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-48"
           >
             <option value="">Все категории</option>
             {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <label className="sr-only" htmlFor="revision-metal">Металл</label>
+          <select
+            id="revision-metal"
+            value={metal}
+            onChange={(event) => {
+              setMetal(event.target.value)
+              setAutoMarkNotice("")
+            }}
+            className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
+          >
+            <option value="">Все металлы</option>
+            {metals.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
           <ProductSearch
             value={query}
@@ -289,7 +314,7 @@ export function RevisionsScreen({
             }}
             onScan={handleScan}
             placeholder="Название, точный артикул или вес…"
-            className="min-w-0 flex-1"
+            className="col-span-2 min-w-0 flex-1 sm:col-span-1"
             inputClassName="h-9"
           />
         </section>
@@ -339,7 +364,9 @@ export function RevisionsScreen({
             const page = Math.min(pageByCategory[section.category] ?? 0, pageCount - 1)
             const pageProducts = section.products.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
             const metalGroups = groupRevisionProducts(pageProducts, new Set())
-            const fullGroups = allGroups.filter((group) => group.category === section.category)
+            const fullGroups = allGroups.filter((group) =>
+              group.category === section.category && (!metal || group.metal === metal),
+            )
 
             return (
               <details key={section.category} open={sectionIndex === 0} className="rounded-lg border border-border/80">
