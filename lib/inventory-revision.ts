@@ -80,6 +80,11 @@ export function recordRevisionScan(
   return { status: "checked", product, checkedIds: [...checkedIds, product.id] }
 }
 
+export function toggleRevisionCheck(checkedIds: readonly string[], productId: string, checked: boolean): string[] {
+  if (checked) return checkedIds.includes(productId) ? [...checkedIds] : [...checkedIds, productId]
+  return checkedIds.filter((id) => id !== productId)
+}
+
 export function parseRevisionSession(raw: string | null): RevisionSession {
   if (!raw) return { checkedProductIds: [], finished: false }
 

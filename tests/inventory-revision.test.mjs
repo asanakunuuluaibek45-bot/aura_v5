@@ -5,6 +5,7 @@ import {
   groupRevisionProducts,
   parseRevisionSession,
   recordRevisionScan,
+  toggleRevisionCheck,
 } from "../lib/inventory-revision.ts"
 
 const product = (id, overrides = {}) => ({
@@ -60,4 +61,13 @@ test("revision sessions restore valid state and ignore malformed data", () => {
     checkedProductIds: ["a", "a", 42, "b"],
     finished: true,
   })), { checkedProductIds: ["a", "b"], finished: true })
+})
+
+
+test("manual checks append once and undo preserves the newest-first history", () => {
+  const first = toggleRevisionCheck([], "a", true)
+  const second = toggleRevisionCheck(first, "b", true)
+  assert.deepEqual(toggleRevisionCheck(second, "a", true), ["a", "b"])
+  assert.deepEqual(toggleRevisionCheck(second, "a", false), ["b"])
+  assert.deepEqual(second, ["a", "b"])
 })
