@@ -14,6 +14,14 @@ interface BarcodeScannerProps {
 }
 
 export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }: BarcodeScannerProps) {
+  const onScanRef = useRef(onScan)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onScanRef.current = onScan
+    onCloseRef.current = onClose
+  }, [onScan, onClose])
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const activeStreamRef = useRef<MediaStream | null>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
@@ -109,8 +117,8 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
   const close = useCallback(() => {
     closedRef.current = true
     stopEverything()
-    onClose()
-  }, [onClose, stopEverything])
+    onCloseRef.current()
+  }, [stopEverything])
 
   const releaseContinuousScanLock = useCallback(() => {
     if (!continuousScan || Date.now() - lastContinuousSeenAtRef.current <= 700) return
@@ -142,10 +150,10 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
       }
 
       if (!continuousScan) stopEverything()
-      onScan(clean)
-      if (!continuousScan) onClose()
+      onScanRef.current(clean)
+      if (!continuousScan) onCloseRef.current()
     },
-    [continuousScan, onClose, onScan, stopEverything],
+    [continuousScan, stopEverything],
   )
 
   useEffect(() => {
