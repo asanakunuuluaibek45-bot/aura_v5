@@ -30,6 +30,7 @@ export interface OutboxItem {
   payload: any
   status: OutboxStatus
   retries: number
+  failure_kind?: 'transient' | 'auth' | 'permanent'
   error?: string | null
   created_at: string
   /** ISO timestamp: item must not be retried before this moment (exponential backoff). */

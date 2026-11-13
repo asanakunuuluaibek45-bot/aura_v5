@@ -585,7 +585,7 @@ export function KabinetScreen({
       if (pendingOperations > 0 && typeof navigator !== "undefined" && navigator.onLine) {
         try {
           await Promise.race([
-            syncEngine.flushOutbox(),
+            syncEngine.flushOutbox({ forceRetry: true }),
             new Promise<void>((resolve) => setTimeout(resolve, 3000)),
           ])
         } catch {
