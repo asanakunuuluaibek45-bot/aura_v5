@@ -1,6 +1,6 @@
 import { getLocalDB } from './db'
 import { createLocalId } from './id'
-import { countUnresolvedOutboxOperations } from './logout-protection'
+import { countUnresolvedOutboxOperations, summarizeOutboxOperations, type OutboxStatusSummary } from './logout-protection'
 import type { OutboxItem, OutboxStatus } from './schema'
 
 /** Attempts after which an operation stops retrying and waits for manual attention. */
@@ -97,11 +97,46 @@ export async function getOutboxPendingCount(shopId?: string): Promise<number> {
   }
 }
 
+/** Count active and dead-lettered operations so the sync UI agrees with logout protection. */
+export async function getOutboxStatusSummary(shopId?: string): Promise<OutboxStatusSummary> {
+  const db = await getLocalDB()
+  const items = (await db.getAll('outbox')) as OutboxItem[]
+  return summarizeOutboxOperations(items, shopId)
+}
+
 /** Every queued operation must be confirmed before logout clears the local outbox. */
 export async function getUnresolvedOutboxOperationCount(shopId?: string): Promise<number> {
   const db = await getLocalDB()
   const items = (await db.getAll('outbox')) as OutboxItem[]
   return countUnresolvedOutboxOperations(items, shopId)
+}
+
+/** Explicitly retry dead-lettered rows after the user chooses to resubmit them. */
+export async function retryDeadOutboxItems(shopId: string): Promise<number> {
+  const db = await getLocalDB()
+  const tx = db.transaction('outbox', 'readwrite')
+  const store = tx.objectStore('outbox')
+  const items = (await store.getAll()) as OutboxItem[]
+  let retried = 0
+
+  for (const item of items) {
+    if (item.shop_id !== shopId || item.status !== 'dead') continue
+    await store.put({
+      ...item,
+      status: 'pending',
+      retries: 0,
+      error: null,
+      scheduled_at: null,
+      attempted_at: null,
+    })
+    retried++
+  }
+  await tx.done
+
+  if (retried > 0 && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('aura:outbox_enqueued', { detail: { retried } }))
+  }
+  return retried
 }
 
 /**

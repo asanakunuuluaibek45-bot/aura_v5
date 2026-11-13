@@ -3,7 +3,8 @@ import { toast } from 'sonner'
 import { bulkPut, bulkDelete, getMeta, setMeta, getLocalDB, ensureShopScope, localDatabaseWasRebuilt, trimLocalSales, purgeSoldProducts, LOCAL_SALES_LIMIT } from '../local-db/db'
 import {
   getDueOutboxItems,
-  getOutboxPendingCount,
+  getOutboxStatusSummary,
+  retryDeadOutboxItems,
   getNextRetryDelayMs,
   markOutboxSyncing,
   markOutboxCompleted,
@@ -67,6 +68,19 @@ function classifyError(err: any): SupabaseErrorKind {
   }
 
   return 'transient'
+}
+
+function outboxStatePatch(summary: Awaited<ReturnType<typeof getOutboxStatusSummary>>) {
+  return {
+    outboxPendingCount: summary.pendingCount,
+    outboxNeedsAttentionCount: summary.needsAttentionCount,
+    outboxLastError: summary.lastError,
+    phaseLabel: summary.needsAttentionCount > 0
+      ? `Нужна проверка: ${summary.needsAttentionCount}`
+      : summary.pendingCount > 0
+        ? `Ожидают подтверждения: ${summary.pendingCount}`
+        : 'Всё синхронизировано',
+  }
 }
 
 function backoff(attempt: number, base = PULL_BACKOFF_BASE_MS, max = PULL_BACKOFF_MAX_MS): number {
@@ -675,17 +689,16 @@ class SyncEngine {
         window.dispatchEvent(new CustomEvent('aura:initial_sync_complete'))
       }
 
-      const pendingOutbox = await getOutboxPendingCount(shopId)
+      const outboxSummary = await getOutboxStatusSummary(shopId)
       updateSyncState({
-        status: 'synced',
+        status: outboxSummary.needsAttentionCount > 0 ? 'error' : outboxSummary.pendingCount > 0 ? 'syncing' : 'synced',
         percent: 100,
         priorityPhase: 4,
-        phaseLabel: 'Всё синхронизировано',
         currentTask: null,
         lastSuccessAt: new Date().toISOString(),
         lastError: null,
         isStale: false,
-        outboxPendingCount: pendingOutbox,
+        ...outboxStatePatch(outboxSummary),
         scopeShopId: shopId,
       })
     } catch (err: any) {
@@ -753,17 +766,15 @@ class SyncEngine {
 
       this.pullFailures = 0
       this.notifyServiceWorker({ type: 'AURA_CLOUD_REACHABLE' })
-      const pendingOutbox = await getOutboxPendingCount(shopId)
-
+      const outboxSummary = await getOutboxStatusSummary(shopId)
       updateSyncState({
-        status: pendingOutbox > 0 ? 'syncing' : 'synced',
+        status: outboxSummary.needsAttentionCount > 0 ? 'error' : outboxSummary.pendingCount > 0 ? 'syncing' : 'synced',
         percent: 100,
-        outboxPendingCount: pendingOutbox,
-        phaseLabel: pendingOutbox > 0 ? `${pendingOutbox} ожидают отправки` : 'Всё синхронизировано',
         currentTask: null,
         lastSuccessAt: new Date().toISOString(),
         lastError: null,
         isStale: false,
+        ...outboxStatePatch(outboxSummary),
         scopeShopId: shopId,
       })
     } catch (err: any) {
@@ -858,17 +869,22 @@ class SyncEngine {
     }
   }
 
+  /** Retry dead-lettered operations only after an explicit user action. */
+  public async retryDeadOutbox(): Promise<number> {
+    if (!this.isOnline || !this.activeShopId || this.stopped) return 0
+    const retried = await retryDeadOutboxItems(this.activeShopId)
+    if (retried > 0) await this.flushOutbox()
+    return retried
+  }
+
   private async flushOutboxBatch() {
     if (!this.isOnline || !this.activeShopId || this.stopped) return
     const shopId = this.activeShopId
 
     const due = await getDueOutboxItems(shopId, 20)
     if (due.length === 0) {
-      const pendingCount = await getOutboxPendingCount(shopId)
-      updateSyncState({
-        outboxPendingCount: pendingCount,
-        phaseLabel: pendingCount === 0 ? 'Всё синхронизировано' : `${pendingCount} ожидают отправки`,
-      })
+      const outboxSummary = await getOutboxStatusSummary(shopId)
+      updateSyncState(outboxStatePatch(outboxSummary))
       await this.scheduleNextOutboxWake(shopId)
       return
     }
@@ -937,11 +953,8 @@ class SyncEngine {
       toast.success(`Отправлено ${syncedCount} операций`)
     }
 
-    const remaining = await getOutboxPendingCount(shopId)
-    updateSyncState({
-      outboxPendingCount: remaining,
-      phaseLabel: remaining === 0 ? 'Всё синхронизировано' : `${remaining} ожидают отправки`,
-    })
+    const outboxSummary = await getOutboxStatusSummary(shopId)
+    updateSyncState(outboxStatePatch(outboxSummary))
 
     await this.scheduleNextOutboxWake(shopId)
   }

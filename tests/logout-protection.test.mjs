@@ -1,33 +1,37 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { countUnresolvedOutboxOperations } from "../lib/local-db/logout-protection.ts"
+import { countUnresolvedOutboxOperations, summarizeOutboxOperations } from "../lib/local-db/logout-protection.ts"
 
 const operationTypes = [
-  "create",
-  "update",
-  "delete",
-  "atomic_sale",
-  "atomic_return",
-  "atomic_cash",
-  "product_add",
-  "product_update",
-  "product_delete",
-  "stock_change",
+  "create", "update", "delete", "atomic_sale", "atomic_return", "atomic_cash",
+  "product_add", "product_update", "product_delete", "stock_change",
 ]
-const unresolvedStatuses = ["pending", "failed", "syncing", "dead"]
-const operation = (op_type, status, shop_id = "shop-a") => ({ op_type, status, shop_id })
+const statuses = ["pending", "failed", "syncing", "dead"]
+const operation = (op_type, status, shop_id = "shop-a", error = null) => ({
+  op_type, status, shop_id, error,
+})
 
-test("counts every unresolved operation type and status, ignoring completed rows", () => {
-  const unresolved = operationTypes.flatMap((type) =>
-    unresolvedStatuses.map((status) => operation(type, status)),
-  )
+test("summarizes queued and rejected operations consistently with logout protection", () => {
+  const active = operationTypes.flatMap((type) => statuses.map((status) =>
+    operation(type, status, "shop-a", status === "dead" ? "Server rejected operation" : null),
+  ))
   const items = [
-    ...unresolved,
+    ...active,
     ...operationTypes.map((type) => operation(type, "completed")),
     operation("product_delete", "pending", "shop-b"),
   ]
 
-  assert.equal(countUnresolvedOutboxOperations(items), unresolved.length + 1)
-  assert.equal(countUnresolvedOutboxOperations(items, "shop-a"), unresolved.length)
+  assert.deepEqual(summarizeOutboxOperations(items), {
+    pendingCount: 31,
+    needsAttentionCount: 10,
+    unresolvedCount: 41,
+    lastError: "Server rejected operation",
+  })
+  assert.deepEqual(summarizeOutboxOperations(items, "shop-a"), {
+    pendingCount: 30,
+    needsAttentionCount: 10,
+    unresolvedCount: 40,
+    lastError: "Server rejected operation",
+  })
   assert.equal(countUnresolvedOutboxOperations(items, "shop-b"), 1)
 })

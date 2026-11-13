@@ -81,6 +81,8 @@ export interface SyncProgressState {
   totalToProcess: number
   processedCount: number
   outboxPendingCount: number
+  outboxNeedsAttentionCount: number
+  outboxLastError: string | null
   lastSuccessAt: string | null
   currentTask: string | null
   priorityPhase: 1 | 2 | 3 | 4 | 5

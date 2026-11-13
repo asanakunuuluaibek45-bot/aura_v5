@@ -14,6 +14,8 @@ const INITIAL_STATE: SyncProgressState = {
   totalToProcess: 0,
   processedCount: 0,
   outboxPendingCount: 0,
+  outboxNeedsAttentionCount: 0,
+  outboxLastError: null,
   lastSuccessAt: null,
   currentTask: null,
   priorityPhase: 1,
