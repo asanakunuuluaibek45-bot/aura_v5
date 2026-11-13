@@ -6,29 +6,57 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AlertTriangle, EyeOff, Image as ImageIcon, Keyboard, RefreshCw, X, Zap, ZapOff } from "lucide-react"
 import { playScanBeep } from "@/lib/sound"
+import { parseQrCode } from "@/lib/qr-code"
+import {
+  getVideoCoverTransform,
+  mapVideoPointsToViewport,
+  rectangleCorners,
+  zxingPointsToPolygon,
+  type ScanPoint,
+} from "@/lib/scanner-overlay"
 
 interface BarcodeScannerProps {
   onClose: () => void
   onScan: (code: string) => void
   continuousScan?: boolean
+  checkedSkus?: Set<string>
 }
 
-export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }: BarcodeScannerProps) {
+type OverlayBarcode = {
+  text: string
+  points: ScanPoint[]
+}
+
+type NativeBarcode = {
+  rawValue?: string
+  cornerPoints?: ScanPoint[]
+  boundingBox?: { x: number; y: number; width: number; height: number }
+}
+
+export function BarcodeScannerModal({
+  onClose,
+  onScan,
+  continuousScan = false,
+  checkedSkus,
+}: BarcodeScannerProps) {
   const onScanRef = useRef(onScan)
   const onCloseRef = useRef(onClose)
+  const checkedSkusRef = useRef(checkedSkus)
 
   useEffect(() => {
     onScanRef.current = onScan
     onCloseRef.current = onClose
-  }, [onScan, onClose])
+    checkedSkusRef.current = checkedSkus
+  }, [checkedSkus, onScan, onClose])
 
   const videoRef = useRef<HTMLVideoElement>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const activeStreamRef = useRef<MediaStream | null>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const closedRef = useRef(false)
-  const lastContinuousCodeRef = useRef<string | null>(null)
-  const lastContinuousSeenAtRef = useRef(0)
+  const continuousCodesRef = useRef(new Map<string, number>())
+  const overlayClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const animFrameRef = useRef<number | null>(null)
 
   const camerasRef = useRef<MediaDeviceInfo[]>([])
@@ -49,7 +77,77 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
   // Возможности камеры
   const [torchAvailable, setTorchAvailable] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
-  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null)
+  const focusPointRef = useRef<HTMLDivElement>(null)
+
+  const clearOverlay = useCallback(() => {
+    if (overlayClearTimerRef.current) {
+      clearTimeout(overlayClearTimerRef.current)
+      overlayClearTimerRef.current = null
+    }
+    const canvas = overlayCanvasRef.current
+    const context = canvas?.getContext("2d")
+    if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height)
+  }, [])
+
+  const drawOverlay = useCallback((codes: OverlayBarcode[]) => {
+    const canvas = overlayCanvasRef.current
+    const video = videoRef.current
+    if (!canvas || !video || !checkedSkusRef.current) return
+
+    const bounds = canvas.getBoundingClientRect()
+    if (bounds.width <= 0 || bounds.height <= 0) return
+
+    const pixelRatio = window.devicePixelRatio || 1
+    const pixelWidth = Math.round(bounds.width * pixelRatio)
+    const pixelHeight = Math.round(bounds.height * pixelRatio)
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth
+      canvas.height = pixelHeight
+    }
+
+    const context = canvas.getContext("2d")
+    if (!context) return
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    context.clearRect(0, 0, bounds.width, bounds.height)
+
+    if (video.videoWidth <= 0 || video.videoHeight <= 0) return
+    const transform = getVideoCoverTransform(
+      video.videoWidth,
+      video.videoHeight,
+      bounds.width,
+      bounds.height,
+    )
+
+    for (const code of codes) {
+      if (code.points.length < 2) continue
+      const sku = parseQrCode(code.text).sku.trim().toLocaleUpperCase("ru-RU")
+      const isChecked = Boolean(sku && checkedSkusRef.current.has(sku))
+      const points = mapVideoPointsToViewport(code.points, transform)
+      const first = points[0]
+
+      context.beginPath()
+      context.moveTo(first.x, first.y)
+      for (let index = 1; index < points.length; index += 1) {
+        context.lineTo(points[index].x, points[index].y)
+      }
+      context.closePath()
+      context.fillStyle = isChecked ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.16)"
+      context.strokeStyle = isChecked ? "#10b981" : "#f59e0b"
+      context.lineWidth = 3
+      context.fill()
+      context.stroke()
+    }
+
+    if (overlayClearTimerRef.current) {
+      clearTimeout(overlayClearTimerRef.current)
+      overlayClearTimerRef.current = null
+    }
+  }, [])
+
+  const scheduleOverlayClear = useCallback(() => {
+    if (!checkedSkusRef.current || overlayClearTimerRef.current) return
+    overlayClearTimerRef.current = setTimeout(clearOverlay, 350)
+  }, [clearOverlay])
 
   // Подавление системных исключений ZXing в консоли Next.js / Turbopack
   useEffect(() => {
@@ -112,7 +210,9 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
       }
       video.srcObject = null
     }
-  }, [])
+    clearOverlay()
+    continuousCodesRef.current.clear()
+  }, [clearOverlay])
 
   const close = useCallback(() => {
     closedRef.current = true
@@ -121,8 +221,11 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
   }, [stopEverything])
 
   const releaseContinuousScanLock = useCallback(() => {
-    if (!continuousScan || Date.now() - lastContinuousSeenAtRef.current <= 700) return
-    lastContinuousCodeRef.current = null
+    if (!continuousScan) return
+    const now = Date.now()
+    for (const [code, lastSeenAt] of continuousCodesRef.current) {
+      if (now - lastSeenAt > 700) continuousCodesRef.current.delete(code)
+    }
   }, [continuousScan])
 
   const handleResult = useCallback(
@@ -132,12 +235,11 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
 
       if (continuousScan) {
         const now = Date.now()
-        if (lastContinuousCodeRef.current === clean) {
-          lastContinuousSeenAtRef.current = now
+        if (continuousCodesRef.current.has(clean)) {
+          continuousCodesRef.current.set(clean, now)
           return
         }
-        lastContinuousCodeRef.current = clean
-        lastContinuousSeenAtRef.current = now
+        continuousCodesRef.current.set(clean, now)
       } else {
         closedRef.current = true
       }
@@ -181,8 +283,15 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    setFocusPoint({ x, y })
-    setTimeout(() => setFocusPoint(null), 1000)
+    const marker = focusPointRef.current
+    if (marker) {
+      marker.style.left = `${x}px`
+      marker.style.top = `${y}px`
+      marker.classList.remove("hidden", "animate-ping")
+      void marker.offsetWidth
+      marker.classList.add("animate-ping")
+      window.setTimeout(() => marker.classList.add("hidden"), 1000)
+    }
 
     const track = activeStreamRef.current?.getVideoTracks()[0]
     if (!track) return
@@ -310,18 +419,37 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
           const processFrame = async (time: number) => {
             if (cancelled || closedRef.current) return
 
-            if (time - lastScanTime > 80 && video.readyState >= 2) {
+            if (time - lastScanTime >= 135 && video.readyState >= 2) {
               lastScanTime = time
               try {
                 const barcodes = await barcodeDetector.detect(video)
-                if (barcodes.length > 0 && barcodes[0].rawValue) {
+                const found = (barcodes as NativeBarcode[]).filter((barcode) => barcode.rawValue)
+                if (found.length > 0) {
                   setIsBadQuality(false)
-                  handleResult(barcodes[0].rawValue)
-                  if (!continuousScan) return
+                  if (checkedSkusRef.current) {
+                    drawOverlay(found.map((barcode) => {
+                      const box = barcode.boundingBox
+                      const points = Array.isArray(barcode.cornerPoints) && barcode.cornerPoints.length >= 2
+                        ? barcode.cornerPoints
+                        : box
+                          ? rectangleCorners({ x: box.x, y: box.y, width: box.width, height: box.height })
+                          : []
+                      return { text: barcode.rawValue, points }
+                    }))
+                  }
+                  if (continuousScan) {
+                    for (const barcode of found) handleResult(barcode.rawValue)
+                    releaseContinuousScanLock()
+                  } else {
+                    handleResult(found[0].rawValue)
+                    return
+                  }
                 } else {
+                  scheduleOverlayClear()
                   releaseContinuousScanLock()
                 }
               } catch {
+                scheduleOverlayClear()
                 releaseContinuousScanLock()
               }
             }
@@ -338,14 +466,31 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
       // 2. Fallback ZXing с трекингом качества изображения
       const reader = new BrowserMultiFormatReader()
       try {
+        let lastZxingResultAt = 0
         const controls = await reader.decodeFromVideoElement(video, (result, err) => {
           if (result) {
             setIsBadQuality(false)
             checksumErrorCountRef.current = 0
+            lastZxingResultAt = Date.now()
+            if (checkedSkusRef.current) {
+              const resultPoints = result.getResultPoints().map((point) => ({
+                x: point.getX(),
+                y: point.getY(),
+              }))
+              const points = zxingPointsToPolygon(resultPoints)
+              if (points.length >= 3) {
+                drawOverlay([{ text: result.getText(), points }])
+              } else {
+                scheduleOverlayClear()
+              }
+            }
             handleResult(result.getText())
             return
           }
 
+          if (checkedSkusRef.current && Date.now() - lastZxingResultAt > 350) {
+            scheduleOverlayClear()
+          }
           releaseContinuousScanLock()
           if (err) {
             const errName = err.name || err.constructor?.name
@@ -378,7 +523,16 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
       cancelled = true
       stopEverything()
     }
-  }, [continuousScan, deviceIndex, facing, handleResult, releaseContinuousScanLock, stopEverything])
+  }, [
+    continuousScan,
+    deviceIndex,
+    drawOverlay,
+    facing,
+    handleResult,
+    releaseContinuousScanLock,
+    scheduleOverlayClear,
+    stopEverything,
+  ])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -449,6 +603,15 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
               isFrontCamera ? "scale-x-[-1]" : ""
             }`}
           />
+          {checkedSkus !== undefined && (
+            <canvas
+              ref={overlayCanvasRef}
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-0 z-10 h-full w-full transform-gpu ${
+                isFrontCamera ? "scale-x-[-1]" : ""
+              }`}
+            />
+          )}
 
           {/* Рамка и скан-линия */}
           {!error && (
@@ -475,12 +638,10 @@ export function BarcodeScannerModal({ onClose, onScan, continuousScan = false }:
           )}
 
           {/* Точка фокусировки */}
-          {focusPoint && (
-            <div
-              className="pointer-events-none absolute h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/80 animate-ping"
-              style={{ left: focusPoint.x, top: focusPoint.y }}
-            />
-          )}
+          <div
+            ref={focusPointRef}
+            className="pointer-events-none absolute hidden h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/80"
+          />
 
           {/* Вспышка */}
           {torchAvailable && (

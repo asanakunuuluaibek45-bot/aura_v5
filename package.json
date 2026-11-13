@@ -18,7 +18,7 @@
     "test:atomic:postgres": "node scripts/test-atomic-postgres.mjs",
     "test:history:postgres": "node scripts/test-action-history-postgres.mjs",
     "test:product-units": "node --max-old-space-size=64 scripts/check-product-unit-usage.mjs",
-    "test:inventory-revision": "node --experimental-strip-types --test tests/inventory-revision.test.mjs tests/qr-code.test.mjs tests/revision-label-scan.test.mjs tests/revision-routing.test.mjs",
+    "test:inventory-revision": "node --experimental-strip-types --test tests/inventory-revision.test.mjs tests/qr-code.test.mjs tests/revision-label-scan.test.mjs tests/revision-routing.test.mjs tests/scanner-overlay.test.mjs",
     "test:reports": "node --experimental-strip-types --test tests/sales-timeline.test.mjs",
     "test:receipt": "node --experimental-strip-types --test tests/receipt-type.test.mjs",
     "test:export": "node --experimental-strip-types --test tests/report-export.test.mjs"

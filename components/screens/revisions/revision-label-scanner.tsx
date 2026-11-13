@@ -23,9 +23,10 @@ const BarcodeScannerModal = dynamic(
 
 type RevisionLabelScannerProps = {
   onScan: (sku: string) => RevisionScanTransaction
+  checkedSkus: Set<string>
 }
 
-export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
+export function RevisionLabelScanner({ onScan, checkedSkus }: RevisionLabelScannerProps) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState("")
   const pendingSkusRef = useRef(new Set<string>())
@@ -105,6 +106,7 @@ export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
         <>
           <BarcodeScannerModal
             continuousScan
+            checkedSkus={checkedSkus}
             onClose={() => setOpen(false)}
             onScan={(raw) => { void handleScan(raw) }}
           />
