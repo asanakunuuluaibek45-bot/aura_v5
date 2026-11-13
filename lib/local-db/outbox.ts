@@ -1,5 +1,6 @@
 import { getLocalDB } from './db'
 import { createLocalId } from './id'
+import { countUnresolvedProductDeletions } from './logout-protection'
 import type { OutboxItem, OutboxStatus } from './schema'
 
 /** Attempts after which an operation stops retrying and waits for manual attention. */
@@ -94,6 +95,13 @@ export async function getOutboxPendingCount(shopId?: string): Promise<number> {
   } catch {
     return 0
   }
+}
+
+/** Product deletions must reach the server before logout can clear the local outbox. */
+export async function getUnresolvedProductDeletionCount(shopId?: string): Promise<number> {
+  const db = await getLocalDB()
+  const items = (await db.getAll('outbox')) as OutboxItem[]
+  return countUnresolvedProductDeletions(items, shopId)
 }
 
 /**

@@ -38,6 +38,8 @@ import { cn } from "@/lib/utils"
 import { BadgeCheck, Coins, LogOut, Package, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
+import { getUnresolvedProductDeletionCount } from "@/lib/local-db/outbox"
+import { syncEngine } from "@/lib/sync/sync-engine"
 import { ActionHistory } from "./action-history"
 import { InstallAppButton } from "@/components/install-app-button"
 import { CabinetProfileCard } from "./profile-card"
@@ -576,6 +578,41 @@ export function KabinetScreen({
   const handleLogout = async () => {
     if (loggingOut) return
     setLoggingOut(true)
+
+    let pendingDeletes = 0
+    try {
+      pendingDeletes = await getUnresolvedProductDeletionCount()
+      if (pendingDeletes > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+        try {
+          await Promise.race([
+            syncEngine.flushOutbox(),
+            new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+          ])
+        } catch {
+          // Keep the session if the server cannot confirm a queued deletion.
+        }
+        pendingDeletes = await getUnresolvedProductDeletionCount()
+      }
+    } catch (error) {
+      console.error("[Logout] Failed to verify queued product deletions:", error)
+      setLoggingOut(false)
+      toast.error("Не удалось проверить очередь удалений", {
+        description: "Выход отменён, чтобы не потерять удалённые товары.",
+      })
+      return
+    }
+
+    if (pendingDeletes > 0) {
+      const online = typeof navigator !== "undefined" && navigator.onLine
+      setLoggingOut(false)
+      toast.error("Выход остановлен: удаление ещё не подтверждено сервером", {
+        description: online
+          ? `Удалений в очереди: ${pendingDeletes}. Дождитесь синхронизации и попробуйте выйти снова.`
+          : `Удалений в очереди: ${pendingDeletes}. Подключитесь к интернету; очередь сохранена.`,
+      })
+      return
+    }
+
     // Полная очистка локальных данных и кэшей перед выходом.
     // Ограничиваем очистку по времени: если IndexedDB заблокирована
     // другой вкладкой или service worker не отвечает, выход всё равно
@@ -894,7 +931,7 @@ export function KabinetScreen({
           <DialogHeader>
             <DialogTitle>Выйти из учётной записи?</DialogTitle>
             <DialogDescription>
-              Локальные данные и кэш на этом устройстве будут очищены. Несинхронизированные изменения могут быть потеряны.
+              Локальные данные и кэш будут очищены. Если удаление товара ещё не подтверждено сервером, выход остановится и очередь останется на устройстве до синхронизации.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
