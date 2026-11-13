@@ -102,6 +102,14 @@ export function RevisionsScreen({
     () => checkedIds.slice().reverse().map((id) => stockById.get(id)).filter((product): product is Product => Boolean(product)),
     [checkedIds, stockById],
   )
+  const checkedSkus = useMemo(
+    () => new Set(
+      checkedProducts
+        .map((product) => product.sku?.trim().toLocaleUpperCase("ru-RU"))
+        .filter((sku): sku is string => Boolean(sku)),
+    ),
+    [checkedProducts],
+  )
   const selectedCheckedProducts = useMemo(
     () => filterRevisionMetal(filterRevisionCategory(checkedProducts, category), metal),
     [category, metal, checkedProducts],
@@ -348,7 +356,12 @@ export function RevisionsScreen({
               className="min-w-0 flex-1"
               inputClassName="h-9"
             />
-            <RevisionLabelScanner key={storageKey} onScan={handleScan} />
+            <RevisionLabelScanner
+              key={storageKey}
+              checkedSkus={checkedSkus}
+              stats={{ total: totalCount, checked: checkedCount, remaining: remainingCount }}
+              onScan={handleScan}
+            />
           </div>
         </section>
       )}
