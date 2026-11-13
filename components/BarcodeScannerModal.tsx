@@ -9,9 +9,13 @@ import { playScanBeep } from "@/lib/sound"
 import { parseQrCode } from "@/lib/qr-code"
 import {
   getVideoCoverTransform,
+  getOverlayTrackOpacity,
   mapVideoPointsToViewport,
   rectangleCorners,
+  shouldProcessRevisionSku,
+  updateOverlayTrackCache,
   zxingPointsToPolygon,
+  type OverlayTrack,
   type ScanPoint,
 } from "@/lib/scanner-overlay"
 
@@ -56,7 +60,8 @@ export function BarcodeScannerModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const closedRef = useRef(false)
   const continuousCodesRef = useRef(new Map<string, number>())
-  const overlayClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handledRevisionSkusRef = useRef(new Set<string>())
+  const overlayTracksRef = useRef(new Map<string, OverlayTrack>())
   const animFrameRef = useRef<number | null>(null)
 
   const camerasRef = useRef<MediaDeviceInfo[]>([])
@@ -80,10 +85,7 @@ export function BarcodeScannerModal({
   const focusPointRef = useRef<HTMLDivElement>(null)
 
   const clearOverlay = useCallback(() => {
-    if (overlayClearTimerRef.current) {
-      clearTimeout(overlayClearTimerRef.current)
-      overlayClearTimerRef.current = null
-    }
+    overlayTracksRef.current.clear()
     const canvas = overlayCanvasRef.current
     const context = canvas?.getContext("2d")
     if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height)
@@ -118,11 +120,20 @@ export function BarcodeScannerModal({
       bounds.height,
     )
 
-    for (const code of codes) {
-      if (code.points.length < 2) continue
+    const now = Date.now()
+    const detections: OverlayTrack[] = codes.map((code) => {
       const sku = parseQrCode(code.text).sku.trim().toLocaleUpperCase("ru-RU")
+      const key = sku || code.text.trim().toLocaleUpperCase("ru-RU")
+      return { key, text: code.text, points: code.points, lastSeenAt: now }
+    }).filter((track) => track.key && track.points.length >= 2)
+    const tracks = updateOverlayTrackCache(overlayTracksRef.current, detections, now)
+
+    for (const track of tracks) {
+      const sku = parseQrCode(track.text).sku.trim().toLocaleUpperCase("ru-RU")
       const isChecked = Boolean(sku && checkedSkusRef.current.has(sku))
-      const points = mapVideoPointsToViewport(code.points, transform)
+      const opacity = getOverlayTrackOpacity(now - track.lastSeenAt)
+      if (opacity <= 0) continue
+      const points = mapVideoPointsToViewport(track.points, transform)
       const first = points[0]
 
       context.beginPath()
@@ -131,23 +142,15 @@ export function BarcodeScannerModal({
         context.lineTo(points[index].x, points[index].y)
       }
       context.closePath()
+      context.globalAlpha = opacity
       context.fillStyle = isChecked ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.16)"
       context.strokeStyle = isChecked ? "#10b981" : "#f59e0b"
       context.lineWidth = 3
       context.fill()
       context.stroke()
     }
-
-    if (overlayClearTimerRef.current) {
-      clearTimeout(overlayClearTimerRef.current)
-      overlayClearTimerRef.current = null
-    }
+    context.globalAlpha = 1
   }, [])
-
-  const scheduleOverlayClear = useCallback(() => {
-    if (!checkedSkusRef.current || overlayClearTimerRef.current) return
-    overlayClearTimerRef.current = setTimeout(clearOverlay, 350)
-  }, [clearOverlay])
 
   // Подавление системных исключений ZXing в консоли Next.js / Turbopack
   useEffect(() => {
@@ -232,6 +235,11 @@ export function BarcodeScannerModal({
     (text: string) => {
       const clean = text.trim()
       if (clean.length < 3 || closedRef.current) return
+
+      if (checkedSkusRef.current) {
+        const sku = parseQrCode(clean).sku.trim().toLocaleUpperCase("ru-RU")
+        if (!shouldProcessRevisionSku(sku, checkedSkusRef.current, handledRevisionSkusRef.current)) return
+      }
 
       if (continuousScan) {
         const now = Date.now()
@@ -448,11 +456,11 @@ export function BarcodeScannerModal({
                     return
                   }
                 } else {
-                  scheduleOverlayClear()
+                  drawOverlay([])
                   releaseContinuousScanLock()
                 }
               } catch {
-                scheduleOverlayClear()
+                drawOverlay([])
                 releaseContinuousScanLock()
               }
             }
@@ -469,12 +477,12 @@ export function BarcodeScannerModal({
       // 2. Fallback ZXing с трекингом качества изображения
       const reader = new BrowserMultiFormatReader()
       try {
-        let lastZxingResultAt = 0
+        let lastOverlayRenderAt = 0
         const controls = await reader.decodeFromVideoElement(video, (result, err) => {
           if (result) {
             setIsBadQuality(false)
             checksumErrorCountRef.current = 0
-            lastZxingResultAt = Date.now()
+            lastOverlayRenderAt = Date.now()
             if (checkedSkusRef.current) {
               const resultPoints = result.getResultPoints().map((point) => ({
                 x: point.getX(),
@@ -484,15 +492,17 @@ export function BarcodeScannerModal({
               if (points.length >= 3) {
                 drawOverlay([{ text: result.getText(), points }])
               } else {
-                scheduleOverlayClear()
+                drawOverlay([])
               }
             }
             handleResult(result.getText())
             return
           }
 
-          if (checkedSkusRef.current && Date.now() - lastZxingResultAt > 350) {
-            scheduleOverlayClear()
+          const now = Date.now()
+          if (checkedSkusRef.current && now - lastOverlayRenderAt >= 135) {
+            drawOverlay([])
+            lastOverlayRenderAt = now
           }
           releaseContinuousScanLock()
           if (err) {
@@ -533,7 +543,6 @@ export function BarcodeScannerModal({
     facing,
     handleResult,
     releaseContinuousScanLock,
-    scheduleOverlayClear,
     stopEverything,
   ])
 

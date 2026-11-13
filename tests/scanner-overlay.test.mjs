@@ -2,8 +2,11 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {
   getVideoCoverTransform,
+  getOverlayTrackOpacity,
   mapVideoPointsToViewport,
   rectangleCorners,
+  shouldProcessRevisionSku,
+  updateOverlayTrackCache,
   zxingPointsToPolygon,
 } from "../lib/scanner-overlay.ts"
 
@@ -53,4 +56,53 @@ test("ZXing's two linear-code points receive a visible box", () => {
   assert.equal(polygon.length, 4)
   assert.ok(polygon[0].y < 10)
   assert.ok(polygon[2].y > 10)
+})
+
+test("last known label frame stays available across missed camera frames", () => {
+  const cache = new Map()
+  const detection = {
+    key: "ring-42",
+    text: "4/RING-42",
+    points: rectangleCorners({ x: 12, y: 20, width: 80, height: 70 }),
+    lastSeenAt: 1_000,
+  }
+  updateOverlayTrackCache(cache, [detection], 1_000)
+  const remembered = updateOverlayTrackCache(cache, [], 4_000)
+  assert.equal(remembered.length, 1)
+  assert.equal(remembered[0].key, "ring-42")
+  assert.deepEqual(remembered[0].points, detection.points)
+})
+
+test("a newly read position replaces the remembered frame and expires after its retention window", () => {
+  const cache = new Map()
+  updateOverlayTrackCache(cache, [{
+    key: "ring-42",
+    text: "4/RING-42",
+    points: rectangleCorners({ x: 12, y: 20, width: 80, height: 70 }),
+    lastSeenAt: 1_000,
+  }], 1_000)
+  const moved = rectangleCorners({ x: 30, y: 40, width: 80, height: 70 })
+  updateOverlayTrackCache(cache, [{
+    key: "ring-42",
+    text: "4/RING-42",
+    points: moved,
+    lastSeenAt: 5_000,
+  }], 5_000)
+  assert.deepEqual(updateOverlayTrackCache(cache, [], 6_000)[0].points, moved)
+  assert.equal(updateOverlayTrackCache(cache, [], 20_000).length, 0)
+})
+
+test("remembered frame fades gradually before it expires", () => {
+  assert.equal(getOverlayTrackOpacity(4_000), 1)
+  assert.ok(getOverlayTrackOpacity(10_000) > 0 && getOverlayTrackOpacity(10_000) < 1)
+  assert.equal(getOverlayTrackOpacity(15_000), 0)
+})
+
+test("a remembered SKU is sent to onScan once per scanner session", () => {
+  const checked = new Set(["READY-1"])
+  const handled = new Set()
+  assert.equal(shouldProcessRevisionSku(" ring-42 ", checked, handled), true)
+  assert.equal(shouldProcessRevisionSku("RING-42", checked, handled), false)
+  assert.equal(shouldProcessRevisionSku("ready-1", checked, handled), false)
+  assert.equal(handled.has("RING-42"), true)
 })

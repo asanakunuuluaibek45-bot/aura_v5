@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { parseQrCode } from "@/lib/qr-code"
 import { checkQrShop } from "@/app/actions/qr"
 import { processRevisionLabel, type RevisionScanTransaction } from "@/lib/revision-label-scan"
-import { toast } from "sonner"
 
 const BarcodeScannerModal = dynamic(
   () => import("@/components/BarcodeScannerModal").then((mod) => mod.BarcodeScannerModal),
@@ -37,7 +36,6 @@ export function RevisionLabelScanner({ onScan, checkedSkus }: RevisionLabelScann
     if (!parsed.sku) {
       const message = "В коде этикетки не найден артикул"
       setStatus(message)
-      toast.error(message)
       return
     }
 
@@ -70,7 +68,6 @@ export function RevisionLabelScanner({ onScan, checkedSkus }: RevisionLabelScann
         // A late rejection must still be visible; late successes must not
         // replace the status of a more recently scanned label.
         setStatus(message)
-        toast.error(message, { duration: 6000 })
         return
       }
       const result = outcome.result
@@ -78,9 +75,6 @@ export function RevisionLabelScanner({ onScan, checkedSkus }: RevisionLabelScann
         ? "Не найдено на складе: " + sku
         : (result.status === "checked" ? "Отмечено: " : "Уже проверено: ") + result.product.name
       if (scanId === latestScanRef.current) setStatus(message)
-      if (result.status === "checked") toast.success(message)
-      else if (result.status === "not_found") toast.error(message)
-      else toast(message)
     } finally {
       pendingSkusRef.current.delete(sku)
     }

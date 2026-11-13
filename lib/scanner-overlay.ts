@@ -1,9 +1,57 @@
 export type ScanPoint = { x: number; y: number }
+export type OverlayTrack = {
+  key: string
+  text: string
+  points: ScanPoint[]
+  lastSeenAt: number
+}
 
 export type VideoCoverTransform = {
   scale: number
   offsetX: number
   offsetY: number
+}
+
+export const OVERLAY_TRACK_RETENTION_MS = 15_000
+const OVERLAY_TRACK_FADE_START_MS = 5_000
+
+export function shouldProcessRevisionSku(
+  rawSku: string,
+  checkedSkus: Set<string>,
+  handledSkus: Set<string>,
+): boolean {
+  const sku = rawSku.trim().toLocaleUpperCase("ru-RU")
+  if (!sku || checkedSkus.has(sku) || handledSkus.has(sku)) return false
+  handledSkus.add(sku)
+  return true
+}
+
+export function updateOverlayTrackCache(
+  cache: Map<string, OverlayTrack>,
+  detections: OverlayTrack[],
+  now: number,
+  retentionMs = OVERLAY_TRACK_RETENTION_MS,
+): OverlayTrack[] {
+  for (const detection of detections) {
+    if (detection.points.length >= 2) {
+      cache.set(detection.key, { ...detection, points: detection.points.map((point) => ({ ...point })) })
+    }
+  }
+
+  for (const [key, track] of cache) {
+    if (now - track.lastSeenAt >= retentionMs) cache.delete(key)
+  }
+
+  return [...cache.values()]
+}
+
+export function getOverlayTrackOpacity(
+  ageMs: number,
+  retentionMs = OVERLAY_TRACK_RETENTION_MS,
+): number {
+  if (ageMs <= OVERLAY_TRACK_FADE_START_MS) return 1
+  if (ageMs >= retentionMs) return 0
+  return 1 - (ageMs - OVERLAY_TRACK_FADE_START_MS) / (retentionMs - OVERLAY_TRACK_FADE_START_MS)
 }
 
 export function getVideoCoverTransform(
