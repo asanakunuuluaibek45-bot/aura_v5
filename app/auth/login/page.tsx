@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { AuthShell } from "@/components/auth/auth-shell"
 import { InlineLoader } from "@/components/ui/page-loader"
@@ -27,7 +26,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [savedSession, setSavedSession] = useState<SavedUserSession | null>(null)
   const [isOffline, setIsOffline] = useState(false)
-  const router = useRouter()
 
   useEffect(() => {
     setIsOffline(!navigator.onLine)
@@ -76,7 +74,8 @@ export default function LoginPage() {
         }
       }
 
-      router.push("/crm")
+      // Use a full navigation so Next proxy reads the fresh Supabase cookies before loading CRM.
+      window.location.replace("/crm/pos")
     } catch (error: unknown) {
       console.error("[v0] Login error:", error)
       // If offline or network error, check if we can restore offline session
