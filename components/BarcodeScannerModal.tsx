@@ -423,7 +423,10 @@ export function BarcodeScannerModal({
               lastScanTime = time
               try {
                 const barcodes = await barcodeDetector.detect(video)
-                const found = (barcodes as NativeBarcode[]).filter((barcode) => barcode.rawValue)
+                const found = (barcodes as NativeBarcode[]).filter(
+                  (barcode): barcode is NativeBarcode & { rawValue: string } =>
+                    typeof barcode.rawValue === "string" && barcode.rawValue.length > 0,
+                )
                 if (found.length > 0) {
                   setIsBadQuality(false)
                   if (checkedSkusRef.current) {
