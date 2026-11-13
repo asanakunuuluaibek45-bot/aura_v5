@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:critical": "node --test tests/critical-regressions.test.mjs",
+    "test:logout-protection": "node --experimental-strip-types --test tests/logout-protection.test.mjs",
     "test:lockfile": "node --test tests/lockfile-registry.test.mjs",
     "test:search-loading": "node --test tests/search-loading.test.mjs",
     "test:atomic": "node --test scripts/test-atomic-actions.mjs",
