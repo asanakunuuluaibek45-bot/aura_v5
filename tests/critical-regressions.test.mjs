@@ -59,7 +59,7 @@ function makeEngine(overrides = {}) {
   const engine = loadSource("lib/sync/sync-engine.ts", "syncEngine", {
     toast: { success() {}, error() {}, warning() {} },
     getDueOutboxItems: async () => [item],
-    getOutboxPendingCount: async () => 0,
+    getOutboxStatusSummary: async () => ({ pendingCount: 0, needsAttentionCount: 0, unresolvedCount: 0, lastError: null }),
     getNextRetryDelayMs: async () => null,
     markOutboxSyncing: async () => {},
     markOutboxCompleted: async (id) => events.completed.push(id),
@@ -174,5 +174,35 @@ test("return replay requires an existing exact server row, not just a conflict",
       await assert.rejects(engine.pushItem(supabase, item), (e) => e === error)
       assert.deepEqual(mutations, [])
     }
+  }
+})
+
+
+test("local-first POS checkout does not refresh the server route, while server checkout still does", async () => {
+  const source = readFileSync(new URL("../components/screens/kassa/index.tsx", import.meta.url), "utf8")
+  const checkoutSource = source.slice(source.indexOf("  const doCheckout = async () => {"), source.indexOf("  const submit = () => {"))
+  for (const local of [true, false]) {
+    const calls = { local: 0, server: 0, refresh: 0, reset: 0, errors: [] }
+    const context = vm.createContext({
+      checkoutBusy: { current: false }, checkoutAttempt: { current: null },
+      setConfirmLoss() {}, setSubmitting() {},
+      cart: [{ id: "product-1", price: 100 }], totalDiscountAmount: 0, bonusNum: 0,
+      payment: "cash", customerName: "", customerPhone: "", customerId: null,
+      receiptType: "non_fiscal", total: 100, showBonus: false,
+      onLocalCheckout: local ? async () => { calls.local++; return { sale: { final_price: 100 } } } : undefined,
+      checkout: async () => { calls.server++; return { total: 100 } },
+      getClientOperationAttempt: () => ({ clientOpId: "checkout-test" }),
+      formatSom: String, handleReset: () => { calls.reset++ },
+      startTransition: (fn) => fn(), router: { refresh: () => { calls.refresh++ } },
+      toast: { success() {}, error: (message) => calls.errors.push(message) },
+      console: { error() {} },
+    })
+    vm.runInContext(checkoutSource + "\nglobalThis.checkoutUnderTest = doCheckout", context)
+    await context.checkoutUnderTest()
+    assert.deepEqual(calls.errors, [])
+    assert.equal(calls.local, local ? 1 : 0)
+    assert.equal(calls.server, local ? 0 : 1)
+    assert.equal(calls.refresh, local ? 0 : 1)
+    assert.equal(calls.reset, 1)
   }
 })

@@ -442,7 +442,7 @@ export function KassaScreen({
       }
 
       const usesLocalCheckout = Boolean(onLocalCheckout && payment !== "credit")
-      if (usesLocalCheckout) {
+      if (onLocalCheckout && payment !== "credit") {
         const res = await onLocalCheckout(checkoutPayload)
         toast.success(`Продажа записана локально: ${formatSom(res.sale?.final_price || total)}`, {
           description: "Ожидает подтверждения сервера. При конфликте с другой продажей приложение сообщит об этом.",
