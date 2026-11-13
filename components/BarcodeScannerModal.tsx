@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { AlertTriangle, EyeOff, Image as ImageIcon, Keyboard, RefreshCw, X, Zap, ZapOff } from "lucide-react"
 import { playScanBeep } from "@/lib/sound"
 import { parseQrCode } from "@/lib/qr-code"
+import { toast } from "sonner"
 import {
   getVideoCoverTransform,
   getOverlayTrackOpacity,
@@ -24,6 +25,7 @@ interface BarcodeScannerProps {
   onScan: (code: string) => void
   continuousScan?: boolean
   checkedSkus?: Set<string>
+  revisionStats?: { total: number; checked: number; remaining: number }
 }
 
 type OverlayBarcode = {
@@ -42,16 +44,30 @@ export function BarcodeScannerModal({
   onScan,
   continuousScan = false,
   checkedSkus,
+  revisionStats,
 }: BarcodeScannerProps) {
   const onScanRef = useRef(onScan)
   const onCloseRef = useRef(onClose)
   const checkedSkusRef = useRef(checkedSkus)
+  const previousRemainingRef = useRef(revisionStats?.remaining ?? 0)
 
   useEffect(() => {
     onScanRef.current = onScan
     onCloseRef.current = onClose
     checkedSkusRef.current = checkedSkus
   }, [checkedSkus, onScan, onClose])
+
+  useEffect(() => {
+    if (!revisionStats) return
+    if (
+      revisionStats.total > 0 &&
+      previousRemainingRef.current > 0 &&
+      revisionStats.remaining === 0
+    ) {
+      toast.success("В выбранном списке всё отмечено")
+    }
+    previousRemainingRef.current = revisionStats.remaining
+  }, [revisionStats?.remaining, revisionStats?.total])
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -624,6 +640,20 @@ export function BarcodeScannerModal({
               }`}
             />
           )}
+          {revisionStats && (
+            <div
+              aria-label="Статистика ревизии"
+              className={`pointer-events-none absolute inset-x-3 top-14 z-20 grid grid-cols-3 overflow-hidden rounded-xl border px-2 py-1.5 text-white shadow-lg backdrop-blur-md ${
+                revisionStats.remaining === 0
+                  ? "border-emerald-300/30 bg-emerald-950/55"
+                  : "border-white/15 bg-black/50"
+              }`}
+            >
+              <RevisionStat label="Всего" value={revisionStats.total} />
+              <RevisionStat label="Отмечено" value={revisionStats.checked} />
+              <RevisionStat label="Осталось" value={revisionStats.remaining} />
+            </div>
+          )}
 
           {/* Рамка и скан-линия */}
           {!error && (
@@ -746,6 +776,15 @@ export function BarcodeScannerModal({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function RevisionStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 px-1 text-center">
+      <div className="truncate text-[9px] leading-3 text-white/70">{label}</div>
+      <div className="font-mono text-sm font-semibold leading-5 tabular-nums">{value}</div>
     </div>
   )
 }

@@ -356,7 +356,12 @@ export function RevisionsScreen({
               className="min-w-0 flex-1"
               inputClassName="h-9"
             />
-            <RevisionLabelScanner key={storageKey} checkedSkus={checkedSkus} onScan={handleScan} />
+            <RevisionLabelScanner
+              key={storageKey}
+              checkedSkus={checkedSkus}
+              stats={{ total: totalCount, checked: checkedCount, remaining: remainingCount }}
+              onScan={handleScan}
+            />
           </div>
         </section>
       )}
