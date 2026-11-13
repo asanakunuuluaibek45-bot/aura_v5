@@ -1,10 +1,9 @@
 import { getLocalDB } from './db'
+import { canRecoverOutboxItem } from '../sync/sync-errors'
 import { createLocalId } from './id'
 import { countUnresolvedOutboxOperations, summarizeOutboxOperations, type OutboxStatusSummary } from './logout-protection'
 import type { OutboxItem, OutboxStatus } from './schema'
 
-/** Attempts after which an operation stops retrying and waits for manual attention. */
-const MAX_OUTBOX_RETRIES = 8
 /** Base delay for exponential backoff (doubles every attempt, capped). */
 const BACKOFF_BASE_MS = 2000
 const BACKOFF_MAX_MS = 5 * 60 * 1000
@@ -139,6 +138,23 @@ export async function retryDeadOutboxItems(shopId: string): Promise<number> {
   return retried
 }
 
+/** Recover exhausted temporary failures; an explicit sync also bypasses scheduled backoff. */
+export async function recoverRetryableOutboxItems(shopId: string, forceRetry = false): Promise<number> {
+  const db = await getLocalDB()
+  const tx = db.transaction('outbox', 'readwrite')
+  const store = tx.objectStore('outbox')
+  const items = (await store.getAll()) as OutboxItem[]
+  let recovered = 0
+  for (const item of items) {
+    if (item.shop_id !== shopId) continue
+    if (!canRecoverOutboxItem(item) && !(forceRetry && item.status === 'failed')) continue
+    await store.put({ ...item, status: 'pending', scheduled_at: null, attempted_at: null })
+    recovered++
+  }
+  await tx.done
+  return recovered
+}
+
 /**
  * Items that are due for delivery right now, oldest first.
  * Respects the backoff schedule, filters to the active shop, and reclaims items
@@ -208,22 +224,23 @@ export async function markOutboxCompleted(id: string): Promise<void> {
 
 /**
  * Delivery failed. Transient failures get an exponentially growing retry delay;
- * after MAX_OUTBOX_RETRIES (or for a permanent failure) the item is dead-lettered
- * instead of being retried forever.
+ * only explicit permanent rejections are dead-lettered. Losing connectivity must
+ * never permanently disable a sale that has not reached the server.
  */
 export async function markOutboxFailed(
   id: string,
   error: string | null,
-  options: { permanent?: boolean } = {}
+  options: { permanent?: boolean; auth?: boolean } = {}
 ): Promise<void> {
   await patchItem(id, (item) => {
     const retries = (item.retries || 0) + 1
-    if (options.permanent || retries >= MAX_OUTBOX_RETRIES) {
-      return { ...item, status: 'dead' as OutboxStatus, retries, error: error || null, scheduled_at: null }
+    if (options.permanent) {
+      return { ...item, status: 'dead' as OutboxStatus, failure_kind: 'permanent', retries, error: error || null, scheduled_at: null }
     }
     return {
       ...item,
       status: 'failed' as OutboxStatus,
+      failure_kind: options.auth ? 'auth' : 'transient',
       retries,
       error: error || null,
       scheduled_at: new Date(Date.now() + backoffDelayMs(retries)).toISOString(),
