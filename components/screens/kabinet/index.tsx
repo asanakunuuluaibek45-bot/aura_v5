@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils"
 import { BadgeCheck, Coins, LogOut, Package, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
-import { getUnresolvedProductDeletionCount } from "@/lib/local-db/outbox"
+import { getUnresolvedOutboxOperationCount } from "@/lib/local-db/outbox"
 import { syncEngine } from "@/lib/sync/sync-engine"
 import { ActionHistory } from "./action-history"
 import { InstallAppButton } from "@/components/install-app-button"
@@ -579,36 +579,36 @@ export function KabinetScreen({
     if (loggingOut) return
     setLoggingOut(true)
 
-    let pendingDeletes = 0
+    let pendingOperations = 0
     try {
-      pendingDeletes = await getUnresolvedProductDeletionCount()
-      if (pendingDeletes > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+      pendingOperations = await getUnresolvedOutboxOperationCount()
+      if (pendingOperations > 0 && typeof navigator !== "undefined" && navigator.onLine) {
         try {
           await Promise.race([
             syncEngine.flushOutbox(),
             new Promise<void>((resolve) => setTimeout(resolve, 3000)),
           ])
         } catch {
-          // Keep the session if the server cannot confirm a queued deletion.
+          // Keep the session if the server cannot confirm a queued operation.
         }
-        pendingDeletes = await getUnresolvedProductDeletionCount()
+        pendingOperations = await getUnresolvedOutboxOperationCount()
       }
     } catch (error) {
-      console.error("[Logout] Failed to verify queued product deletions:", error)
+      console.error("[Logout] Failed to verify queued changes:", error)
       setLoggingOut(false)
-      toast.error("Не удалось проверить очередь удалений", {
-        description: "Выход отменён, чтобы не потерять удалённые товары.",
+      toast.error("Не удалось проверить очередь изменений", {
+        description: "Выход отменён, чтобы не потерять несинхронизированные изменения.",
       })
       return
     }
 
-    if (pendingDeletes > 0) {
+    if (pendingOperations > 0) {
       const online = typeof navigator !== "undefined" && navigator.onLine
       setLoggingOut(false)
-      toast.error("Выход остановлен: удаление ещё не подтверждено сервером", {
+      toast.error("Выход остановлен: есть несинхронизированные изменения", {
         description: online
-          ? `Удалений в очереди: ${pendingDeletes}. Дождитесь синхронизации и попробуйте выйти снова.`
-          : `Удалений в очереди: ${pendingDeletes}. Подключитесь к интернету; очередь сохранена.`,
+          ? `Операций без подтверждения: ${pendingOperations}. Проверьте синхронизацию и повторите выход; очередь сохранена.`
+          : `Операций без подтверждения: ${pendingOperations}. Подключитесь к интернету; очередь сохранена.`,
       })
       return
     }
@@ -931,7 +931,7 @@ export function KabinetScreen({
           <DialogHeader>
             <DialogTitle>Выйти из учётной записи?</DialogTitle>
             <DialogDescription>
-              Локальные данные и кэш будут очищены. Если удаление товара ещё не подтверждено сервером, выход остановится и очередь останется на устройстве до синхронизации.
+              Локальные данные и кэш будут очищены. Если в очереди есть неподтверждённые изменения, выход остановится и сохранит очередь на устройстве.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
