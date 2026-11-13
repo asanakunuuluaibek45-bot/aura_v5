@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { subscribeSyncState, getSyncState, type SyncProgressState } from "@/lib/local-db/sync-store"
 import { syncEngine } from "@/lib/sync/sync-engine"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -61,6 +62,8 @@ export function SyncIndicator() {
     status,
     percent,
     outboxPendingCount,
+    outboxNeedsAttentionCount,
+    outboxLastError,
     lastSuccessAt,
     currentTask,
     lastError,
@@ -71,8 +74,23 @@ export function SyncIndicator() {
     syncEngine.triggerSync()
   }
 
+  const handleRetryDeadOutbox = async () => {
+    try {
+      const retried = await syncEngine.retryDeadOutbox()
+      if (retried > 0) toast.info(`Повторная отправка: ${retried} операций`)
+      else toast.info("Нет операций для повторной отправки")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось повторить отправку")
+    }
+  }
+
+  const unresolvedOperationCount = outboxPendingCount + outboxNeedsAttentionCount
   const dotColor =
-    status === "synced"
+    outboxNeedsAttentionCount > 0
+      ? "bg-destructive"
+      : outboxPendingCount > 0
+      ? "bg-amber-500"
+      : status === "synced"
       ? "bg-emerald-500"
       : status === "syncing"
       ? "bg-blue-500 animate-pulse"
@@ -83,10 +101,14 @@ export function SyncIndicator() {
       : "bg-muted-foreground"
   const progressPercent = Math.max(0, Math.min(100, Math.round(percent)))
   const statusDescription =
-    status === "synced"
+    outboxNeedsAttentionCount > 0
+      ? `Требуют внимания: ${outboxNeedsAttentionCount}`
+      : outboxPendingCount > 0
+      ? isOnline ? `Ожидают отправки: ${outboxPendingCount}` : `Сохранены локально: ${outboxPendingCount}`
+      : status === "synced"
       ? "Онлайн"
       : status === "syncing"
-      ? `Синхронизация, ${progressPercent}%`
+      ? `Сверка данных, ${progressPercent}%`
       : status === "offline"
       ? "Офлайн"
       : status === "error"
@@ -99,15 +121,15 @@ export function SyncIndicator() {
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         className="relative flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card/60 shadow-xs transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        title={`Статус синхронизации: ${statusDescription}${outboxPendingCount > 0 ? `; неотправленных операций: ${outboxPendingCount}` : ""}`}
-        aria-label={`Статус синхронизации: ${statusDescription}${outboxPendingCount > 0 ? `; неотправленных операций: ${outboxPendingCount}` : ""}`}
+        title={`Статус синхронизации: ${statusDescription}${unresolvedOperationCount > 0 ? `; неподтверждённых операций: ${unresolvedOperationCount}` : ""}`}
+        aria-label={`Статус синхронизации: ${statusDescription}${unresolvedOperationCount > 0 ? `; неподтверждённых операций: ${unresolvedOperationCount}` : ""}`}
         aria-expanded={isOpen}
       >
         <span className={`h-2.5 w-2.5 rounded-full ${dotColor}`} aria-hidden="true" />
-        {outboxPendingCount > 0 && (
+        {unresolvedOperationCount > 0 && (
           <span
-            className="absolute right-0 top-0 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-card"
-            title="Есть неотправленные данные"
+            className={`absolute right-0 top-0 h-2 w-2 rounded-full ${outboxNeedsAttentionCount > 0 ? "bg-destructive" : "bg-amber-500"} ring-2 ring-card`}
+            title="Есть неподтверждённые операции"
             aria-hidden="true"
           />
         )}
@@ -126,7 +148,11 @@ export function SyncIndicator() {
                 <Badge
                   variant="outline"
                   className={
-                    status === "synced"
+                    outboxNeedsAttentionCount > 0
+                      ? "bg-destructive/10 text-destructive border-destructive/20"
+                      : outboxPendingCount > 0
+                      ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
+                      : status === "synced"
                       ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300"
                       : status === "syncing"
                       ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300"
@@ -137,11 +163,13 @@ export function SyncIndicator() {
                       : "bg-muted text-muted-foreground border-border"
                   }
                 >
-                  {status === "synced" && "Всё зеркально"}
-                  {status === "syncing" && `Обмен (${Math.round(percent)}%)`}
-                  {status === "offline" && "Локальный режим"}
-                  {status === "error" && "Сбой связи"}
-                  {status === "idle" && "Ожидание"}
+                  {outboxNeedsAttentionCount > 0 && `Требуют внимания: ${outboxNeedsAttentionCount}`}
+                  {outboxNeedsAttentionCount === 0 && outboxPendingCount > 0 && (isOnline ? `Ожидают отправки: ${outboxPendingCount}` : `Сохранены локально: ${outboxPendingCount}`)}
+                  {unresolvedOperationCount === 0 && status === "synced" && "Всё зеркально"}
+                  {unresolvedOperationCount === 0 && status === "syncing" && `Обмен (${Math.round(percent)}%)`}
+                  {unresolvedOperationCount === 0 && status === "offline" && "Локальный режим"}
+                  {unresolvedOperationCount === 0 && status === "error" && "Сбой связи"}
+                  {unresolvedOperationCount === 0 && status === "idle" && "Ожидание"}
                 </Badge>
                 <button
                   type="button"
@@ -155,14 +183,14 @@ export function SyncIndicator() {
 
             <div className="space-y-2 rounded-lg bg-muted/50 p-2.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Прогресс синхронизации</span>
+                <span className="text-muted-foreground">Загрузка данных с сервера</span>
                 <span className="font-medium text-foreground">{progressPercent}%</span>
               </div>
-              {status === "syncing" && (
+              {status === "syncing" && currentTask && (
                 <div
                   className="h-1.5 overflow-hidden rounded-full bg-muted"
                   role="progressbar"
-                  aria-label="Прогресс синхронизации"
+                  aria-label="Загрузка данных с сервера"
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={progressPercent}
@@ -201,9 +229,9 @@ export function SyncIndicator() {
                 <span className="font-medium text-foreground">IndexedDB (активно)</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Очередь отправки (Outbox):</span>
-                <span className="font-medium text-foreground">
-                  {outboxPendingCount > 0 ? `${outboxPendingCount} операций` : "Очередь пуста"}
+                <span>Неподтверждённые операции:</span>
+                <span className={`font-medium ${unresolvedOperationCount > 0 ? "text-amber-700 dark:text-amber-400" : "text-foreground"}`}>
+                  {unresolvedOperationCount === 0 ? "Нет" : `${outboxPendingCount} в очереди · ${outboxNeedsAttentionCount} требуют внимания`}
                 </span>
               </div>
               {lastSuccessAt && (
@@ -230,10 +258,30 @@ export function SyncIndicator() {
               </div>
             )}
 
+            {unresolvedOperationCount > 0 && outboxLastError && (
+              <div className="flex items-start gap-1.5 rounded bg-destructive/10 p-2 text-xs text-destructive">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span className="min-w-0 break-words">
+                  {outboxNeedsAttentionCount > 0 ? "Операция требует внимания: " : "Последняя ошибка отправки: "}{outboxLastError}
+                </span>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
               <span className="text-[11px] text-muted-foreground">
                 Работает без интернета
               </span>
+              {outboxNeedsAttentionCount > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 px-2.5 text-xs"
+                  onClick={handleRetryDeadOutbox}
+                  disabled={!isOnline || status === "syncing"}
+                >
+                  Повторить ошибки
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="default"
