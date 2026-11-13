@@ -67,7 +67,7 @@ test("last known label frame stays available across missed camera frames", () =>
     lastSeenAt: 1_000,
   }
   updateOverlayTrackCache(cache, [detection], 1_000)
-  const remembered = updateOverlayTrackCache(cache, [], 4_000)
+  const remembered = updateOverlayTrackCache(cache, [], 1_200)
   assert.equal(remembered.length, 1)
   assert.equal(remembered[0].key, "ring-42")
   assert.deepEqual(remembered[0].points, detection.points)
@@ -88,14 +88,14 @@ test("a newly read position replaces the remembered frame and expires after its 
     points: moved,
     lastSeenAt: 5_000,
   }], 5_000)
-  assert.deepEqual(updateOverlayTrackCache(cache, [], 6_000)[0].points, moved)
-  assert.equal(updateOverlayTrackCache(cache, [], 20_000).length, 0)
+  assert.deepEqual(updateOverlayTrackCache(cache, [], 5_200)[0].points, moved)
+  assert.equal(updateOverlayTrackCache(cache, [], 5_321).length, 0)
 })
 
 test("remembered frame fades gradually before it expires", () => {
-  assert.equal(getOverlayTrackOpacity(4_000), 1)
-  assert.ok(getOverlayTrackOpacity(10_000) > 0 && getOverlayTrackOpacity(10_000) < 1)
-  assert.equal(getOverlayTrackOpacity(15_000), 0)
+  assert.equal(getOverlayTrackOpacity(100), 1)
+  assert.ok(getOverlayTrackOpacity(220) > 0 && getOverlayTrackOpacity(220) < 1)
+  assert.equal(getOverlayTrackOpacity(320), 0)
 })
 
 test("a remembered SKU is sent to onScan once per scanner session", () => {

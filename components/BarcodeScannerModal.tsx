@@ -427,7 +427,7 @@ export function BarcodeScannerModal({
           const processFrame = async (time: number) => {
             if (cancelled || closedRef.current) return
 
-            if (time - lastScanTime >= 135 && video.readyState >= 2) {
+            if (time - lastScanTime >= 120 && video.readyState >= 2) {
               lastScanTime = time
               try {
                 const barcodes = await barcodeDetector.detect(video)

@@ -12,8 +12,8 @@ export type VideoCoverTransform = {
   offsetY: number
 }
 
-export const OVERLAY_TRACK_RETENTION_MS = 15_000
-const OVERLAY_TRACK_FADE_START_MS = 5_000
+export const OVERLAY_TRACK_RETENTION_MS = 320
+const OVERLAY_TRACK_FADE_START_MS = 120
 
 export function shouldProcessRevisionSku(
   rawSku: string,
