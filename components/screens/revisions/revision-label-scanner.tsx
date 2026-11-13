@@ -110,7 +110,7 @@ export function RevisionLabelScanner({ onScan, checkedSkus, stats }: RevisionLab
             <div
               role="status"
               aria-live="polite"
-              className="fixed inset-x-4 top-16 z-[120] mx-auto max-w-md rounded-lg border border-white/15 bg-black/85 px-4 py-3 text-center text-sm text-white shadow-xl"
+              className="pointer-events-none fixed inset-x-4 bottom-36 z-[120] mx-auto max-w-md rounded-lg border border-white/15 bg-black/85 px-4 py-3 text-center text-sm text-white shadow-xl"
             >
               {status}
             </div>
