@@ -441,6 +441,7 @@ export function KassaScreen({
         receipt_type: receiptType,
       }
 
+      const usesLocalCheckout = Boolean(onLocalCheckout && payment !== "credit")
       if (onLocalCheckout && payment !== "credit") {
         const res = await onLocalCheckout(checkoutPayload)
         toast.success(`Продажа записана локально: ${formatSom(res.sale?.final_price || total)}`, {
@@ -457,7 +458,9 @@ export function KassaScreen({
         })
       }
       handleReset()
-      startTransition(() => router.refresh())
+      // Local-first checkout already updates IndexedDB and React state. Avoid a server refresh,
+      // which can replace the POS shell with a network error when connectivity drops.
+      if (!usesLocalCheckout) startTransition(() => router.refresh())
     } catch (e) {
       console.error("[kassa] checkout error:", e)
       toast.error(e instanceof Error ? e.message : "Ошибка оформления продажи")

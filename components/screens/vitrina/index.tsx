@@ -141,7 +141,7 @@ export function VitrinaScreen({
     if (!storeQrDataUrl) return
     const link = document.createElement("a")
     link.href = storeQrDataUrl
-    link.download = "aura-storefront-qr.png"
+    link.download = "golduchet-storefront-qr.png"
     link.click()
   }
 

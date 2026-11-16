@@ -76,7 +76,7 @@ const PRECACHE_SHELL_URLS = [
 
 const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aura CRM — офлайн</title>
+<title>GOLDUCHET — офлайн</title>
 <style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#0f1115;color:#e7e7ea}div{text-align:center;padding:24px}button{margin-top:16px;padding:10px 18px;border:0;border-radius:8px;background:#c9a227;color:#1a1a1a;font-weight:600}</style>
 </head><body><div>
 <h1>Нет подключения</h1>

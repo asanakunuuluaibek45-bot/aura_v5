@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { parseQrCode } from "@/lib/qr-code"
 import { checkQrShop } from "@/app/actions/qr"
 import { processRevisionLabel, type RevisionScanTransaction } from "@/lib/revision-label-scan"
-import { toast } from "sonner"
 
 const BarcodeScannerModal = dynamic(
   () => import("@/components/BarcodeScannerModal").then((mod) => mod.BarcodeScannerModal),
@@ -23,9 +22,11 @@ const BarcodeScannerModal = dynamic(
 
 type RevisionLabelScannerProps = {
   onScan: (sku: string) => RevisionScanTransaction
+  checkedSkus: Set<string>
+  stats: { total: number; checked: number; remaining: number }
 }
 
-export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
+export function RevisionLabelScanner({ onScan, checkedSkus, stats }: RevisionLabelScannerProps) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState("")
   const pendingSkusRef = useRef(new Set<string>())
@@ -36,7 +37,6 @@ export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
     if (!parsed.sku) {
       const message = "В коде этикетки не найден артикул"
       setStatus(message)
-      toast.error(message)
       return
     }
 
@@ -69,7 +69,6 @@ export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
         // A late rejection must still be visible; late successes must not
         // replace the status of a more recently scanned label.
         setStatus(message)
-        toast.error(message, { duration: 6000 })
         return
       }
       const result = outcome.result
@@ -77,9 +76,6 @@ export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
         ? "Не найдено на складе: " + sku
         : (result.status === "checked" ? "Отмечено: " : "Уже проверено: ") + result.product.name
       if (scanId === latestScanRef.current) setStatus(message)
-      if (result.status === "checked") toast.success(message)
-      else if (result.status === "not_found") toast.error(message)
-      else toast(message)
     } finally {
       pendingSkusRef.current.delete(sku)
     }
@@ -105,6 +101,8 @@ export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
         <>
           <BarcodeScannerModal
             continuousScan
+            checkedSkus={checkedSkus}
+            revisionStats={stats}
             onClose={() => setOpen(false)}
             onScan={(raw) => { void handleScan(raw) }}
           />
@@ -112,7 +110,7 @@ export function RevisionLabelScanner({ onScan }: RevisionLabelScannerProps) {
             <div
               role="status"
               aria-live="polite"
-              className="fixed inset-x-4 top-16 z-[120] mx-auto max-w-md rounded-lg border border-white/15 bg-black/85 px-4 py-3 text-center text-sm text-white shadow-xl"
+              className="pointer-events-none fixed inset-x-4 bottom-36 z-[120] mx-auto max-w-md rounded-lg border border-white/15 bg-black/85 px-4 py-3 text-center text-sm text-white shadow-xl"
             >
               {status}
             </div>

@@ -12,16 +12,18 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:critical": "node --test tests/critical-regressions.test.mjs",
+    "test:logout-protection": "node --experimental-strip-types --test tests/logout-protection.test.mjs",
     "test:lockfile": "node --test tests/lockfile-registry.test.mjs",
     "test:search-loading": "node --test tests/search-loading.test.mjs",
     "test:atomic": "node --test scripts/test-atomic-actions.mjs",
     "test:atomic:postgres": "node scripts/test-atomic-postgres.mjs",
     "test:history:postgres": "node scripts/test-action-history-postgres.mjs",
     "test:product-units": "node --max-old-space-size=64 scripts/check-product-unit-usage.mjs",
-    "test:inventory-revision": "node --experimental-strip-types --test tests/inventory-revision.test.mjs tests/qr-code.test.mjs tests/revision-label-scan.test.mjs tests/revision-routing.test.mjs",
+    "test:inventory-revision": "node --experimental-strip-types --test tests/inventory-revision.test.mjs tests/qr-code.test.mjs tests/revision-label-scan.test.mjs tests/revision-routing.test.mjs tests/scanner-overlay.test.mjs",
     "test:reports": "node --experimental-strip-types --test tests/sales-timeline.test.mjs",
     "test:receipt": "node --experimental-strip-types --test tests/receipt-type.test.mjs",
-    "test:export": "node --experimental-strip-types --test tests/report-export.test.mjs"
+    "test:export": "node --experimental-strip-types --test tests/report-export.test.mjs tests/report-export-xlsx.test.mjs",
+    "test:reconciliation": "node --experimental-strip-types --test tests/report-reconciliation.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

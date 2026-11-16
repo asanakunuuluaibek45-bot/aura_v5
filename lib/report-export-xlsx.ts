@@ -1,124 +1,90 @@
 "use client"
 
-/**
- * Генерация .xlsx в браузере через SheetJS.
- * Библиотека подгружается только при запуске экспорта.
- */
-import type { Product, Sale, SaleReturn } from "@/lib/types"
+/** SheetJS загружается только при скачивании; предпросмотр использует чистую модель. */
 import {
-  GNS_RETURN_COLUMNS,
-  GNS_SALES_COLUMNS,
-  GNS_STOCK_COLUMNS,
-  MANAGER_SALES_COLUMNS,
-  RETURN_COLUMNS,
-  SUMMARY_COLUMNS,
-  allSales,
+  defaultReportSettings,
   excelSerialBishkek,
   fileDate,
-  fiscalSales,
-  gnsNetSummary,
-  inStock,
-  managerNetSummary,
-  managerStockColumns,
-  returnLines,
-  saleLines,
+  prepareConfiguredReport,
   type CellKind,
-  type Column,
-  type ProductInfo,
-} from "@/lib/report-export"
+  type PreparedSheet,
+  type ReportInput,
+  type ReportKind,
+  type ReportSettings,
+} from "./report-export"
 
 const FORMATS: Record<CellKind, string | undefined> = {
-  text: undefined,
-  datetime: "yyyy-mm-dd hh:mm",
-  weight: "0.00",
-  money: "#,##0.00",
-  int: "0",
-  percent: "0.0%",
+  text: undefined, datetime: "yyyy-mm-dd hh:mm", weight: "0.00",
+  money: "#,##0.00", int: "0", percent: "0.0%",
 }
-
 type XlsxModule = typeof import("xlsx")
+export type ExportInput = ReportInput
 
-function buildSheet<Row>(XLSX: XlsxModule, columns: Column<Row>[], rows: Row[]) {
-  const values = rows.map((row) =>
-    columns.map((column) => {
-      const raw = column.value(row)
-      if (column.kind === "text") return String(raw ?? "")
-      if (column.kind === "datetime") return typeof raw === "string" ? excelSerialBishkek(raw) : null
-      return Number(raw) || 0
-    }),
-  )
-  // SheetJS converts a whole matrix more efficiently than encoding and
-  // assigning every cell separately on the main thread.
-  const sheet = XLSX.utils.aoa_to_sheet([columns.map((c) => c.header), ...values])
-  for (let c = 0; c < columns.length; c++) {
-    const format = FORMATS[columns[c].kind]
+export function buildConfiguredSheet(XLSX: XlsxModule, input: PreparedSheet) {
+  const values = input.rows.map((row) => row.map((raw, i) => {
+    const kind = input.columns[i].kind
+    if (kind === "text") return String(raw ?? "")
+    if (kind === "datetime") return typeof raw === "string" ? excelSerialBishkek(raw) : null
+    // Текстовые пояснения в сводке не превращаем в нули.
+    return raw
+  }))
+  const sheet = XLSX.utils.aoa_to_sheet([input.columns.map((c) => c.header), ...values])
+  for (let c = 0; c < input.columns.length; c++) {
+    const format = FORMATS[input.columns[c].kind]
     if (!format) continue
-    for (let r = 0; r < rows.length; r++) {
-      const address = XLSX.utils.encode_cell({ r: r + 1, c })
-      const cell = sheet[address]
+    for (let r = 0; r < input.rows.length; r++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: r + 1, c })]
       if (cell && typeof cell.v === "number") cell.z = format
     }
   }
-  sheet["!cols"] = columns.map((c) => ({ wch: c.width }))
-  if (columns.length > 0) {
-    sheet["!autofilter"] = {
-      ref: XLSX.utils.encode_range({
-        s: { r: 0, c: 0 },
-        e: { r: rows.length, c: columns.length - 1 },
-      }),
-    }
+  sheet["!cols"] = input.columns.map((c) => ({ wch: c.width }))
+  if (input.columns.length) sheet["!autofilter"] = {
+    ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: input.rows.length, c: input.columns.length - 1 } }),
   }
   return sheet
 }
 
-export type ExportInput = {
-  sales: Sale[]
-  productInfo: ProductInfo[]
-  products: Product[]
-  returns: SaleReturn[]
-  /** null — «за всё время». */
-  from: number | null
-  to: number
-}
-
-/** Начинаем загружать библиотеку вместе с данными, а не после них. */
 export function preloadXlsx() {
   return import("xlsx")
 }
 
-/** Файл для налоговой: фискальные чеки, возвраты по ним и остатки. */
-export async function exportGnsReport(input: ExportInput) {
-  const XLSX = await preloadXlsx()
-  const info = new Map(input.productInfo.map((p) => [p.id, p]))
-  for (const p of input.products) info.set(p.id, p)
-  const lines = saleLines(fiscalSales(input.sales, input.from, input.to), info)
-  const fiscalIds = new Set(input.sales.filter((sale) => sale.receipt_type === "fiscal").map((sale) => sale.id))
-  const refunds = returnLines(input.returns.filter((refund) => fiscalIds.has(refund.sale_id)), input.sales, info)
-  const stock = inStock(input.products)
+/** Передача подготовленной модели гарантирует совпадение предпросмотра и файла. */
+export function buildConfiguredWorkbook(
+  XLSX: XlsxModule,
+  report: ReturnType<typeof prepareConfiguredReport>,
+) {
+  if (report.error) throw new Error(report.error)
+  if (!report.sheets.length || report.sheets.some((sheet) => !sheet.columns.length)) {
+    throw new Error("Выберите листы и столбцы для экспорта")
+  }
   const book = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, GNS_SALES_COLUMNS, lines), "Фискальные продажи")
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, GNS_RETURN_COLUMNS, refunds), "Возвраты")
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, GNS_STOCK_COLUMNS, stock), "Остатки на складе")
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, SUMMARY_COLUMNS, gnsNetSummary(lines, refunds)), "Итоги")
-  // Deflate is expensive on mobile and these workbooks are bounded; skip it
-  // to make the "file ready" step noticeably faster.
-  XLSX.writeFile(book, `GNS_Report_${fileDate()}.xlsx`, { compression: false })
-  return { sales: lines.length, returns: refunds.length, stock: stock.length }
+  for (const sheet of report.sheets) {
+    XLSX.utils.book_append_sheet(book, buildConfiguredSheet(XLSX, sheet), sheet.name)
+  }
+  return book
 }
 
-/** Управленческий файл: все чеки с возвратами, себестоимостью и складом. */
-export async function exportManagerReport(input: ExportInput & { scrapPrices: Record<string, number> }) {
+export async function exportConfiguredReport(
+  report: ReturnType<typeof prepareConfiguredReport>,
+  kind: ReportKind,
+) {
   const XLSX = await preloadXlsx()
-  const info = new Map(input.productInfo.map((p) => [p.id, p]))
-  for (const p of input.products) info.set(p.id, p)
-  const lines = saleLines(allSales(input.sales, input.from, input.to), info)
-  const refunds = returnLines(input.returns, input.sales, info)
-  const stock = inStock(input.products)
-  const book = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, MANAGER_SALES_COLUMNS, lines), "Все продажи")
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, RETURN_COLUMNS, refunds), "Возвраты")
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, managerStockColumns(input.scrapPrices), stock), "Полный склад")
-  XLSX.utils.book_append_sheet(book, buildSheet(XLSX, SUMMARY_COLUMNS, managerNetSummary(lines, refunds)), "Итоги")
-  XLSX.writeFile(book, `Manager_Report_${fileDate()}.xlsx`, { compression: false })
-  return { sales: lines.length, returns: refunds.length, stock: stock.length }
+  const book = buildConfiguredWorkbook(XLSX, report)
+  const filename = kind === "gns"
+    ? `GOLDUCHET_Internal_Tax_Reconciliation_DRAFT_${fileDate()}.xlsx`
+    : `Manager_Report_${fileDate()}.xlsx`
+  XLSX.writeFile(book, filename, { compression: false })
+  return report.counts
+}
+
+/** Совместимость с другими вызовами: настройки необязательны. */
+export function exportGnsReport(input: ExportInput, settings = defaultReportSettings("gns")) {
+  return exportConfiguredReport(prepareConfiguredReport(input, "gns", settings), "gns")
+}
+
+export function exportManagerReport(
+  input: ExportInput & { scrapPrices: Record<string, number> },
+  settings: ReportSettings = defaultReportSettings("manager"),
+) {
+  return exportConfiguredReport(prepareConfiguredReport(input, "manager", settings), "manager")
 }

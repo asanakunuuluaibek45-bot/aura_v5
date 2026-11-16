@@ -1,5 +1,5 @@
 import { connectDejen, printDejenRaster, DEJEN_OPTIONAL_SERVICES, type DejenPrinterInfo, type DejenModelName } from "./dejen"
-import { dejenPageWidthPx } from "./dejen-protocol.mjs"
+import { dejenContentLeftPx, dejenPageWidthPx } from "./dejen-protocol.mjs"
 import { isStaleBluetoothLinkError } from "./printer-errors"
 
 /**
@@ -767,8 +767,10 @@ export async function printCanvas(
     if (!context) throw new Error("Не удалось подготовить растр Dejen")
     context.fillStyle = "#fff"
     context.fillRect(0, 0, width, height)
-    // Preserve the label's physical size and anchor it to the page's left edge.
-    context.drawImage(source, 0, 0, contentWidth, height)
+    // Horizontal labels stay at the left edge; all other formats are centered on the head.
+    const isHorizontal = sizeDef.key === "T25x30_horizontal" || sizeDef.key === "T30x25_horizontal"
+    const left = dejenContentLeftPx(width, contentWidth, isHorizontal)
+    context.drawImage(source, left, 0, contentWidth, height)
     const rgba = context.getImageData(0, 0, width, height).data
     await enqueuePrinterOperation(() => withPrinterDeviceSelection(model.key, "remembered", () =>
       printDejenRaster(rgba, width, height, {
@@ -880,7 +882,7 @@ export async function printPrinterTestLabel(profileKey: string) {
   context.fillStyle = "#111"
   context.textAlign = "center"
   context.font = "bold 10px sans-serif"
-  context.fillText("AURA", canvas.width / 2, 88)
+  context.fillText("GOLDUCHET", canvas.width / 2, 88)
   context.font = "8px sans-serif"
   context.fillText("ТЕСТ ПЕЧАТИ", canvas.width / 2, 110)
 

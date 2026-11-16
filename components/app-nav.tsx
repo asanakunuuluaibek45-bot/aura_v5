@@ -92,7 +92,7 @@ const ITEMS: NavItem[] = [
   { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management", description: "Поставщики, долги и расчёты" },
   { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
   { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
-  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления Aura" },
+  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления GOLDUCHET" },
   { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
 ]
 

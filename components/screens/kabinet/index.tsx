@@ -38,6 +38,8 @@ import { cn } from "@/lib/utils"
 import { BadgeCheck, Coins, LogOut, Package, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
+import { getUnresolvedOutboxOperationCount } from "@/lib/local-db/outbox"
+import { syncEngine } from "@/lib/sync/sync-engine"
 import { ActionHistory } from "./action-history"
 import { InstallAppButton } from "@/components/install-app-button"
 import { CabinetProfileCard } from "./profile-card"
@@ -576,6 +578,41 @@ export function KabinetScreen({
   const handleLogout = async () => {
     if (loggingOut) return
     setLoggingOut(true)
+
+    let pendingOperations = 0
+    try {
+      pendingOperations = await getUnresolvedOutboxOperationCount()
+      if (pendingOperations > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+        try {
+          await Promise.race([
+            syncEngine.flushOutbox({ forceRetry: true }),
+            new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+          ])
+        } catch {
+          // Keep the session if the server cannot confirm a queued operation.
+        }
+        pendingOperations = await getUnresolvedOutboxOperationCount()
+      }
+    } catch (error) {
+      console.error("[Logout] Failed to verify queued changes:", error)
+      setLoggingOut(false)
+      toast.error("Не удалось проверить очередь изменений", {
+        description: "Выход отменён, чтобы не потерять несинхронизированные изменения.",
+      })
+      return
+    }
+
+    if (pendingOperations > 0) {
+      const online = typeof navigator !== "undefined" && navigator.onLine
+      setLoggingOut(false)
+      toast.error("Выход остановлен: есть несинхронизированные изменения", {
+        description: online
+          ? `Операций без подтверждения: ${pendingOperations}. Проверьте синхронизацию и повторите выход; очередь сохранена.`
+          : `Операций без подтверждения: ${pendingOperations}. Подключитесь к интернету; очередь сохранена.`,
+      })
+      return
+    }
+
     // Полная очистка локальных данных и кэшей перед выходом.
     // Ограничиваем очистку по времени: если IndexedDB заблокирована
     // другой вкладкой или service worker не отвечает, выход всё равно
@@ -894,7 +931,7 @@ export function KabinetScreen({
           <DialogHeader>
             <DialogTitle>Выйти из учётной записи?</DialogTitle>
             <DialogDescription>
-              Локальные данные и кэш на этом устройстве будут очищены. Несинхронизированные изменения могут быть потеряны.
+              Локальные данные и кэш будут очищены. Если в очереди есть неподтверждённые изменения, выход остановится и сохранит очередь на устройстве.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">

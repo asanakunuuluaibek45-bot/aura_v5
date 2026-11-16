@@ -1,9 +1,12 @@
+import { classifySyncError as classifyError } from './sync-errors'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { bulkPut, bulkDelete, getMeta, setMeta, getLocalDB, ensureShopScope, localDatabaseWasRebuilt, trimLocalSales, purgeSoldProducts, LOCAL_SALES_LIMIT } from '../local-db/db'
 import {
   getDueOutboxItems,
-  getOutboxPendingCount,
+  recoverRetryableOutboxItems,
+  getOutboxStatusSummary,
+  retryDeadOutboxItems,
   getNextRetryDelayMs,
   markOutboxSyncing,
   markOutboxCompleted,
@@ -27,46 +30,17 @@ const PERIODIC_SYNC_MS = 15000
 const PULL_BACKOFF_BASE_MS = 5000
 const PULL_BACKOFF_MAX_MS = 5 * 60 * 1000
 
-type SupabaseErrorKind = 'transient' | 'permanent' | 'auth' | 'conflict'
-
-/** Classify a Supabase/network failure: only transient errors deserve a retry. */
-function classifyError(err: any): SupabaseErrorKind {
-  const code = String(err?.code || '')
-  const status = Number(err?.status || err?.statusCode || 0)
-  const message = String(err?.message || '').toLowerCase()
-
-  if (status === 401 || status === 403 || code === 'PGRST301' || message.includes('jwt')) return 'auth'
-  if (status === 409 || code === '23505' || message.includes('duplicate key')) return 'conflict'
-  // Keep offline receipts queued if the RPC has not reached PostgREST's schema
-  // cache yet; a transient retry lets the same operation succeed after deploy.
-  if (code === 'PGRST202' || code === '42883') return 'transient'
-
-  // Network-level failures, aborts and rate limits are always worth retrying.
-  if (
-    err?.name === 'AbortError' ||
-    message.includes('failed to fetch') ||
-    message.includes('network') ||
-    message.includes('timeout') ||
-    message.includes('fetch failed') ||
-    status === 408 ||
-    status === 425 ||
-    status === 429 ||
-    (status >= 500 && status <= 599) ||
-    code === '40001' || // serialization failure
-    code === '40P01' || // deadlock
-    code === '57014' || // statement timeout
-    code === '08006' ||
-    code === '08003'
-  ) {
-    return 'transient'
+function outboxStatePatch(summary: Awaited<ReturnType<typeof getOutboxStatusSummary>>) {
+  return {
+    outboxPendingCount: summary.pendingCount,
+    outboxNeedsAttentionCount: summary.needsAttentionCount,
+    outboxLastError: summary.lastError,
+    phaseLabel: summary.needsAttentionCount > 0
+      ? `Нужна проверка: ${summary.needsAttentionCount}`
+      : summary.pendingCount > 0
+        ? `Ожидают подтверждения: ${summary.pendingCount}`
+        : 'Всё синхронизировано',
   }
-
-  // Constraint violations, bad payloads and RLS denials will never succeed on retry.
-  if (code.startsWith('22') || code.startsWith('23') || code.startsWith('42') || (status >= 400 && status < 500)) {
-    return 'permanent'
-  }
-
-  return 'transient'
 }
 
 function backoff(attempt: number, base = PULL_BACKOFF_BASE_MS, max = PULL_BACKOFF_MAX_MS): number {
@@ -245,7 +219,7 @@ class SyncEngine {
       return
     }
     this.runDeltaSync()
-    this.flushOutbox()
+    this.flushOutbox({ forceRetry: true })
   }
 
   /** Instant updates: any change in the cloud for this shop triggers a delta pull. */
@@ -675,17 +649,16 @@ class SyncEngine {
         window.dispatchEvent(new CustomEvent('aura:initial_sync_complete'))
       }
 
-      const pendingOutbox = await getOutboxPendingCount(shopId)
+      const outboxSummary = await getOutboxStatusSummary(shopId)
       updateSyncState({
-        status: 'synced',
+        status: outboxSummary.needsAttentionCount > 0 ? 'error' : outboxSummary.pendingCount > 0 ? 'syncing' : 'synced',
         percent: 100,
         priorityPhase: 4,
-        phaseLabel: 'Всё синхронизировано',
         currentTask: null,
         lastSuccessAt: new Date().toISOString(),
         lastError: null,
         isStale: false,
-        outboxPendingCount: pendingOutbox,
+        ...outboxStatePatch(outboxSummary),
         scopeShopId: shopId,
       })
     } catch (err: any) {
@@ -753,17 +726,15 @@ class SyncEngine {
 
       this.pullFailures = 0
       this.notifyServiceWorker({ type: 'AURA_CLOUD_REACHABLE' })
-      const pendingOutbox = await getOutboxPendingCount(shopId)
-
+      const outboxSummary = await getOutboxStatusSummary(shopId)
       updateSyncState({
-        status: pendingOutbox > 0 ? 'syncing' : 'synced',
+        status: outboxSummary.needsAttentionCount > 0 ? 'error' : outboxSummary.pendingCount > 0 ? 'syncing' : 'synced',
         percent: 100,
-        outboxPendingCount: pendingOutbox,
-        phaseLabel: pendingOutbox > 0 ? `${pendingOutbox} ожидают отправки` : 'Всё синхронизировано',
         currentTask: null,
         lastSuccessAt: new Date().toISOString(),
         lastError: null,
         isStale: false,
+        ...outboxStatePatch(outboxSummary),
         scopeShopId: shopId,
       })
     } catch (err: any) {
@@ -847,28 +818,34 @@ class SyncEngine {
    * failure. `client_op_id` makes retries idempotent, so a request that actually
    * landed before the connection dropped cannot create a second row.
    */
-  public async flushOutbox() {
+  public async flushOutbox(options: { forceRetry?: boolean } = {}) {
     // Timer, online events and enqueue events can overlap within the same tab.
     if (this.outboxFlushing) return
     this.outboxFlushing = true
     try {
-      await this.flushOutboxBatch()
+      await this.flushOutboxBatch(options.forceRetry === true)
     } finally {
       this.outboxFlushing = false
     }
   }
 
-  private async flushOutboxBatch() {
+  /** Retry dead-lettered operations only after an explicit user action. */
+  public async retryDeadOutbox(): Promise<number> {
+    if (!this.isOnline || !this.activeShopId || this.stopped) return 0
+    const retried = await retryDeadOutboxItems(this.activeShopId)
+    if (retried > 0) await this.flushOutbox()
+    return retried
+  }
+
+  private async flushOutboxBatch(forceRetry = false) {
     if (!this.isOnline || !this.activeShopId || this.stopped) return
     const shopId = this.activeShopId
 
+    await recoverRetryableOutboxItems(shopId, forceRetry)
     const due = await getDueOutboxItems(shopId, 20)
     if (due.length === 0) {
-      const pendingCount = await getOutboxPendingCount(shopId)
-      updateSyncState({
-        outboxPendingCount: pendingCount,
-        phaseLabel: pendingCount === 0 ? 'Всё синхронизировано' : `${pendingCount} ожидают отправки`,
-      })
+      const outboxSummary = await getOutboxStatusSummary(shopId)
+      updateSyncState(outboxStatePatch(outboxSummary))
       await this.scheduleNextOutboxWake(shopId)
       return
     }
@@ -881,7 +858,7 @@ class SyncEngine {
 
       try {
         await markOutboxSyncing(item.id)
-        await this.pushItem(supabase, item)
+        await this.pushItemWithSessionRecovery(supabase, item)
         await markOutboxCompleted(item.id)
         syncedCount++
       } catch (err: any) {
@@ -925,7 +902,7 @@ class SyncEngine {
             description: err?.message || undefined,
           })
         } else if (kind === 'auth') {
-          await markOutboxFailed(item.id, 'Сессия истекла')
+          await markOutboxFailed(item.id, 'Сессия истекла', { auth: true })
           break // no point trying the rest with an invalid session
         } else {
           await markOutboxFailed(item.id, err?.message || 'Ошибка отправки')
@@ -937,11 +914,8 @@ class SyncEngine {
       toast.success(`Отправлено ${syncedCount} операций`)
     }
 
-    const remaining = await getOutboxPendingCount(shopId)
-    updateSyncState({
-      outboxPendingCount: remaining,
-      phaseLabel: remaining === 0 ? 'Всё синхронизировано' : `${remaining} ожидают отправки`,
-    })
+    const outboxSummary = await getOutboxStatusSummary(shopId)
+    updateSyncState(outboxStatePatch(outboxSummary))
 
     await this.scheduleNextOutboxWake(shopId)
   }
@@ -951,6 +925,19 @@ class SyncEngine {
     const delay = await getNextRetryDelayMs(shopId)
     if (delay === null) return
     this.scheduleOutboxFlush(Math.max(1000, Math.min(delay, PULL_BACKOFF_MAX_MS)))
+  }
+
+  /** Retry the exact same operation once after refreshing an expired session. */
+  private async pushItemWithSessionRecovery(supabase: any, item: OutboxItem): Promise<void> {
+    try {
+      await this.pushItem(supabase, item)
+    } catch (error) {
+      if (classifyError(error) !== 'auth' || !supabase.auth?.refreshSession) throw error
+      const refreshed: any = await withTimeout(() => supabase.auth.refreshSession(), 'refresh-session')
+      if (refreshed?.error) throw refreshed.error
+      if (!refreshed?.data?.session) throw error
+      await this.pushItem(supabase, item)
+    }
   }
 
   /** Deliver a single outbox operation. */
