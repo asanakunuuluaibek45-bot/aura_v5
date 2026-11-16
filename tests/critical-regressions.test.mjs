@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { stripTypeScriptTypes } from "node:module"
 import vm from "node:vm"
+import { classifySyncError } from "../lib/sync/sync-errors.ts"
 
 // Exercise the real TypeScript without Next/Supabase, a database or credentials.
 // These tests require Node >=22.13 (or Node 24).
@@ -59,7 +60,9 @@ function makeEngine(overrides = {}) {
   const engine = loadSource("lib/sync/sync-engine.ts", "syncEngine", {
     toast: { success() {}, error() {}, warning() {} },
     getDueOutboxItems: async () => [item],
-    getOutboxPendingCount: async () => 0,
+    recoverRetryableOutboxItems: async () => 0,
+    classifyError: classifySyncError,
+    getOutboxStatusSummary: async () => ({ pendingCount: 0, needsAttentionCount: 0, unresolvedCount: 0, lastError: null }),
     getNextRetryDelayMs: async () => null,
     markOutboxSyncing: async () => {},
     markOutboxCompleted: async (id) => events.completed.push(id),
@@ -175,4 +178,72 @@ test("return replay requires an existing exact server row, not just a conflict",
       assert.deepEqual(mutations, [])
     }
   }
+})
+
+
+test("local-first POS checkout does not refresh the server route, while server checkout still does", async () => {
+  const source = readFileSync(new URL("../components/screens/kassa/index.tsx", import.meta.url), "utf8")
+  const checkoutSource = source.slice(source.indexOf("  const doCheckout = async () => {"), source.indexOf("  const submit = () => {"))
+  for (const local of [true, false]) {
+    const calls = { local: 0, server: 0, refresh: 0, reset: 0, errors: [] }
+    const context = vm.createContext({
+      checkoutBusy: { current: false }, checkoutAttempt: { current: null },
+      setConfirmLoss() {}, setSubmitting() {},
+      cart: [{ id: "product-1", price: 100 }], totalDiscountAmount: 0, bonusNum: 0,
+      payment: "cash", customerName: "", customerPhone: "", customerId: null,
+      receiptType: "non_fiscal", total: 100, showBonus: false,
+      onLocalCheckout: local ? async () => { calls.local++; return { sale: { final_price: 100 } } } : undefined,
+      checkout: async () => { calls.server++; return { total: 100 } },
+      getClientOperationAttempt: () => ({ clientOpId: "checkout-test" }),
+      formatSom: String, handleReset: () => { calls.reset++ },
+      startTransition: (fn) => fn(), router: { refresh: () => { calls.refresh++ } },
+      toast: { success() {}, error: (message) => calls.errors.push(message) },
+      console: { error() {} },
+    })
+    vm.runInContext(checkoutSource + "\nglobalThis.checkoutUnderTest = doCheckout", context)
+    await context.checkoutUnderTest()
+    assert.deepEqual(calls.errors, [])
+    assert.equal(calls.local, local ? 1 : 0)
+    assert.equal(calls.server, local ? 0 : 1)
+    assert.equal(calls.refresh, local ? 0 : 1)
+    assert.equal(calls.reset, 1)
+  }
+})
+
+
+test("an expired session refreshes once and retries the same queued operation", async () => {
+  let refreshes = 0
+  const { engine, events } = makeEngine({ createSupabaseClient: () => ({
+    auth: { refreshSession: async () => { refreshes++; return { data: { session: { user: { id: "user-1" } } }, error: null } } },
+  }) })
+  const ids = []
+  engine.pushItem = async (_client, item) => {
+    ids.push(item.client_op_id)
+    if (ids.length === 1) throw { status: 401, message: "JWT expired" }
+  }
+  await engine.flushOutbox()
+  assert.equal(refreshes, 1)
+  assert.deepEqual(ids, ["operation-1", "operation-1"])
+  assert.deepEqual(events.completed, ["queue-1"])
+  assert.equal(events.failed.length, 0)
+})
+
+test("failed auth refresh does not confirm or permanently reject an unsent operation", async () => {
+  const { engine, events } = makeEngine({ createSupabaseClient: () => ({
+    auth: { refreshSession: async () => ({ error: new Error("Failed to fetch") }) },
+  }) })
+  engine.pushItem = async () => { throw { status: 401 } }
+  await engine.flushOutbox()
+  assert.deepEqual(events.completed, [])
+  assert.equal(events.failed.length, 1)
+  assert.notEqual(events.failed[0][2]?.permanent, true)
+})
+
+test("explicit flush forces scheduled retries without changing ordinary timed flushes", async () => {
+  const forced = []
+  const { engine } = makeEngine({ recoverRetryableOutboxItems: async (_shopId, force) => { forced.push(force) } })
+  engine.pushItem = async () => {}
+  await engine.flushOutbox()
+  await engine.flushOutbox({ forceRetry: true })
+  assert.deepEqual(forced, [false, true])
 })
