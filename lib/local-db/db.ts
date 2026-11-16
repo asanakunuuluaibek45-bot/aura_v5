@@ -250,7 +250,16 @@ export async function getLocalDB(): Promise<IDBPDatabase> {
       }
     },
     blocked() {
-      console.warn('[LocalDB] Upgrade blocked by another open tab')
+      console.warn('[LocalDB] Upgrade is waiting for another open tab to release the database')
+    },
+    blocking(currentVersion, blockedVersion) {
+      console.info('[LocalDB] Closing an older database connection for schema upgrade', {
+        currentVersion,
+        blockedVersion,
+      })
+      dbInstance?.close()
+      dbInstance = null
+      openPromise = null
     },
   })
     .then((db) => {
