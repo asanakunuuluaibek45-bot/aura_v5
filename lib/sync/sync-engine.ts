@@ -1,0 +1,1176 @@
+import { classifySyncError as classifyError } from './sync-errors'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
+import { bulkPut, bulkDelete, getMeta, setMeta, getLocalDB, ensureShopScope, localDatabaseWasRebuilt, trimLocalSales, purgeSoldProducts, LOCAL_SALES_LIMIT } from '../local-db/db'
+import {
+  getDueOutboxItems,
+  recoverRetryableOutboxItems,
+  getOutboxStatusSummary,
+  retryDeadOutboxItems,
+  getNextRetryDelayMs,
+  markOutboxSyncing,
+  markOutboxCompleted,
+  markOutboxFailed,
+} from '../local-db/outbox'
+import { setLocalSaleSyncState } from '../local-db/sale-record'
+import { updateSyncState, resetSyncState, recomputeStaleness } from '../local-db/sync-store'
+import type { OutboxItem, TableName } from '../local-db/schema'
+
+interface CursorInfo {
+  updated_at: string
+  id: string
+}
+
+/** Per-request timeout: a hung fetch must never freeze the sync loop. */
+const REQUEST_TIMEOUT_MS = 20000
+/** Whole-pull safety valve, so pagination cannot loop forever. */
+const MAX_PAGES_PER_TABLE = 500
+const PERIODIC_SYNC_MS = 15000
+/** Retry schedule for failed pulls (exponential with jitter). */
+const PULL_BACKOFF_BASE_MS = 5000
+const PULL_BACKOFF_MAX_MS = 5 * 60 * 1000
+
+function outboxStatePatch(summary: Awaited<ReturnType<typeof getOutboxStatusSummary>>) {
+  return {
+    outboxPendingCount: summary.pendingCount,
+    outboxNeedsAttentionCount: summary.needsAttentionCount,
+    outboxLastError: summary.lastError,
+    phaseLabel: summary.needsAttentionCount > 0
+      ? `Нужна проверка: ${summary.needsAttentionCount}`
+      : summary.pendingCount > 0
+        ? `Ожидают подтверждения: ${summary.pendingCount}`
+        : 'Всё синхронизировано',
+  }
+}
+
+function backoff(attempt: number, base = PULL_BACKOFF_BASE_MS, max = PULL_BACKOFF_MAX_MS): number {
+  const exponential = Math.min(base * 2 ** Math.max(0, attempt), max)
+  return Math.round(exponential + Math.random() * exponential * 0.25)
+}
+
+/** Run a Supabase query builder with a hard timeout. */
+async function withTimeout<T>(runner: (signal: AbortSignal) => PromiseLike<T>, label: string): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    return await runner(controller.signal)
+  } catch (err: any) {
+    if (controller.signal.aborted) {
+      const timeoutError: any = new Error(`Превышено время ожидания сети (${label})`)
+      timeoutError.name = 'AbortError'
+      throw timeoutError
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Throw on a Supabase error so the caller's classification logic handles it. */
+function unwrap<T>(res: { data: T | null; error: any }, label: string): T | null {
+  if (res.error) {
+    res.error.__label = label
+    throw res.error
+  }
+  return res.data
+}
+
+interface PullSpec {
+  table: TableName
+  /** Extra filter applied to the very first (initial) pull only. */
+  initialFilter?: (query: any) => any
+}
+
+class SyncEngine {
+  private isRunning = false
+  private outboxFlushing = false
+  private isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
+  private activeShopId: string | null = null
+  private syncTimer: any = null
+  private outboxTimer: any = null
+  private pullRetryTimer: any = null
+  private stalenessTimer: any = null
+  private pullFailures = 0
+  private stopped = false
+  private listenersBound = false
+  private realtimeChannel: any = null
+  private realtimeDebounce: any = null
+  private pendingRealtime = false
+
+  constructor() {
+    this.bindListeners()
+  }
+
+  private bindListeners() {
+    if (this.listenersBound || typeof window === 'undefined') return
+    this.listenersBound = true
+
+    window.addEventListener('online', () => this.handleOnlineState(true))
+    window.addEventListener('offline', () => this.handleOnlineState(false))
+    window.addEventListener('aura:outbox_enqueued', () => this.scheduleOutboxFlush(300))
+
+    // A tab that comes back to the foreground should verify freshness immediately.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.isOnline && !this.stopped) {
+        this.triggerSync()
+      }
+    })
+
+    // The service worker tells us when the app booted from the offline shell.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
+        if (event.data?.type === 'AURA_OFFLINE_SHELL') {
+          updateSyncState({ isStale: true, phaseLabel: 'Офлайн-режим (данные могут быть устаревшими)' })
+        }
+      })
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Lifecycle
+  // -------------------------------------------------------------------------
+
+  public async init(shopId: string) {
+    if (!shopId) return
+
+    this.stopped = false
+    this.bindListeners()
+
+    const previousShop = this.activeShopId
+    this.activeShopId = shopId
+
+    // Switching shops must never mix local data: purge everything that is not this shop.
+    const switched = await ensureShopScope(shopId)
+    if (switched || (previousShop && previousShop !== shopId)) {
+      await this.clearCursors()
+      resetSyncState()
+      this.notifyServiceWorker({ type: 'AURA_SHOP_CHANGED', shopId })
+    }
+
+    updateSyncState({ scopeShopId: shopId })
+
+    // Одноразово освобождаем место от данных старых версий: проданные товары
+    // и история продаж сверх последних LOCAL_SALES_LIMIT чеков.
+    if (!(await getMeta<boolean>(`slim_local_v1:${shopId}`, false))) {
+      try {
+        await purgeSoldProducts(shopId)
+        await trimLocalSales(shopId, LOCAL_SALES_LIMIT)
+        await setMeta(`slim_local_v1:${shopId}`, true)
+      } catch (err) {
+        console.warn('[Sync] Local cleanup failed, will retry next start:', err)
+      }
+    }
+
+    this.startPeriodicSync()
+    this.startStalenessWatch()
+    this.startRealtime(shopId)
+    this.flushOutbox()
+
+    // A rebuilt IndexedDB cannot be trusted as a baseline → do a full pull instead
+    // of a delta.
+    const needsFull =
+      localDatabaseWasRebuilt() ||
+      !(await getMeta<boolean>('initial_sync_done', false))
+
+    if (needsFull) {
+      await this.runInitialSync()
+    } else {
+      await this.runDeltaSync()
+    }
+  }
+
+  /** Stop all timers and detach from the current shop (used on logout). */
+  public stop() {
+    this.stopped = true
+    this.activeShopId = null
+    this.stopRealtime()
+    if (this.syncTimer) clearInterval(this.syncTimer)
+    if (this.outboxTimer) clearTimeout(this.outboxTimer)
+    if (this.pullRetryTimer) clearTimeout(this.pullRetryTimer)
+    if (this.stalenessTimer) clearInterval(this.stalenessTimer)
+    this.syncTimer = null
+    this.outboxTimer = null
+    this.pullRetryTimer = null
+    this.stalenessTimer = null
+    this.isRunning = false
+    this.pullFailures = 0
+    resetSyncState()
+  }
+
+  public getActiveShopId(): string | null {
+    return this.activeShopId
+  }
+
+  public handleOnlineState(online: boolean) {
+    this.isOnline = online
+    if (!online) {
+      updateSyncState({ status: 'offline', phaseLabel: 'Офлайн', isStale: true })
+      return
+    }
+    updateSyncState({ status: 'idle', phaseLabel: 'Подключено' })
+    this.pullFailures = 0
+    this.triggerSync()
+  }
+
+  public triggerSync() {
+    if (this.stopped || !this.activeShopId) return
+    if (!this.isOnline) {
+      updateSyncState({ status: 'offline', phaseLabel: 'Офлайн (нет сети)', isStale: true })
+      return
+    }
+    this.runDeltaSync()
+    this.flushOutbox({ forceRetry: true })
+  }
+
+  /** Instant updates: any change in the cloud for this shop triggers a delta pull. */
+  private startRealtime(shopId: string) {
+    this.stopRealtime()
+    try {
+      const supabase = createSupabaseClient()
+      const tables = [
+        'products', 'sales', 'sale_returns', 'cash_operations', 'customers',
+        'cash_reason_presets', 'metal_rates', 'supplier_debt_operations', 'shop_settings',
+        'product_deletion_tombstones',
+      ]
+      let channel = supabase.channel(`aura-sync-${shopId}`)
+      for (const table of tables) {
+        channel = channel.on(
+          'postgres_changes' as any,
+          { event: '*', schema: 'public', table, filter: `shop_id=eq.${shopId}` },
+          () => this.onRealtimeChange()
+        )
+      }
+      this.realtimeChannel = channel.subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') this.triggerSync()
+      })
+    } catch (err) {
+      console.warn('[Sync] Realtime unavailable, falling back to polling:', err)
+    }
+  }
+
+  private stopRealtime() {
+    if (this.realtimeDebounce) clearTimeout(this.realtimeDebounce)
+    this.realtimeDebounce = null
+    if (this.realtimeChannel) {
+      try {
+        createSupabaseClient().removeChannel(this.realtimeChannel)
+      } catch {}
+      this.realtimeChannel = null
+    }
+  }
+
+  private onRealtimeChange() {
+    if (this.realtimeDebounce) clearTimeout(this.realtimeDebounce)
+    this.realtimeDebounce = setTimeout(() => {
+      if (this.stopped || !this.isOnline) return
+      if (this.isRunning) {
+        this.pendingRealtime = true
+        return
+      }
+      this.runDeltaSync()
+    }, 400)
+  }
+
+  private startPeriodicSync() {
+    if (this.syncTimer) clearInterval(this.syncTimer)
+    this.syncTimer = setInterval(() => {
+      if (this.isOnline && !this.isRunning && !this.stopped) {
+        this.runDeltaSync()
+        this.flushOutbox()
+      }
+    }, PERIODIC_SYNC_MS)
+  }
+
+  /** Keep the "data may be outdated" flag accurate even when nothing else happens. */
+  private startStalenessWatch() {
+    if (this.stalenessTimer) clearInterval(this.stalenessTimer)
+    this.stalenessTimer = setInterval(() => recomputeStaleness(), 15000)
+  }
+
+  private notifyServiceWorker(message: any) {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    navigator.serviceWorker.ready
+      .then((reg) => reg.active?.postMessage(message))
+      .catch(() => {})
+  }
+
+  private getBatchSize(): number {
+    if (typeof navigator !== 'undefined') {
+      const conn = (navigator as any).connection
+      if (conn?.saveData || conn?.effectiveType === '3g' || conn?.effectiveType === '2g') {
+        return 200
+      }
+    }
+    return 500
+  }
+
+  // -------------------------------------------------------------------------
+  // Cursors
+  // -------------------------------------------------------------------------
+
+  private cursorKey(table: TableName): string {
+    return `cursor:${this.activeShopId}:${table}`
+  }
+
+  private async getCursor(table: TableName): Promise<string | null> {
+    return getMeta<string | null>(this.cursorKey(table), null)
+  }
+
+  private async setCursor(table: TableName, updatedAt: string): Promise<void> {
+    await setMeta(this.cursorKey(table), updatedAt)
+  }
+
+  private async clearCursors(): Promise<void> {
+    const tables: TableName[] = [
+      'products',
+      'customers',
+      'sales',
+      'sale_returns',
+      'cash_operations',
+      'cash_reason_presets',
+      'metal_rates',
+      'supplier_debt_operations',
+      'shop_settings',
+    ]
+    for (const table of tables) {
+      await setMeta(this.cursorKey(table), null)
+    }
+    if (this.activeShopId) {
+      await setMeta(`cursor:product_deletion_tombstones:${this.activeShopId}`, null)
+    }
+    await setMeta('initial_sync_done', false)
+  }
+
+  // -------------------------------------------------------------------------
+  // Pull: fully paginated, deletion-aware
+  // -------------------------------------------------------------------------
+
+  /**
+   * Pull every row of one table, page by page, using a keyset cursor on
+   * (updated_at, id). Unlike a plain `.limit()`, this never silently truncates the
+   * dataset. Soft-deleted rows (`deleted_at`) are removed locally in the same pass, so
+   * a record deleted in the cloud disappears from the device too.
+   */
+  private async pullTable(
+    spec: PullSpec,
+    options: { incremental: boolean; onProgress?: (fetched: number) => void } = { incremental: true }
+  ): Promise<{ fetched: number; deleted: number }> {
+    const shopId = this.activeShopId
+    if (!shopId) return { fetched: 0, deleted: 0 }
+
+    const supabase = createSupabaseClient()
+    const batchSize = this.getBatchSize()
+    const since = options.incremental ? await this.getCursor(spec.table) : null
+
+    let cursor: CursorInfo | null = null
+    let fetched = 0
+    let deletedCount = 0
+    let page = 0
+    let latestUpdatedAt = since
+
+    while (page < MAX_PAGES_PER_TABLE) {
+      page++
+
+      const data = await withTimeout(async (signal) => {
+        const pkCol = spec.table === 'shop_settings' ? 'shop_id' : 'id'
+        let query = supabase
+          .from(spec.table)
+          .select('*')
+          .eq('shop_id', shopId)
+          .order('updated_at', { ascending: true })
+          .order(pkCol, { ascending: true })
+          .limit(batchSize)
+          .abortSignal(signal)
+
+        if (!options.incremental && spec.initialFilter) {
+          query = spec.initialFilter(query)
+        }
+
+        if (cursor) {
+          query = query.or(
+            `updated_at.gt.${cursor.updated_at},and(updated_at.eq.${cursor.updated_at},${pkCol}.gt.${cursor.id})`
+          )
+        } else if (since) {
+          query = query.gt('updated_at', since)
+        }
+
+        const res = await query
+        if (res.error) {
+          // Graceful fallback if a table is in pre-migration state without updated_at
+          if (res.error.message?.includes('updated_at') || res.error.details?.includes('updated_at')) {
+            let fallbackQuery = supabase
+              .from(spec.table)
+              .select('*')
+              .eq('shop_id', shopId)
+              .order('created_at', { ascending: true })
+              .limit(batchSize)
+              .abortSignal(signal)
+            if (!options.incremental && spec.initialFilter) {
+              fallbackQuery = spec.initialFilter(fallbackQuery)
+            }
+            return unwrap(await fallbackQuery, spec.table)
+          }
+          throw res.error
+        }
+        return res.data
+      }, spec.table)
+
+      if (!data || data.length === 0) break
+
+      // Split the page: live rows are written, soft-deleted rows are purged locally.
+      // Проданные товары не храним в локальном каталоге — для устройства они
+      // равносильны удалённым (история продаж читается с сервера).
+      const isGone = (row: any) =>
+        Boolean(row.deleted_at) || (spec.table === 'products' && row.status === 'sold')
+      const live = data.filter((row: any) => !isGone(row))
+      const removed = data.filter((row: any) => isGone(row)).map((row: any) => row.id)
+
+      if (live.length > 0) await bulkPut(spec.table, live)
+      if (removed.length > 0) {
+        await bulkDelete(spec.table, removed)
+        deletedCount += removed.length
+      }
+
+      fetched += data.length
+      options.onProgress?.(fetched)
+
+      const last = data[data.length - 1]
+      const lastUpdatedAt = last.updated_at || last.created_at
+      cursor = { updated_at: lastUpdatedAt, id: last.id }
+      if (lastUpdatedAt) latestUpdatedAt = lastUpdatedAt
+
+      // Advance the stored cursor per page: an interrupted sync resumes where it stopped.
+      if (lastUpdatedAt) await this.setCursor(spec.table, lastUpdatedAt)
+
+      if (data.length < batchSize) break
+    }
+
+    if (latestUpdatedAt) await this.setCursor(spec.table, latestUpdatedAt)
+    return { fetched, deleted: deletedCount }
+  }
+
+  /**
+   * Hard-deleted products no longer appear in the products delta. The durable
+   * tombstone journal carries those IDs to every device, including devices that
+   * were offline when the product was undone.
+   */
+  private async pullProductDeletionTombstones(): Promise<{ fetched: number; deleted: number }> {
+    const shopId = this.activeShopId
+    if (!shopId) return { fetched: 0, deleted: 0 }
+
+    const supabase = createSupabaseClient()
+    const cursorKey = `cursor:product_deletion_tombstones:${shopId}`
+    const persistedCursor = await getMeta<string | null>(cursorKey, null)
+    let pageCursor: { deleted_at: string; product_id: string } | null = null
+    let latestDeletedAt = persistedCursor
+    let fetched = 0
+    let deleted = 0
+    let page = 0
+    const batchSize = this.getBatchSize()
+
+    while (page < MAX_PAGES_PER_TABLE) {
+      page++
+      const rows = await withTimeout(async (signal) => {
+        let query = supabase
+          .from('product_deletion_tombstones')
+          .select('product_id, deleted_at')
+          .eq('shop_id', shopId)
+          .order('deleted_at', { ascending: true })
+          .order('product_id', { ascending: true })
+          .limit(batchSize)
+          .abortSignal(signal)
+
+        if (pageCursor) {
+          query = query.or(
+            `deleted_at.gt.${pageCursor.deleted_at},and(deleted_at.eq.${pageCursor.deleted_at},product_id.gt.${pageCursor.product_id})`
+          )
+        } else if (persistedCursor) {
+          // Re-read the boundary timestamp so concurrent rows with an identical
+          // timestamp cannot be skipped. Repeated local deletes are harmless.
+          query = query.gte('deleted_at', persistedCursor)
+        }
+
+        const res = await query
+        if (res.error) throw res.error
+        return res.data ?? []
+      }, 'product_deletion_tombstones')
+
+      if (rows.length === 0) break
+      const productIds = rows.map((row: any) => row.product_id).filter(Boolean)
+      if (productIds.length > 0) {
+        const db = await getLocalDB()
+        const localRows = await Promise.all(productIds.map((id: string) => db.get('products', id)))
+        await bulkDelete('products', productIds)
+        deleted += localRows.filter(Boolean).length
+      }
+      fetched += rows.length
+
+      const last = rows[rows.length - 1] as { deleted_at: string; product_id: string }
+      pageCursor = { deleted_at: last.deleted_at, product_id: last.product_id }
+      latestDeletedAt = last.deleted_at
+      await setMeta(cursorKey, latestDeletedAt)
+
+      if (rows.length < batchSize) break
+    }
+
+    return { fetched, deleted }
+  }
+
+  /**
+   * Загружает только последние LOCAL_SALES_LIMIT чеков (новые сверху) и ставит
+   * курсор дельты на самый свежий updated_at — дальше подтягиваются только
+   * изменения. Старые чеки остаются на сервере и читаются постранично.
+   */
+  private async pullRecentSales(): Promise<number> {
+    const shopId = this.activeShopId
+    if (!shopId) return 0
+    const supabase = createSupabaseClient()
+    const rows = await withTimeout(async (signal) => {
+      const res = await supabase
+        .from('sales')
+        .select('*')
+        .eq('shop_id', shopId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(LOCAL_SALES_LIMIT)
+        .abortSignal(signal)
+      return unwrap(res as any, 'sales') as any[] | null
+    }, 'sales')
+
+    const list = rows ?? []
+    if (list.length > 0) await bulkPut('sales', list)
+    await trimLocalSales(shopId, LOCAL_SALES_LIMIT)
+
+    let latest: string | null = null
+    for (const row of list) {
+      const stamp = row.updated_at || row.created_at
+      if (stamp && (!latest || Date.parse(stamp) > Date.parse(latest))) latest = stamp
+    }
+    if (latest) await this.setCursor('sales', latest)
+    return list.length
+  }
+
+  // Stage 1: minimum needed to start working (shop, rates, in-stock products)
+  // Stage 2: customers, presets, cash operations
+  // Stage 3: sales and returns history
+  public async runInitialSync() {
+    if (this.isRunning || !this.isOnline || !this.activeShopId || this.stopped) return
+    this.isRunning = true
+    const shopId = this.activeShopId
+
+    try {
+      const supabase = createSupabaseClient()
+
+      updateSyncState({
+        status: 'syncing',
+        priorityPhase: 1,
+        phaseLabel: 'Синхронизация каталога и настроек (Этап 1/3)',
+        percent: 10,
+        currentTask: 'Загрузка профиля и курсов металлов...',
+        scopeShopId: shopId,
+      })
+
+      // 1.1 Shop settings and metal rates
+      const settingsRes = await withTimeout(
+        (signal) =>
+          supabase.from('shop_settings').select('*').eq('shop_id', shopId).abortSignal(signal).maybeSingle(),
+        'shop_settings'
+      )
+      const settings = unwrap(settingsRes as any, 'shop_settings')
+      if (settings) await bulkPut('shop_settings', [settings])
+
+      await this.pullTable({ table: 'metal_rates' }, { incremental: false })
+
+      // 1.2 Products, fully paginated
+      updateSyncState({ percent: 25, currentTask: 'Загрузка товаров в наличии...' })
+      await this.pullTable(
+        // Первичная загрузка: проданные товары даже не скачиваем.
+        { table: 'products', initialFilter: (query) => query.neq('status', 'sold') },
+        {
+          incremental: false,
+          onProgress: (count) =>
+            updateSyncState({ currentTask: `Загрузка товаров: ${count}...`, processedCount: count }),
+        }
+      )
+      await this.pullProductDeletionTombstones()
+
+      if (this.activeShopId !== shopId) return // shop switched mid-sync
+
+      // Phase 1 complete: POS / inventory are usable.
+      updateSyncState({
+        priorityPhase: 2,
+        phaseLabel: 'База готова. Догрузка клиентов и кассы (Этап 2/3)',
+        percent: 50,
+        currentTask: 'Загрузка клиентов и кассовых операций...',
+      })
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aura:phase1_ready'))
+      }
+
+      // 2. Customers, cash operations, presets — all paginated
+      await this.pullTable({ table: 'customers' }, { incremental: false })
+      await this.pullTable({ table: 'cash_reason_presets' }, { incremental: false })
+
+      const startOfMonth = new Date()
+      startOfMonth.setDate(1)
+      startOfMonth.setHours(0, 0, 0, 0)
+      const startOfMonthIso = startOfMonth.toISOString()
+
+      await this.pullTable(
+        {
+          table: 'cash_operations',
+          initialFilter: (query) => query.gte('created_at', startOfMonthIso),
+        },
+        { incremental: false }
+      )
+
+      if (this.activeShopId !== shopId) return
+
+      // Phase 3: history
+      updateSyncState({
+        priorityPhase: 3,
+        phaseLabel: 'Догрузка истории продаж (Этап 3/3)',
+        percent: 75,
+        currentTask: 'Фоновая загрузка истории чеков...',
+      })
+
+      // Только последние LOCAL_SALES_LIMIT чеков; полная история — на сервере.
+      await this.pullRecentSales()
+      await this.pullTable({ table: 'sale_returns' }, { incremental: false })
+      await this.pullTable({ table: 'supplier_debt_operations' }, { incremental: false })
+
+      if (this.activeShopId !== shopId) return
+
+      await setMeta('initial_sync_done', true)
+      this.pullFailures = 0
+      this.notifyServiceWorker({ type: 'AURA_CLOUD_REACHABLE' })
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aura:initial_sync_complete'))
+      }
+
+      const outboxSummary = await getOutboxStatusSummary(shopId)
+      updateSyncState({
+        status: outboxSummary.needsAttentionCount > 0 ? 'error' : outboxSummary.pendingCount > 0 ? 'syncing' : 'synced',
+        percent: 100,
+        priorityPhase: 4,
+        currentTask: null,
+        lastSuccessAt: new Date().toISOString(),
+        lastError: null,
+        isStale: false,
+        ...outboxStatePatch(outboxSummary),
+        scopeShopId: shopId,
+      })
+    } catch (err: any) {
+      this.handlePullError(err, 'Ошибка синхронизации')
+    } finally {
+      this.isRunning = false
+    }
+  }
+
+  /** Delta sync: only rows changed since the stored per-table cursor. */
+  public async runDeltaSync() {
+    if (this.isRunning || !this.isOnline || !this.activeShopId || this.stopped) return
+
+    // If local data was never fully loaded, a delta would leave permanent gaps.
+    if (!(await getMeta<boolean>('initial_sync_done', false))) {
+      return this.runInitialSync()
+    }
+
+    this.isRunning = true
+    const shopId = this.activeShopId
+
+    try {
+      updateSyncState({ status: 'syncing', currentTask: 'Проверка обновлений в облаке...', scopeShopId: shopId })
+
+      const tables: TableName[] = [
+        'products',
+        'sales',
+        'sale_returns',
+        'cash_operations',
+        'customers',
+        'cash_reason_presets',
+        'metal_rates',
+        'supplier_debt_operations',
+      ]
+
+      // Sequential on purpose: keeps request count predictable on weak connections
+      // and lets every table persist its own cursor before the next one starts.
+      let changed = 0
+      for (const table of tables) {
+        if (this.activeShopId !== shopId || this.stopped) return
+        const r = await this.pullTable({ table }, { incremental: true })
+        changed += r.fetched + r.deleted
+        if (table === 'sales' && r.fetched > 0) {
+          changed += await trimLocalSales(shopId, LOCAL_SALES_LIMIT)
+        }
+        if (table === 'products') {
+          const tombstones = await this.pullProductDeletionTombstones()
+          changed += tombstones.deleted
+        }
+      }
+
+      const settingsRes = await withTimeout(
+        (signal) =>
+          supabaseSettingsQuery(shopId, signal),
+        'shop_settings'
+      )
+      const settings = unwrap(settingsRes as any, 'shop_settings')
+      if (settings) await bulkPut('shop_settings', [settings])
+
+      // Tell mounted screens to re-read local data — without this, new rows landed
+      // in IndexedDB but the UI only showed them after a full page reload.
+      if (changed > 0 && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aura:data_changed'))
+      }
+
+      this.pullFailures = 0
+      this.notifyServiceWorker({ type: 'AURA_CLOUD_REACHABLE' })
+      const outboxSummary = await getOutboxStatusSummary(shopId)
+      updateSyncState({
+        status: outboxSummary.needsAttentionCount > 0 ? 'error' : outboxSummary.pendingCount > 0 ? 'syncing' : 'synced',
+        percent: 100,
+        currentTask: null,
+        lastSuccessAt: new Date().toISOString(),
+        lastError: null,
+        isStale: false,
+        ...outboxStatePatch(outboxSummary),
+        scopeShopId: shopId,
+      })
+    } catch (err: any) {
+      this.handlePullError(err, 'Ошибка обновления')
+    } finally {
+      this.isRunning = false
+      if (this.pendingRealtime && !this.stopped) {
+        this.pendingRealtime = false
+        setTimeout(() => this.runDeltaSync(), 100)
+      }
+    }
+  }
+
+  /** Report a pull failure and schedule a retry when the failure looks temporary. */
+  private handlePullError(err: any, fallbackMessage: string) {
+    const kind = classifyError(err)
+    const message = String(err?.message || '').toLowerCase()
+    const transportFailure =
+      err?.name === 'TypeError' ||
+      err?.name === 'AbortError' ||
+      message.includes('failed to fetch') ||
+      message.includes('fetch failed') ||
+      message.includes('network') ||
+      message.includes('timeout')
+
+    if (transportFailure) {
+      // A browser can report navigator.onLine=true while DNS, Wi-Fi or Supabase is
+      // unreachable. Keep the local-first screens usable and retry in the background
+      // instead of presenting a fatal sync error for an ordinary connection loss.
+      console.warn('[Sync] Cloud is temporarily unreachable; keeping local data active:', err)
+      this.notifyServiceWorker({ type: 'AURA_CLOUD_UNREACHABLE' })
+    } else {
+      console.error('[Sync] Pull failed:', err)
+    }
+
+    if (kind === 'auth') {
+      updateSyncState({
+        status: 'error',
+        lastError: 'Сессия истекла — войдите снова',
+        phaseLabel: 'Требуется вход',
+        isStale: true,
+      })
+      return
+    }
+
+    const locallyAvailable = kind === 'transient' && (transportFailure || !this.isOnline)
+    updateSyncState({
+      status: locallyAvailable ? 'offline' : 'error',
+      lastError: locallyAvailable
+        ? 'Нет связи с сервером. Работа продолжается с локальными данными.'
+        : err?.message || fallbackMessage,
+      phaseLabel: locallyAvailable ? 'Локальный режим — повтор при восстановлении связи' : 'Ошибка — повторить',
+      isStale: true,
+    })
+
+    if (kind === 'transient') {
+      this.pullFailures++
+      if (this.pullRetryTimer) clearTimeout(this.pullRetryTimer)
+      this.pullRetryTimer = setTimeout(() => {
+        if (this.isOnline && !this.stopped) this.runDeltaSync()
+      }, backoff(this.pullFailures))
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Push: outbox flush
+  // -------------------------------------------------------------------------
+
+  public scheduleOutboxFlush(delayMs = 300) {
+    if (this.outboxTimer) clearTimeout(this.outboxTimer)
+    this.outboxTimer = setTimeout(() => {
+      this.flushOutbox()
+    }, delayMs)
+  }
+
+  /**
+   * Push queued operations to the cloud.
+   *
+   * Each item is claimed (`syncing`) before the request, removed only after a
+   * confirmed success, and rescheduled with exponential backoff on a transient
+   * failure. `client_op_id` makes retries idempotent, so a request that actually
+   * landed before the connection dropped cannot create a second row.
+   */
+  public async flushOutbox(options: { forceRetry?: boolean } = {}) {
+    // Timer, online events and enqueue events can overlap within the same tab.
+    if (this.outboxFlushing) return
+    this.outboxFlushing = true
+    try {
+      await this.flushOutboxBatch(options.forceRetry === true)
+    } finally {
+      this.outboxFlushing = false
+    }
+  }
+
+  /** Retry dead-lettered operations only after an explicit user action. */
+  public async retryDeadOutbox(): Promise<number> {
+    if (!this.isOnline || !this.activeShopId || this.stopped) return 0
+    const retried = await retryDeadOutboxItems(this.activeShopId)
+    if (retried > 0) await this.flushOutbox()
+    return retried
+  }
+
+  private async flushOutboxBatch(forceRetry = false) {
+    if (!this.isOnline || !this.activeShopId || this.stopped) return
+    const shopId = this.activeShopId
+
+    await recoverRetryableOutboxItems(shopId, forceRetry)
+    const due = await getDueOutboxItems(shopId, 20)
+    if (due.length === 0) {
+      const outboxSummary = await getOutboxStatusSummary(shopId)
+      updateSyncState(outboxStatePatch(outboxSummary))
+      await this.scheduleNextOutboxWake(shopId)
+      return
+    }
+
+    const supabase = createSupabaseClient()
+    let syncedCount = 0
+
+    for (const item of due) {
+      if (this.stopped || this.activeShopId !== shopId) return
+
+      try {
+        await markOutboxSyncing(item.id)
+        await this.pushItemWithSessionRecovery(supabase, item)
+        await markOutboxCompleted(item.id)
+        syncedCount++
+      } catch (err: any) {
+        // The cash RPC handles actual idempotent retries itself. A remaining
+        // unique violation is a conflicting payload/id, not a successful send.
+        // A unique constraint/HTTP 409 is not proof that THIS operation
+        // committed. Idempotent RPCs/upserts handle real replays themselves.
+        const classified = classifyError(err)
+        const kind = classified === 'conflict'
+          ? 'permanent'
+          : classified
+
+        if (err?.code === 'OFFLINE_SALE_CONFLICT') {
+          await markOutboxFailed(item.id, err.message, { permanent: true })
+          toast.error(`Продажа не подтверждена: «${err.productName || 'товар'}» уже продан`, {
+            description: 'Чек исключён из итогов. Обновите каталог перед следующей продажей.',
+            duration: 8000,
+          })
+          continue
+        }
+
+        console.error('[Sync] Outbox item failed:', item.id, err)
+
+        if (kind === 'permanent') {
+          if (item.op_type === 'atomic_sale' && item.payload?.id) {
+            await setLocalSaleSyncState(item.payload.id, 'rejected', {
+              reason: err?.message || 'Продажа отклонена сервером',
+              shopId,
+            })
+          }
+          if (item.op_type === 'atomic_cash' && item.payload?.id) {
+            // Keep the rejected request in the outbox for review, but remove
+            // its optimistic cash row so local balances cannot count it.
+            await bulkDelete('cash_operations', [item.payload.id])
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('aura:data_changed'))
+            }
+          }
+          await markOutboxFailed(item.id, err?.message || 'Операция отклонена сервером', { permanent: true })
+          toast.error('Операция отклонена сервером и требует проверки', {
+            description: err?.message || undefined,
+          })
+        } else if (kind === 'auth') {
+          await markOutboxFailed(item.id, 'Сессия истекла', { auth: true })
+          break // no point trying the rest with an invalid session
+        } else {
+          await markOutboxFailed(item.id, err?.message || 'Ошибка отправки')
+        }
+      }
+    }
+
+    if (syncedCount > 0) {
+      toast.success(`Отправлено ${syncedCount} операций`)
+    }
+
+    const outboxSummary = await getOutboxStatusSummary(shopId)
+    updateSyncState(outboxStatePatch(outboxSummary))
+
+    await this.scheduleNextOutboxWake(shopId)
+  }
+
+  /** Wake the flusher exactly when the earliest backoff expires. */
+  private async scheduleNextOutboxWake(shopId: string) {
+    const delay = await getNextRetryDelayMs(shopId)
+    if (delay === null) return
+    this.scheduleOutboxFlush(Math.max(1000, Math.min(delay, PULL_BACKOFF_MAX_MS)))
+  }
+
+  /** Retry the exact same operation once after refreshing an expired session. */
+  private async pushItemWithSessionRecovery(supabase: any, item: OutboxItem): Promise<void> {
+    try {
+      await this.pushItem(supabase, item)
+    } catch (error) {
+      if (classifyError(error) !== 'auth' || !supabase.auth?.refreshSession) throw error
+      const refreshed: any = await withTimeout(() => supabase.auth.refreshSession(), 'refresh-session')
+      if (refreshed?.error) throw refreshed.error
+      if (!refreshed?.data?.session) throw error
+      await this.pushItem(supabase, item)
+    }
+  }
+
+  /** Deliver a single outbox operation. */
+  private async pushItem(supabase: any, item: OutboxItem): Promise<void> {
+    const nowIso = new Date().toISOString()
+
+    // Conflict detection for updates and stock changes (unchanged behaviour).
+    if (
+      (item.op_type === 'product_update' || item.op_type === 'stock_change' || item.op_type === 'update') &&
+      item.payload?.id &&
+      item.payload?.original_updated_at
+    ) {
+      const targetTable = item.entity || 'products'
+      const serverRow: any = unwrap(
+        await withTimeout(
+          (signal) =>
+            supabase
+              .from(targetTable)
+              .select('updated_at, name, sku')
+              .eq('id', item.payload.id)
+              .abortSignal(signal)
+              .maybeSingle(),
+          `${targetTable}:conflict-check`
+        ) as any,
+        targetTable
+      )
+
+      if (
+        serverRow &&
+        serverRow.updated_at &&
+        new Date(serverRow.updated_at).getTime() > new Date(item.payload.original_updated_at).getTime()
+      ) {
+        const label = serverRow.name || serverRow.sku || item.payload.name || item.payload.sku || 'Запись'
+        toast.warning(`Конфликт данных: «${label}» был изменён на сервере. Изменения не перезаписаны.`, {
+          duration: 6000,
+        })
+        const conflict: any = new Error('Конфликт изменений на сервере: запись была изменена')
+        conflict.status = 422 // permanent: needs human resolution, retrying cannot help
+        throw conflict
+      }
+    }
+
+    if (item.op_type === 'atomic_sale') {
+      const {
+        total_price,
+        final_price,
+        original_updated_at,
+        sync_status,
+        sync_error,
+        ...salePayload
+      } = item.payload
+      // Миграция 007: та же продажа + тип чека (фискальный / нефискальный).
+      // Если миграция ещё не применена, очередь не застревает — продажа уходит
+      // в прежнюю функцию, тип чека при этом не сохраняется.
+      let result: any
+      try {
+        result = await this.run(supabase, (client, signal) =>
+          client.rpc('commit_sale_with_receipt', {
+            _client_op_id: item.client_op_id,
+            _sale: salePayload,
+            _due_date: null,
+          }).abortSignal(signal)
+        )
+      } catch (error: any) {
+        if (error?.code !== 'PGRST202' && error?.code !== '42883') throw error
+        result = await this.run(supabase, (client, signal) =>
+          client.rpc('commit_offline_sale', {
+            _client_op_id: item.client_op_id,
+            _sale: salePayload,
+          }).abortSignal(signal)
+        )
+      }
+
+      if (result?.accepted !== true) {
+        await setLocalSaleSyncState(item.payload.id, 'rejected', {
+          reason: 'Товар уже продан на другом устройстве',
+          unavailableProductId: result?.product_id,
+          shopId: item.shop_id,
+        })
+        const conflict: any = new Error('Товар уже продан на другом устройстве')
+        conflict.status = 422
+        conflict.code = 'OFFLINE_SALE_CONFLICT'
+        conflict.productId = result?.product_id
+        conflict.productName = result?.product_name
+        throw conflict
+      }
+
+      await setLocalSaleSyncState(item.payload.id, 'confirmed', { shopId: item.shop_id })
+      return
+    }
+
+    if (item.op_type === 'atomic_return') {
+      const payload = item.payload
+      let result: any
+      try {
+        // The existing database function calculates the refund and updates cash,
+        // stock and customer totals together, under the sale's row lock.
+        result = await this.run(supabase, (client, signal) =>
+          client.rpc('return_sale_item', {
+            _sale_id: payload.sale_id,
+            _item_index: payload.item_index,
+            _reason: payload.reason || null,
+          }).abortSignal(signal)
+        )
+      } catch (error: any) {
+        if (error?.code !== 'P0001' && error?.code !== '23505') throw error
+        // The response may have been lost after commit. A confirmed row for
+        // this exact shop/sale/item proves completion; an arbitrary 409 does not.
+        result = await this.run(supabase, (client, signal) =>
+          client.from('sale_returns').select('*')
+            .eq('shop_id', item.shop_id)
+            .eq('sale_id', payload.sale_id)
+            .eq('item_index', payload.item_index)
+            .is('deleted_at', null)
+            .abortSignal(signal).maybeSingle()
+        )
+        if (!result) throw error
+      }
+      const confirmed = Array.isArray(result) ? result[0] : result
+      if (!confirmed?.id || confirmed.shop_id !== item.shop_id ||
+          confirmed.sale_id !== payload.sale_id || confirmed.item_index !== payload.item_index) {
+        throw new Error('Возврат не подтверждён сервером')
+      }
+      const cash = confirmed.cash_operation_id
+        ? await this.run(supabase, (client, signal) =>
+            client.from('cash_operations').select('*')
+              .eq('shop_id', item.shop_id).eq('id', confirmed.cash_operation_id)
+              .abortSignal(signal).single()
+          )
+        : null
+
+      // Replace optimistic rows rather than counting both local and server IDs.
+      const db = await getLocalDB()
+      const tx = db.transaction(['sale_returns', 'cash_operations'], 'readwrite')
+      const returns = tx.objectStore('sale_returns')
+      const cashStore = tx.objectStore('cash_operations')
+      const localCash = await cashStore.index('shop_id').getAll(item.shop_id)
+      for (const row of localCash) {
+        if (row.client_op_id === `${item.client_op_id}:cash`) await cashStore.delete(row.id)
+      }
+      if (payload.id && payload.id !== confirmed.id) await returns.delete(payload.id)
+      await returns.put(confirmed)
+      if (cash) await cashStore.put(cash)
+      await tx.done
+      return
+    }
+
+    if (item.op_type === 'atomic_cash') {
+      const payload = item.payload
+      const result = await this.run(supabase, (client, signal) =>
+        client.rpc('create_cash_operation_atomic', {
+          _client_op_id: item.client_op_id,
+          _type: payload.type,
+          _amount: payload.amount,
+          _source: payload.source || 'cash',
+          _amount_cash: payload.amount_cash || 0,
+          _amount_electronic: payload.amount_electronic || 0,
+          _reason: payload.reason,
+          _operation_id: payload.id,
+          _created_at: payload.created_at,
+        }).abortSignal(signal)
+      )
+      if (result?.accepted !== true) throw new Error('Кассовая операция не подтверждена сервером')
+      return
+    }
+
+    if (item.op_type === 'product_add') {
+      const { original_updated_at, ...cleanPayload } = item.payload
+      await this.run(supabase, (client, signal) =>
+        client
+          .from('products')
+          .upsert(
+            { ...cleanPayload, shop_id: item.shop_id, updated_at: nowIso },
+            { onConflict: 'id', ignoreDuplicates: false }
+          )
+          .abortSignal(signal)
+      )
+      return
+    }
+
+    if (item.op_type === 'product_update' || item.op_type === 'stock_change') {
+      const { id: prodId, original_updated_at, ...cleanPayload } = item.payload
+      await this.run(supabase, (client, signal) =>
+        client
+          .from('products')
+          .update({ ...cleanPayload, updated_at: nowIso })
+          .eq('id', prodId)
+          .abortSignal(signal)
+      )
+      return
+    }
+
+    if (item.op_type === 'create' || item.op_type === 'update') {
+      const { original_updated_at, ...cleanPayload } = item.payload
+      const targetShopId = item.shop_id || cleanPayload.shop_id || this.activeShopId
+      const finalPayload = {
+        ...cleanPayload,
+        ...(targetShopId ? { shop_id: targetShopId } : {}),
+        updated_at: nowIso,
+      }
+      await this.run(supabase, (client, signal) =>
+        client
+          .from(item.entity)
+          .upsert(finalPayload)
+          .abortSignal(signal)
+      )
+      return
+    }
+
+    if (item.op_type === 'delete' || item.op_type === 'product_delete') {
+      const targetTable = item.entity || 'products'
+      await this.run(supabase, (client, signal) =>
+        client
+          .from(targetTable)
+          .update({ deleted_at: nowIso, updated_at: nowIso })
+          .eq('id', item.payload.id)
+          .abortSignal(signal)
+      )
+    }
+  }
+
+  /** Execute one write with a timeout and Supabase error unwrapping. */
+  private async run(supabase: any, build: (client: any, signal: AbortSignal) => PromiseLike<any>): Promise<any> {
+    const res = await withTimeout((signal) => build(supabase, signal), 'write')
+    if (res?.error) throw res.error
+    return res?.data
+  }
+}
+
+/** Small helper kept separate so the delta path stays readable. */
+function supabaseSettingsQuery(shopId: string, signal: AbortSignal) {
+  const supabase = createSupabaseClient()
+  return supabase.from('shop_settings').select('*').eq('shop_id', shopId).abortSignal(signal).maybeSingle()
+}
+
+export const syncEngine = new SyncEngine()

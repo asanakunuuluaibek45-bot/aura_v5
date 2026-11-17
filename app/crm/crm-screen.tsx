@@ -1,0 +1,115 @@
+import { redirect } from "next/navigation"
+import { getRequestCrmContext } from "@/lib/supabase/request-context"
+import type { Profile, ProfileWithImpersonation } from "@/lib/types"
+import { PendingScreen } from "@/components/screens/sklad/add-edit-Product/pending-screen"
+import { Dashboard } from "@/components/dashboard"
+import type { ScreenId } from "@/components/app-nav"
+import { getProducts } from "@/app/actions/products"
+import { getSales } from "@/app/actions/sales"
+import { getSaleReturns } from "@/app/actions/returns"
+import { getCabinetData } from "@/app/actions/cabinet"
+import { getCashData } from "@/app/actions/cash"
+import { getMetalRates } from "@/app/actions/rates"
+import { getClients } from "@/app/actions/clients"
+import { getSuperAdminShops, getImpersonatedShop } from "@/app/actions/superadmin"
+import type { ShopBillingRow } from "@/app/actions/superadmin"
+import { getSupplierDebtData } from "@/app/actions/suppliers"
+import { getOwnShopPublicState } from "@/app/actions/shops"
+
+/**
+ * Общий серверный экран CRM. Каждый раздел имеет собственный URL
+ * (/crm/pos, /crm/showcase, /crm/inventory, /crm/customers, /crm/reports,
+ * /crm/stores, /crm/notifications, /crm/suppliers, /crm/cabinet) и рендерит этот компонент
+ * со своим значением `screen`.
+ */
+export async function CrmScreen({ screen }: { screen: ScreenId }) {
+  const { supabase, user, profile, shopId: activeShopId } = await getRequestCrmContext()
+  if (!user) redirect("/auth/login")
+
+  // Любой пользователь (включая основателя магазина) должен быть подтверждён суперадмином.
+  // Авто-подтверждение намеренно отключено в v18.
+  const typed = profile as ProfileWithImpersonation | null
+
+  // Если профиль не подтверждён — показываем экран ожидания, не вызывая никаких action-функций.
+  if (!typed || typed.status !== "approved" || !typed.role) {
+    return <PendingScreen profile={typed} email={user.email ?? ""} />
+  }
+
+  const isSuperAdmin = typed.role === "super_admin"
+  // A global super admin without a selected store should land on the store
+  // selector instead of trying to initialize store-specific CRM data.
+  if (isSuperAdmin && !activeShopId) {
+    if (screen !== "shops" && screen !== "notifications") redirect("/crm/stores")
+    const superAdminShops = await getSuperAdminShops()
+    return (
+      <Dashboard
+        screen={screen}
+        profile={typed}
+        products={[]}
+        sales={[]}
+        returns={[]}
+        cabinet={{ team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask" }}
+        cash={{ operations: [], presets: [] }}
+        supplierDebts={{ operations: [], suppliers: [], profiles: [] }}
+        rates={[]}
+        email={user.email ?? ""}
+        clients={[]}
+        superAdminShops={superAdminShops}
+      />
+    )
+  }
+
+  // История долга поставщиков не ограничена по размеру. Загружаем её только
+  // при первом открытии соответствующего раздела, а не при старте кассы.
+  // Оборачиваем в try/catch: если сессия устарела или профиль изменился между запросами — редиректим.
+  let products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, impersonatedShop, publicStorefrontState
+  try {
+    ;[products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, impersonatedShop, publicStorefrontState] =
+      await Promise.all([
+        getProducts(),
+        getSales(),
+        getSaleReturns(),
+        getCabinetData(),
+        getCashData(),
+        getMetalRates(),
+        getClients(),
+        screen === "suppliers"
+          ? getSupplierDebtData()
+          : Promise.resolve({ operations: [], suppliers: [], profiles: [] }),
+        isSuperAdmin ? getSuperAdminShops() : Promise.resolve([] as ShopBillingRow[]),
+        isSuperAdmin ? getImpersonatedShop() : Promise.resolve(null),
+        typed.role === "admin" ? getOwnShopPublicState() : Promise.resolve({ enabled: true, canToggle: false }),
+      ])
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ""
+    // Профиль стал неактивным между двумя запросами — показываем экран ожидания.
+    if (msg.includes("подтверждён") || msg.includes("не подтверждён") || msg.includes("not approved")) {
+      const { data: freshProfile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+      return <PendingScreen profile={freshProfile as Profile | null} email={user.email ?? ""} />
+    }
+    // Сессия истекла — отправляем на логин.
+    if (msg.includes("Сессия") || msg.includes("Требуется вход") || msg.includes("Войдите")) {
+      redirect("/auth/login")
+    }
+    throw err
+  }
+
+  return (
+    <Dashboard
+      screen={screen}
+      profile={typed}
+      products={products!}
+      sales={sales!}
+      returns={returns!}
+      cabinet={cabinet!}
+      cash={cash!}
+      supplierDebts={supplierDebts!}
+      rates={rates!}
+      email={user.email ?? ""}
+      clients={clients!}
+      superAdminShops={isSuperAdmin ? superAdminShops : undefined}
+      impersonatedShop={impersonatedShop ?? undefined}
+      publicStorefrontState={publicStorefrontState}
+    />
+  )
+}

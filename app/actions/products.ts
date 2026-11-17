@@ -1,0 +1,382 @@
+"use server"
+
+import { createClient } from "@/lib/supabase/server"
+import { requireApprovedContext } from "@/lib/supabase/request-context"
+import { revalidatePath } from "next/cache"
+import type { Product } from "@/lib/types"
+
+// Не используем select("*") для каталога: описание и массивы изображений
+// заметно увеличивают payload на каждом открытии CRM.
+const PRODUCT_COLUMNS = [
+  "id",
+  "shop_id",
+  "created_by",
+  "name",
+  "category",
+  "metal",
+  "metal_color",
+  "weight",
+  "size",
+  "sku",
+  "article_seq",
+  "is_hidden",
+  "purchase_price",
+  "purchase_price_visible",
+  "price_per_gram_purchase_visible",
+  "price_per_gram_sale",
+  "price_per_gram_purchase",
+  "stones",
+  "description",
+  "sale_price",
+  "image_url",
+  "images",
+  "supplier_name",
+  "supplier_phone",
+  "consignment_operation_id",
+  "consignment_at",
+  "consignment_by",
+  "status",
+  "created_at",
+].join(", ")
+
+const requireProfile = requireApprovedContext
+
+/**
+ * Возвращает АКТИВНЫЙ shop_id так, как его видят RLS-политики.
+ *
+ * RLS проверяет `shop_id = public.current_shop_id()`, а current_shop_id()
+ * это COALESCE(impersonated_shop_id для super_admin, profiles.shop_id).
+ * Раньше INSERT писал profile.shop_id: для суперадмина в режиме
+ * имперсонации (и для профиля без магазина) значения расходились и Postgres
+ * отклонял вставку с "new row violates row-level security policy".
+ */
+async function requireShopId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profile: { shop_id: string | null; impersonated_shop_id?: string | null; role?: string | null },
+  resolvedShopId?: string | null,
+): Promise<string> {
+  const fallbackShopId =
+    profile.role === "super_admin" ? profile.impersonated_shop_id ?? profile.shop_id : profile.shop_id
+  const shopId = resolvedShopId ?? fallbackShopId
+  if (!shopId) {
+    throw new Error("Ваш аккаунт не привязан к магазину — обратитесь к администратору")
+  }
+  return shopId
+}
+
+/**
+ * Дополняет товары коротким числовым ID магазина (shop_settings.seq_id).
+ * Без него QR-ссылка теряет идентификатор магазина и превращается в /q//SKU.
+ */
+async function withShopSeqId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: Product[],
+): Promise<Product[]> {
+  const shopIds = [...new Set(rows.map((p) => p.shop_id).filter(Boolean))]
+  if (shopIds.length === 0) return rows
+
+  const { data: shops } = await supabase
+    .from("shop_settings")
+    .select("shop_id, seq_id")
+    .in("shop_id", shopIds)
+
+  const seqByShop = new Map<string, number | null>(
+    (shops ?? []).map((s: { shop_id: string; seq_id: number | null }) => [s.shop_id, s.seq_id]),
+  )
+
+  return rows.map((p) => ({ ...p, shop_seq_id: seqByShop.get(p.shop_id) ?? null }))
+}
+
+/** Запрашивает короткий номер активного магазина для локально сохранённой этикетки. */
+export async function getShopSeqIdForLabel(productShopId: string): Promise<number> {
+  const { supabase, profile, shopId: resolvedShopId } = await requireProfile()
+  const shopId = await requireShopId(supabase, profile, resolvedShopId)
+  if (productShopId !== shopId) {
+    throw new Error("Товар принадлежит другому магазину. Обновите каталог перед печатью.")
+  }
+  const { data, error } = await supabase
+    .from("shop_settings")
+    .select("seq_id")
+    .eq("shop_id", shopId)
+    .single()
+  if (error) throw new Error(`Не удалось получить короткий номер магазина: ${error.message}`)
+  const seqId = data?.seq_id
+  if (typeof seqId !== "number" || !Number.isSafeInteger(seqId) || seqId <= 0) {
+    throw new Error("У магазина нет короткого номера для QR-кода. Синхронизируйте магазин перед печатью.")
+  }
+  return seqId
+}
+
+export async function getProducts(): Promise<Product[]> {
+  // Ship only the first 50 catalog rows with the server-rendered page. The
+  // local-first sync engine continues its resumable, paginated full catalog
+  // pull into IndexedDB, so POS/offline search still receives the whole catalog.
+  const page = await getProductsPage({ limit: 50, offset: 0 })
+  return page.items
+}
+
+export type ProductPage = {
+  items: Product[]
+  offset: number
+  limit: number
+  hasMore: boolean
+}
+
+/**
+ * Ограниченная выборка для экранов и lazy-load сценариев. Берём одну
+ * дополнительную строку, чтобы корректно вычислить hasMore.
+ */
+export async function getProductsPage(
+  input: { limit?: number; offset?: number } = {},
+): Promise<ProductPage> {
+  const { supabase, shopId } = await requireProfile()
+  const limit = Math.min(Math.max(Math.floor(input.limit ?? 50), 1), 100)
+  const offset = Math.max(Math.floor(input.offset ?? 0), 0)
+  if (!shopId) return { items: [], offset, limit, hasMore: false }
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_COLUMNS)
+    .eq("shop_id", shopId)
+    .is("deleted_at", null)
+    // Проданные товары не отправляем в каталог: они не нужны кассе/складу
+    // и только раздувают локальную базу на слабых устройствах.
+    .neq("status", "sold")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit)
+
+  if (error) throw error
+  const rows = await withShopSeqId(supabase, (data as unknown as Product[]) ?? [])
+  return {
+    items: rows.slice(0, limit),
+    offset,
+    limit,
+    hasMore: rows.length > limit,
+  }
+}
+
+
+/** Exact, case-insensitive SKU lookup across the active shop, including older catalog pages. */
+export async function findProductBySku(rawSku: string): Promise<Product | null> {
+  const sku = String(rawSku ?? "").trim().toUpperCase()
+  if (!/^[A-Z]{2}\d{1,8}$/.test(sku)) return null
+
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) return null
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_COLUMNS)
+    .eq("shop_id", shopId)
+    .ilike("sku", sku)
+    .is("deleted_at", null)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) return null
+  const [product] = await withShopSeqId(supabase, [data as unknown as Product])
+  return product ?? null
+}
+
+export type ProductInput = {
+  name: string
+  category: string
+  metal: string
+  metal_color?: string | null
+  weight: number
+  size: string
+  sku: string
+  purchase_price: number
+  /** Закупочная цена видимая для продавца (переименовано из purchase_price_seller). */
+  purchase_price_visible?: number | null
+  price_per_gram_sale?: number | null
+  price_per_gram_purchase?: number | null
+  /** Курс закупки видимый для продавца (переименовано из price_per_gram_purchase_seller). */
+  price_per_gram_purchase_visible?: number | null
+  stones?: string | null
+  description?: string | null
+  sale_price: number
+  image_url?: string | null
+  images?: string[]
+  supplier_name?: string | null
+  supplier_phone?: string | null
+}
+
+function validate(input: Partial<ProductInput>) {
+  if (input.name !== undefined && !String(input.name).trim()) {
+    throw new Error("Укажите название изделия")
+  }
+  const numeric: [keyof ProductInput, string][] = [
+    ["weight", "Вес"],
+    ["sale_price", "Цена продажи"],
+    ["purchase_price", "Закупочная цена"],
+  ]
+  for (const [key, label] of numeric) {
+    const v = input[key]
+    if (v === undefined || v === null) continue
+    const n = Number(v)
+    if (!Number.isFinite(n) || n < 0) throw new Error(`${label}: укажите корректное число`)
+  }
+}
+
+type ArticleRow = { article: string; prefix: string; seq: number; reused: boolean }
+
+/** RPC next_article возвращает out_article/out_prefix/out_seq/out_reused. */
+function normalizeArticle(row: Record<string, unknown>): ArticleRow {
+  return {
+    article: String(row["out_article"] ?? row["article"] ?? ""),
+    prefix: String(row["out_prefix"] ?? row["prefix"] ?? ""),
+    seq: Number(row["out_seq"] ?? row["seq"] ?? 0),
+    reused: Boolean(row["out_reused"] ?? row["reused"] ?? false),
+  }
+}
+
+/**
+ * Извлекает двухбуквенный ASCII-префикс из артикула или строки-префикса.
+ * Принимает только латинские буквы A-Z. Если передан кириллический
+ * префикс (наследие старых данных) — возвращает безопасный дефолт "RY".
+ */
+function extractPrefix(value: string | null | undefined): string {
+  const match = (value ?? "").match(/^[A-Za-z]{2}/)
+  if (match) return match[0].toUpperCase()
+  return "RY" // дефолт: Кольцо / Жёлтое золото → Ring Yellow
+}
+
+/**
+ * Создаёт товар и ВОЗВРАЩАЕТ сохранённую строку (с реальными id / sku /
+ * shop_id / shop_seq_id). Раньше экшн ничего не возвращал, поэтому этикетка
+ * печаталась по черновику (id: "draft", shop_id отсутствовал) — и ID не
+ * попадал в QR-код.
+ */
+export async function createProduct(input: ProductInput): Promise<Product> {
+  const { supabase, user, profile, shopId: resolvedShopId } = await requireProfile()
+  validate(input)
+
+  // shop_id берём из того же источника, что и RLS-политика (см. requireShopId).
+  const shopId = await requireShopId(supabase, profile, resolvedShopId)
+
+  const prefix = extractPrefix(input.sku)
+
+  const { data: artData, error: artErr } = await supabase.rpc("next_article", { p_prefix: prefix }).single()
+  if (artErr) throw new Error(`Ошибка генерации артикула: ${artErr.message}`)
+
+  const art = normalizeArticle((artData ?? {}) as Record<string, unknown>)
+
+  const { data, error } = await supabase
+    .from("products")
+    .insert({
+      ...input,
+      name: input.name.trim(),
+      sku: art.article,
+      article_prefix: art.prefix,
+      article_seq: art.seq,
+      shop_id: shopId,
+      created_by: user.id,
+      status: "in_stock",
+    })
+    .select("*")
+    .single()
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("Артикул только что был занят другим товаром. Попробуйте нажать «Сохранить» ещё раз.")
+    }
+    throw new Error(`Не удалось сохранить товар: ${error.message}`)
+  }
+
+  revalidatePath("/crm")
+
+  const [saved] = await withShopSeqId(supabase, [data as Product])
+  return saved
+}
+
+/** Обновляет товар и возвращает актуальную строку (нужна для печати этикетки). */
+export async function updateProduct(
+  id: string,
+  input: Partial<ProductInput> & { is_hidden?: boolean; is_secondary?: never },
+): Promise<Product> {
+  const { supabase } = await requireProfile()
+  const { data: current } = await supabase
+    .from("products")
+    .select("consignment_operation_id, purchase_price, supplier_name, supplier_phone")
+    .eq("id", id)
+    .single()
+  const restrictedChanged = current?.consignment_operation_id && (
+    (input.purchase_price !== undefined && Number(input.purchase_price) !== Number(current.purchase_price)) ||
+    (input.supplier_name !== undefined && (input.supplier_name ?? null) !== (current.supplier_name ?? null)) ||
+    (input.supplier_phone !== undefined && (input.supplier_phone ?? null) !== (current.supplier_phone ?? null))
+  )
+  if (restrictedChanged) {
+    throw new Error("Товар уже взят на реализацию: закупочную цену и поставщика менять нельзя")
+  }
+  validate(input)
+  // Разрешаем менять только поля карточки: статус, магазин, артикул и автора
+  // нельзя подменить с клиента (иначе проданный товар можно «вернуть» на склад).
+  const ALLOWED: (keyof ProductInput | "is_hidden")[] = [
+    "name", "category", "metal", "metal_color", "weight", "size",
+    "purchase_price", "purchase_price_visible", "price_per_gram_sale",
+    "price_per_gram_purchase", "price_per_gram_purchase_visible", "stones",
+    "description", "sale_price", "image_url", "images", "supplier_name",
+    "supplier_phone", "is_hidden",
+  ]
+  const patch: Record<string, unknown> = {}
+  for (const key of ALLOWED) {
+    if ((input as Record<string, unknown>)[key] !== undefined) patch[key] = (input as Record<string, unknown>)[key]
+  }
+  if (typeof patch.name === "string") patch.name = patch.name.trim()
+  const { data, error } = await supabase
+    .from("products")
+    .update(patch)
+    .eq("id", id)
+    .select("*")
+    .single()
+  if (error) throw new Error(`Не удалось обновить товар: ${error.message}`)
+  revalidatePath("/crm")
+  const [saved] = await withShopSeqId(supabase, [data as Product])
+  return saved
+}
+
+
+export async function deleteProduct(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Server Action никогда не бросает исключение: в production Next.js скрывает
+  // текст ошибки и клиент получает лишь "React error #441" / HTTP 500.
+  try {
+    const { supabase } = await requireProfile()
+    const { error } = await supabase.rpc("delete_product", { _product_id: id })
+    if (error) {
+      // Миграция v44 ещё не применена — мягкое удаление как запасной вариант.
+      if (["PGRST202", "42883"].includes(error.code ?? "")) {
+        const now = new Date().toISOString()
+        const { error: softErr } = await supabase
+          .from("products")
+          .update({ deleted_at: now, updated_at: now })
+          .eq("id", id)
+        if (softErr) return { ok: false, error: `Не удалось удалить товар: ${softErr.message}` }
+      } else if (!/не найден/i.test(error.message)) {
+        return { ok: false, error: `Не удалось удалить товар: ${error.message}` }
+      }
+    }
+    try {
+      revalidatePath("/crm")
+      revalidatePath("/crm/inventory")
+    } catch {}
+    return { ok: true }
+  } catch (e) {
+    console.error("[deleteProduct]", e)
+    return { ok: false, error: e instanceof Error ? e.message : "Не удалось удалить товар" }
+  }
+}
+
+export async function generateArticle(prefix: string) {
+  const { supabase } = await requireProfile()
+
+  const { data: artData, error } = await supabase
+    .rpc("next_article", { p_prefix: extractPrefix(prefix) })
+    .single()
+
+  if (error) throw new Error(error.message)
+
+  return normalizeArticle((artData ?? {}) as Record<string, unknown>)
+}
+
