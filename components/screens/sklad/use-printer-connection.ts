@@ -1,5 +1,6 @@
 "use client"
 
+import { registerCapacitorBluetoothPolyfill } from "@/lib/capacitor-bluetooth"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { getPrintErrorMessage } from "@/lib/printer-errors"
@@ -33,6 +34,7 @@ export function usePrinterConnection() {
   const [clientReady, setClientReady] = useState(false)
 
   useEffect(() => {
+    registerCapacitorBluetoothPolyfill()
     const unsubscribe = subscribeToPrinterConnection(setSnapshot)
     setSnapshot(getPrinterConnectionSnapshot())
     startPrinterConnectionMonitor()

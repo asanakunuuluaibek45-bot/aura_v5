@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { DecodeHintType, BarcodeFormat } from "@zxing/library"
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -358,8 +359,8 @@ export function BarcodeScannerModal({
           ...(chosen?.deviceId
             ? { deviceId: { exact: chosen.deviceId } }
             : { facingMode: { ideal: facing } }),
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 960, max: 1280 },
+          height: { ideal: 540, max: 720 },
           frameRate: { ideal: 30, max: 30 },
         },
       }
@@ -491,7 +492,19 @@ export function BarcodeScannerModal({
       }
 
       // 2. Fallback ZXing с трекингом качества изображения
-      const reader = new BrowserMultiFormatReader()
+      const hints = new Map<DecodeHintType, any>()
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.UPC_A,
+      ])
+      const reader = new BrowserMultiFormatReader(hints, {
+        delayBetweenScanAttempts: 150,
+        delayBetweenScanSuccess: 500,
+      })
       try {
         let lastOverlayRenderAt = 0
         const controls = await reader.decodeFromVideoElement(video, (result, err) => {

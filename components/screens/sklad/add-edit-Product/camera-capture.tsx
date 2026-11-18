@@ -1,5 +1,7 @@
 "use client"
 
+import { Camera as CapacitorCamera, CameraResultType, CameraSource } from "@capacitor/camera"
+import { Capacitor } from "@capacitor/core"
 import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Camera, Loader2, X } from "lucide-react"
@@ -49,6 +51,26 @@ function CameraCaptureInner({ onClose, onCapture }: CameraCaptureProps) {
     }
 
     const start = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const image = await CapacitorCamera.getPhoto({
+            quality: 90,
+            allowEditing: false,
+            resultType: CameraResultType.Uri,
+            source: CameraSource.Camera,
+          })
+          if (image.webPath) {
+            const res = await fetch(image.webPath)
+            const blob = await res.blob()
+            cbRef.current.onClose()
+            void cbRef.current.onCapture(blob)
+            return
+          }
+        } catch {
+          cbRef.current.onClose()
+          return
+        }
+      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {

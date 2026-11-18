@@ -1,5 +1,6 @@
 "use client"
 
+import { registerCapacitorBluetoothPolyfill } from "@/lib/capacitor-bluetooth"
 import { useEffect } from "react"
 import type { Profile } from "@/lib/types"
 import { getSavedUserSession, saveUserSession } from "@/lib/local-db/db"
@@ -9,6 +10,7 @@ import { createClient } from "@/lib/supabase/client"
 
 export function PwaProvider({ profile }: { profile?: Profile | null }) {
   useEffect(() => {
+    registerCapacitorBluetoothPolyfill()
     if (typeof window === "undefined") return
 
     const isDev = process.env.NODE_ENV !== "production"

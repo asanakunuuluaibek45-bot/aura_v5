@@ -7,18 +7,18 @@ const config: CapacitorConfig = {
   server: {
     url: "https://golduchet.com",
     cleartext: false,
+    errorPath: "offline.html",
     allowNavigation: ["golduchet.com", "*.golduchet.com", "aura-crm-five.vercel.app"],
   },
   ios: {
     contentInset: "always",
+    limitsNavigationsToAppBoundDomains: false,
   },
   plugins: {
     BluetoothLe: {
       displayStringsProvider: true,
     },
-    Camera: {
-      // Native camera configuration
-    },
+    Camera: {},
   },
 };
 
