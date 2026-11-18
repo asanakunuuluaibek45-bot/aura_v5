@@ -11,10 +11,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
 
       - name: Install dependencies
@@ -32,9 +32,11 @@ jobs:
         run: |
           PLIST="ios/App/App/Info.plist"
           if [ -f "$PLIST" ]; then
-            /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Требуется для сканирования QR-кодов и штрихкодов товаров'" "$PLIST" || true
-            /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || true
-            /usr/libexec/PlistBuddy -c "Add :NSBluetoothPeripheralUsageDescription string 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || true
+            /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Требуется для фотосъемки товаров и сканирования QR-кодов и штрихкодов'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Требуется для фотосъемки товаров и сканирования QR-кодов и штрихкодов'" "$PLIST" || true
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Требуется для выбора фотографий товаров из галереи'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Требуется для выбора фотографий товаров из галереи'" "$PLIST" || true
+            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Требуется для сохранения фотографий товаров в галерею'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Требуется для сохранения фотографий товаров в галерею'" "$PLIST" || true
+            /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSBluetoothAlwaysUsageDescription 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || true
+            /usr/libexec/PlistBuddy -c "Add :NSBluetoothPeripheralUsageDescription string 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSBluetoothPeripheralUsageDescription 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || true
           fi
 
       - name: Build Xcode Archive (Unsigned)
@@ -47,7 +49,8 @@ jobs:
             -archivePath App.xcarchive \
             archive \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
 
       - name: Package Unsigned IPA
         run: |
