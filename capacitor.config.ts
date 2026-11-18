@@ -2,11 +2,12 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.auracrm.app",
-  appName: "Aura CRM",
+  appName: "Gold Uchet",
   webDir: "public",
   server: {
-    url: "https://aura-crm-five.vercel.app",
+    url: "https://golduchet.com",
     cleartext: false,
+    allowNavigation: ["golduchet.com", "*.golduchet.com", "aura-crm-five.vercel.app"],
   },
   ios: {
     contentInset: "always",
@@ -14,6 +15,9 @@ const config: CapacitorConfig = {
   plugins: {
     BluetoothLe: {
       displayStringsProvider: true,
+    },
+    Camera: {
+      // Native camera configuration
     },
   },
 };
