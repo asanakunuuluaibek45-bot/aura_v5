@@ -23,7 +23,9 @@
     "test:reports": "node --experimental-strip-types --test tests/sales-timeline.test.mjs",
     "test:receipt": "node --experimental-strip-types --test tests/receipt-type.test.mjs",
     "test:export": "node --experimental-strip-types --test tests/report-export.test.mjs tests/report-export-xlsx.test.mjs",
-    "test:reconciliation": "node --experimental-strip-types --test tests/report-reconciliation.test.mjs"
+    "test:reconciliation": "node --experimental-strip-types --test tests/report-reconciliation.test.mjs",
+    "cap:sync": "cap sync",
+    "cap:ios": "cap open ios"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -50,7 +52,10 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "tw-animate-css": "^1.4.0",
-    "xlsx": "file:vendor/xlsx-0.20.3.tgz"
+    "xlsx": "file:vendor/xlsx-0.20.3.tgz",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor-community/bluetooth-le": "^8.4.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -61,7 +66,8 @@
     "postcss": "^8.5",
     "supabase": "^2.116.0-beta.11",
     "tailwindcss": "^4.3.3",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "@capacitor/cli": "^8.6.0"
   },
   "overrides": {
     "hono": "4.13.16",
