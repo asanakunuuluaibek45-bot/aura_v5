@@ -12,7 +12,7 @@ const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfa
 
 export const metadata: Metadata = {
   title: "GOLDUCHET — Управление ювелирным магазином (Local-First)",
-  description: "GOLDUCHET — касса, витрина, склад и отчёты для ювелирного бизнеса. Полная работа без интернета.",
+  description: "Касса и основные операции GOLDUCHET доступны офлайн после первичной загрузки каталога; изменения синхронизируются при подключении.",
   icons: {
     icon: [{ url: "/favicon.svg?v=golduchet-1", type: "image/svg+xml" }, { url: "/favicon.ico" }],
     apple: [{ url: "/apple-touch-icon.png?v=golduchet-1", sizes: "180x180", type: "image/png" }],
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: "dark light",
-  themeColor: "#1c1830",
+  themeColor: "#29233d",
   viewportFit: "cover",
 }
 

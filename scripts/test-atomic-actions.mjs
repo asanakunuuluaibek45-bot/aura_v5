@@ -23,6 +23,11 @@ function load(path, mocks = {}) {
 const operations = load("lib/client-operation.ts", {
   "@/lib/local-db/id": load("lib/local-db/id.ts"),
 })
+const productSearch = load("lib/product-search.ts")
+const saleSearch = load("lib/sale-search.ts", {
+  "@/lib/product-search": productSearch,
+})
+const receiptType = load("lib/receipt-type.ts")
 const key = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 const product = { product_id: key, kind: "product", quantity: 1, name: "Кольцо", weight: 1, metal: "Золото", price: 100, cost: 40 }
 const saleInput = { items: [product], payment_method: "cash", discount: 0, bonus_used: 0, customer_name: "", customer_phone: "", client_op_id: key }
@@ -60,6 +65,9 @@ function actions({
   const mocks = {
     "next/cache": { revalidatePath: () => calls.push({ revalidate: true }) },
     "@/lib/rates": { DEFAULT_RATES: {} },
+    "@/lib/product-search": productSearch,
+    "@/lib/sale-search": saleSearch,
+    "@/lib/receipt-type": receiptType,
     "@/lib/client-operation": operations,
     "@/lib/supabase/request-context": {
       getRequestCrmContext: async () => ({
@@ -88,7 +96,7 @@ test("checkout delegates ALL writes and bonus/statistics changes to one RPC", as
   assert.equal(result.total, 100)
   assert.equal(result.clientOpId, key)
   assert.equal(calls.filter((c) => c.name).length, 1)
-  assert.equal(calls[0].name, "commit_offline_sale")
+  assert.equal(calls[0].name, "commit_sale_with_receipt")
   assert.equal(calls[0].args._client_op_id, key)
 })
 test("scrap checkout fetches rates once for all distinct metals", async () => {
@@ -108,7 +116,7 @@ test("scrap checkout fetches rates once for all distinct metals", async () => {
   })
   assert.deepEqual(dbQueries, ["metal_rates", "sales"])
   assert.deepEqual(
-    calls.find((call) => call.name === "commit_offline_sale").args._sale.items.map((item) => item.price),
+    calls.find((call) => call.name === "commit_sale_with_receipt").args._sale.items.map((item) => item.price),
     [6000, 9000, 200],
   )
 })

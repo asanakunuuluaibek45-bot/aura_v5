@@ -193,7 +193,14 @@ export function Dashboard({
       setIsOnline(true)
       if (isImpersonating) router.refresh()
     }
-    const handleOffline = () => setIsOnline(false)
+    const handleOffline = () => {
+      setIsOnline(false)
+      if (!isImpersonating) {
+        setActiveScreen("kassa")
+        window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
+        toast.info("Нет интернета — открыта офлайн-касса")
+      }
+    }
     setIsOnline(navigator.onLine)
     window.addEventListener("online", handleOnline)
     window.addEventListener("offline", handleOffline)
@@ -280,11 +287,17 @@ export function Dashboard({
   /** Переключение экрана: переход по отдельному URL. */
   const handleScreenChange = useCallback(
     (next: ScreenId) => {
+      if (!navigator.onLine && next !== "kassa" && !isImpersonating) {
+        setActiveScreen("kassa")
+        window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
+        toast.info("Без интернета доступна только касса")
+        return
+      }
       backCountRef.current = 0 // сбрасываем счётчик при навигации вперёд
       setActiveScreen(next)
       window.history.pushState({ [CRM_HISTORY_KEY]: next }, "", SCREEN_PATHS[next])
     },
-    [],
+    [isImpersonating],
   )
 
   /**
@@ -298,7 +311,13 @@ export function Dashboard({
         const next = (Object.entries(SCREEN_PATHS) as [ScreenId, string][]).find(
           ([, path]) => path === window.location.pathname,
         )?.[0]
-        if (next) setActiveScreen(next)
+        if (!next) return
+        if (!navigator.onLine && next !== "kassa" && !isImpersonating) {
+          setActiveScreen("kassa")
+          window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
+          return
+        }
+        setActiveScreen(next)
       }
 
       window.addEventListener("popstate", onSectionPopState)
@@ -313,6 +332,12 @@ export function Dashboard({
         ([, path]) => path === window.location.pathname,
       )?.[0]
       if (next && next !== "kassa") {
+        if (!navigator.onLine && !isImpersonating) {
+          window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
+          setActiveScreen("kassa")
+          toast.info("Без интернета доступна только касса")
+          return
+        }
         backCountRef.current = 0
         setActiveScreen(next)
         return
@@ -343,7 +368,7 @@ export function Dashboard({
 
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
-  }, [activeScreen])
+  }, [activeScreen, isImpersonating])
 
   /** «Выйти» — разлогиниваем пользователя и уводим на страницу входа. */
   const handleExitCrm = async () => {

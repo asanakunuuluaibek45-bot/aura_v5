@@ -5,7 +5,9 @@ const config: CapacitorConfig = {
   appName: "Gold Uchet",
   webDir: "public",
   server: {
-    url: "https://golduchet.com",
+    // Start on the main sales screen. The service worker can then restore this
+    // cached route on a later offline launch instead of loading the public home page.
+    url: "https://golduchet.com/crm/pos",
     cleartext: false,
     errorPath: "offline.html",
     allowNavigation: ["golduchet.com", "*.golduchet.com", "aura-crm-five.vercel.app"],

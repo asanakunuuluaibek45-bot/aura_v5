@@ -75,14 +75,18 @@ const PRECACHE_SHELL_URLS = [
 ]
 
 const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#29233d">
 <title>GOLDUCHET — офлайн</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#0f1115;color:#e7e7ea}div{text-align:center;padding:24px}button{margin-top:16px;padding:10px 18px;border:0;border-radius:8px;background:#c9a227;color:#1a1a1a;font-weight:600}</style>
+<style>:root{color-scheme:dark;--bg:#1c1830;--card:#29233d;--text:#f3f1f7;--muted:#b2acbf;--accent:#c9a227}
+:root[data-theme="light"]{color-scheme:light;--bg:#fbfaff;--card:#fff;--text:#302d3d;--muted:#696579;--accent:#7055d9}
+@media(prefers-color-scheme:light){:root:not([data-theme]){color-scheme:light;--bg:#fbfaff;--card:#fff;--text:#302d3d;--muted:#696579;--accent:#7055d9}}
+*{box-sizing:border-box}html,body{min-height:100%;overscroll-behavior:none}body{margin:0;min-height:100vh;min-height:100svh;min-height:100dvh;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:var(--bg);color:var(--text)}div{text-align:center;max-width:420px;padding:24px;border-radius:20px;background:var(--card)}p{color:var(--muted);line-height:1.5}button{margin-top:16px;padding:12px 18px;border:0;border-radius:8px;background:var(--accent);color:#1a1a1a;font-weight:600}</style>
 </head><body><div>
 <h1>Нет подключения</h1>
-<p>Откройте приложение снова, когда появится сеть.</p>
+<p>Для первого запуска и загрузки каталога нужен интернет. После входа и первичной загрузки откройте кассу повторно.</p>
 <button onclick="location.reload()">Повторить</button>
-</div></body></html>`
+</div><script>try{var s=localStorage.getItem("aura-theme"),t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]').content=t==="dark"?"#29233d":"#fbfaff"}catch(e){}</script></body></html>`
 
 // ---------------------------------------------------------------------------
 // Install / activate
@@ -376,39 +380,94 @@ async function handleNavigation(request, url) {
     const finalPath = network?.url ? new URL(network.url).pathname : ''
     const authLookupFailed = finalPath.startsWith('/auth/login') && url.pathname.startsWith('/crm/')
     if (authLookupFailed && (!navigator.onLine || await cloudWasRecentlyUnreachable())) {
-      const cached = await findCachedShell(cache, url.pathname)
-      if (cached) {
-        notifyClients({ type: 'AURA_OFFLINE_SHELL', path: url.pathname })
-        return cached
-      }
+      const fallback = await offlineNavigationFallback(cache, url)
+      if (fallback) return fallback
     }
 
     // When Next's server-side auth/data checks fail because Supabase is unreachable,
     // prefer the last good document over an error page. Do not mask auth redirects or
     // ordinary 4xx responses (for example, a genuinely missing page).
     if (network && (network.status >= 500 || network.status === 408 || network.status === 429)) {
-      const cached = await findCachedShell(cache, url.pathname)
-      if (cached) {
-        notifyClients({ type: 'AURA_OFFLINE_SHELL', path: url.pathname })
-        return cached
-      }
+      const fallback = await offlineNavigationFallback(cache, url)
+      if (fallback) return fallback
     }
     return network
   } catch {
-    // Offline (or the network is too slow): serve the precached interactive shell.
-    const cached = await findCachedShell(cache, url.pathname)
-
-    if (cached) {
-      // Tell the app it started from cache so it can show the offline/stale badge.
-      notifyClients({ type: 'AURA_OFFLINE_SHELL', path: url.pathname })
-      return cached
-    }
+    // Offline (or the network is too slow): open the cached cashier first.
+    const fallback = await offlineNavigationFallback(cache, url)
+    if (fallback) return fallback
 
     return new Response(OFFLINE_FALLBACK_HTML, {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     })
   }
+}
+
+/**
+ * The native app and the installable PWA both launch on /crm/pos. If iOS restores
+ * the website root (or a different CRM route) while offline, send the navigation
+ * to that known cached route instead of rendering an unrelated cached server page.
+ * Logout clears the shell cache, so this fallback only exists for a previously
+ * authenticated local profile.
+ */
+async function offlineNavigationFallback(cache, url) {
+  const pathname = url.pathname
+  const posPath = '/crm/pos'
+  const isPosRoute = pathname === posPath || pathname === '/pos'
+  const isCrmRoute =
+    pathname === '/crm' ||
+    pathname.startsWith('/crm/') ||
+    [
+      '/pos',
+      '/showcase',
+      '/inventory',
+      '/customers',
+      '/stores',
+      '/notifications',
+      '/suppliers',
+      '/cabinet',
+      '/reports',
+    ].includes(pathname)
+  const shouldOpenCashier =
+    pathname === '/' ||
+    pathname.startsWith('/auth/') ||
+    (isCrmRoute && !isPosRoute)
+
+  if (shouldOpenCashier) {
+    const cachedPos = await findExactCachedShell(cache, posPath)
+    if (cachedPos) {
+      notifyClients({ type: 'AURA_OFFLINE_SHELL', path: posPath })
+      return Response.redirect(new URL(posPath, self.location.origin), 302)
+    }
+
+    // Do not expose a cached reports/inventory page when the cashier shell has
+    // not been saved. The generic offline page is safer and more honest.
+    if (isCrmRoute) return null
+  }
+
+  const cached = await findCachedShell(cache, pathname)
+  if (!cached) return null
+
+  notifyClients({ type: 'AURA_OFFLINE_SHELL', path: pathname })
+  return cached
+}
+
+async function findExactCachedShell(cache, pathname) {
+  const keys = await caches.keys()
+  const shellCaches = keys
+    .filter((key) => key.startsWith('aura-crm-shell-'))
+    .sort((a, b) => cacheVersion(b, 'aura-crm-shell-') - cacheVersion(a, 'aura-crm-shell-'))
+
+  for (const cacheName of shellCaches) {
+    const candidateCache = cacheName === SHELL_CACHE ? cache : await caches.open(cacheName)
+    const match = await candidateCache.match(shellCacheKey(pathname), {
+      ignoreSearch: true,
+      ignoreVary: true,
+    })
+    if (match) return match
+  }
+  return null
 }
 
 async function findCachedShell(cache, pathname) {

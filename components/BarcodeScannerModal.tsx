@@ -674,6 +674,7 @@ export function BarcodeScannerModal({
       className={`fixed inset-0 z-[100] flex h-[100dvh] min-h-[100svh] w-screen flex-col text-white ${
         nativeScannerActive ? "bg-transparent" : "bg-black"
       }`}
+      style={{ height: "100dvh", minHeight: "100svh", touchAction: "none" }}
       onClick={close}
     >
       <div
@@ -683,14 +684,14 @@ export function BarcodeScannerModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Шапка */}
-        <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/85 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
+        <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between border-b border-white/10 bg-black/90 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pb-3">
           <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Сканер кодов
           </span>
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 rounded-full bg-black/40 hover:bg-white/20 text-white"
+            className="h-11 w-11 rounded-full bg-black/70 text-white hover:bg-white/20"
             onClick={close}
             aria-label="Закрыть"
           >
@@ -778,7 +779,9 @@ export function BarcodeScannerModal({
                 e.stopPropagation()
                 void toggleTorch()
               }}
-              className="absolute top-16 right-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md active:scale-95 transition-transform"
+              aria-label={torchOn ? "Выключить вспышку" : "Включить вспышку"}
+              aria-pressed={torchOn}
+              className="absolute right-4 top-[calc(env(safe-area-inset-top,0px)+5rem)] z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur-md transition-transform active:scale-95"
             >
               {torchOn ? <Zap className="h-5 w-5 text-yellow-400 fill-yellow-400" /> : <ZapOff className="h-5 w-5" />}
             </button>

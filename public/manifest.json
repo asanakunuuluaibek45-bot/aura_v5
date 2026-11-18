@@ -1,11 +1,11 @@
 {
   "name": "GOLDUCHET",
   "short_name": "GOLDUCHET",
-  "description": "Автономная Local-First CRM-система для ювелирного ритейла",
+  "description": "Local-First касса доступна офлайн после первичной загрузки каталога.",
   "start_url": "/crm/pos",
   "display": "standalone",
-  "background_color": "#FAFAF9",
-  "theme_color": "#125059",
+  "background_color": "#1c1830",
+  "theme_color": "#29233d",
   "orientation": "any",
   "icons": [
     {

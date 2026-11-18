@@ -55,6 +55,8 @@ export async function startNativeScan(
   const { BarcodeScanner, BarcodeFormat, LensFacing } = await loadPlugin()
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
 
+  const scrollY = typeof window !== "undefined" ? window.scrollY : 0
+  document.documentElement.style.setProperty("--barcode-scanner-scroll-y", `${-scrollY}px`)
   document.documentElement.classList.add(NATIVE_SCANNER_BODY_CLASS)
   document.body.classList.add(NATIVE_SCANNER_BODY_CLASS)
 
@@ -64,6 +66,7 @@ export async function startNativeScan(
   const cleanupDom = () => {
     document.documentElement.classList.remove(NATIVE_SCANNER_BODY_CLASS)
     document.body.classList.remove(NATIVE_SCANNER_BODY_CLASS)
+    document.documentElement.style.removeProperty("--barcode-scanner-scroll-y")
   }
 
   try {

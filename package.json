@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test:critical": "node --test tests/critical-regressions.test.mjs",
     "test:ios-optimizations": "node --test tests/ios-optimizations.test.mjs",
+    "test:offline-startup": "node --test tests/offline-startup.test.mjs",
     "test:logout-protection": "node --experimental-strip-types --test tests/logout-protection.test.mjs",
     "test:lockfile": "node --test tests/lockfile-registry.test.mjs",
     "test:search-loading": "node --test tests/search-loading.test.mjs",
