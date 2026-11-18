@@ -51,7 +51,7 @@ export function VirtualizedSkladTable({
   return (
     <div className="rounded-md border border-border bg-card">
       {/* Sticky Table Header */}
-      <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-border text-xs font-semibold text-muted-foreground bg-muted/40 sticky top-0 z-10">
+      <div className="isolate sticky top-0 z-20 grid grid-cols-12 gap-2 border-b border-border bg-muted px-4 py-3 text-xs font-semibold text-muted-foreground">
         <div className="col-span-3 sm:col-span-3">Товар / Артикул</div>
         <div className="col-span-2 sm:col-span-2">Категория</div>
         <div className="col-span-2 sm:col-span-2 text-right">Вес / Проба</div>

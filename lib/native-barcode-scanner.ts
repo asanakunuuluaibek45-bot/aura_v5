@@ -50,6 +50,7 @@ export type NativeScanSession = {
 
 export async function startNativeScan(
   onBarcodes: (results: NativeScanResult[]) => void,
+  facing: "environment" | "user" = "environment",
 ): Promise<NativeScanSession> {
   const { BarcodeScanner, BarcodeFormat, LensFacing } = await loadPlugin()
   const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
@@ -89,7 +90,7 @@ export async function startNativeScan(
         BarcodeFormat.UpcA,
         BarcodeFormat.DataMatrix,
       ],
-      lensFacing: LensFacing.Back,
+      lensFacing: facing === "user" ? LensFacing.Front : LensFacing.Back,
     })
   } catch (error) {
     stopped = true

@@ -61,8 +61,8 @@ export function AppHeader({
     : currentShopName ?? profile.shop_name ?? "Магазин"
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full items-center gap-2 px-3 sm:gap-3 sm:px-4 md:px-6">
+    <header className="sticky top-0 z-40 isolate border-b border-border bg-background">
+      <div className="mx-auto flex h-[calc(4rem+env(safe-area-inset-top))] w-full items-center gap-2 pt-[env(safe-area-inset-top)] px-3 sm:gap-3 sm:px-4 md:px-6">
         <Button
           variant="ghost"
           size="icon"

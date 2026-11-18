@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:critical": "node --test tests/critical-regressions.test.mjs",
+    "test:ios-optimizations": "node --test tests/ios-optimizations.test.mjs",
     "test:logout-protection": "node --experimental-strip-types --test tests/logout-protection.test.mjs",
     "test:lockfile": "node --test tests/lockfile-registry.test.mjs",
     "test:search-loading": "node --test tests/search-loading.test.mjs",
@@ -24,8 +25,8 @@
     "test:receipt": "node --experimental-strip-types --test tests/receipt-type.test.mjs",
     "test:export": "node --experimental-strip-types --test tests/report-export.test.mjs tests/report-export-xlsx.test.mjs",
     "test:reconciliation": "node --experimental-strip-types --test tests/report-reconciliation.test.mjs",
-    "cap:sync": "cap sync",
-    "cap:ios": "cap open ios"
+    "cap:sync": "cap sync && node scripts/sync-ios-icon.mjs",
+    "cap:ios": "node scripts/sync-ios-icon.mjs && cap open ios"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

@@ -28,6 +28,9 @@ jobs:
             npx cap sync ios
           fi
 
+      - name: Set GOLDUCHET iOS App Icon
+        run: node scripts/sync-ios-icon.mjs
+
       - name: Set iOS Permissions in Info.plist
         run: |
           PLIST="ios/App/App/Info.plist"

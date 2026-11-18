@@ -1,23 +1,32 @@
 # Нативный сканер QR/штрихкодов на iOS (ML Kit)
 
-В iOS-приложении (Capacitor) сканер `components/BarcodeScannerModal.tsx` автоматически
-переключается на `@capacitor-mlkit/barcode-scanning` (Google ML Kit) — скорость как у
-`BarcodeDetector` на Android. В браузере/PWA и на Android работает прежняя логика
-(BarcodeDetector → ZXing). Обёртка: `lib/native-barcode-scanner.ts`.
+В iOS-приложении (Capacitor) сканер `components/BarcodeScannerModal.tsx` сначала
+использует `@capacitor-mlkit/barcode-scanning` (Google ML Kit). Если плагин недоступен
+или не запускается, остаётся браузерный резервный путь. В браузере/PWA и на Android
+работает прежняя логика (BarcodeDetector → ZXing). Обёртка: `lib/native-barcode-scanner.ts`.
 
 ## Сборка iOS
 1. `npm install`
-2. `npx cap sync ios` (если папки ios нет: `npx cap add ios`)
-3. В `ios/App/App/Info.plist` добавьте:
+2. Если папки `ios` ещё нет: `npx cap add ios`.
+3. `npm run cap:sync` — синхронизирует плагины и копирует иконки в Xcode.
+4. `npm run cap:ios` — открывает Xcode с актуальной иконкой.
+5. В `ios/App/App/Info.plist` проверьте наличие:
    ```xml
    <key>NSCameraUsageDescription</key>
-   <string>Камера нужна для сканирования QR-кодов и штрихкодов товаров</string>
+   <string>Камера нужна для съёмки товаров и сканирования QR-кодов и штрихкодов</string>
    ```
-4. Минимальная версия iOS — 15.5 (требование ML Kit), в Xcode: Deployment Target 15.5+.
-5. `npm run cap:ios` → Run.
+6. Минимальная версия iOS — 15.5 (требование ML Kit), в Xcode: Deployment Target 15.5+.
+7. В Xcode выберите iPhone 11 (или подключённое устройство) и нажмите Run.
 
 ## Важно
-Приложение грузит `https://golduchet.com`, поэтому изменения веб-части нужно задеплоить
-(Vercel), а нативный плагин — пересобрать в Xcode. Камера рендерится под WebView:
-на время скана фон страницы прозрачный (CSS-класс `barcode-scanner-active` в `app/globals.css`).
-Поддерживаются одиночный и непрерывный режим (ревизия), фонарик и подсветка кодов.
+Приложение загружает `https://golduchet.com`, поэтому изменения веб-интерфейса
+появятся после деплоя Next.js-приложения; нативный ML Kit и иконка требуют
+`npm run cap:sync` и пересборки в Xcode. Камера рендерится под WebView:
+на время сканирования фон страницы прозрачен через класс `barcode-scanner-active`
+в `app/globals.css`. Поддерживаются одиночный и непрерывный режим (ревизия),
+фонарик и переключение объектива.
+
+Иконки находятся в `resources/ios/AppIcon.appiconset` и подготовлены из
+`public/icon.svg`. Скрипт `scripts/sync-ios-icon.mjs` копирует все размеры в
+`ios/App/App/Assets.xcassets/AppIcon.appiconset`; он вызывается при `npm run cap:sync`
+и перед открытием Xcode командой `npm run cap:ios`.

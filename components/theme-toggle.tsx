@@ -20,6 +20,10 @@ export function ThemeToggle() {
     localStorage.setItem(STORAGE_KEY, next)
     document.documentElement.classList.toggle("dark", next === "dark")
     document.documentElement.style.colorScheme = next
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      "content",
+      next === "dark" ? "#29233d" : "#fbfaff",
+    )
   }
 
   return (

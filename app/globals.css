@@ -144,11 +144,25 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    background-color: var(--background);
+  }
   body {
     @apply bg-background text-foreground;
     font-size: 1rem;
     line-height: 1.5;
   }
+}
+
+/* Native ML Kit draws its camera preview behind the iOS WebView. */
+html.barcode-scanner-active,
+body.barcode-scanner-active {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.barcode-scanner-active {
+  --background: transparent;
 }
 
 /* Keep labels and helper text readable without changing the whole layout. */

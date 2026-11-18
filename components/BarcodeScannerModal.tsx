@@ -20,6 +20,12 @@ import {
   type OverlayTrack,
   type ScanPoint,
 } from "@/lib/scanner-overlay"
+import {
+  canUseNativeScanner,
+  ensureNativeCameraPermission,
+  startNativeScan,
+  type NativeScanSession,
+} from "@/lib/native-barcode-scanner"
 
 interface BarcodeScannerProps {
   onClose: () => void
@@ -74,6 +80,8 @@ export function BarcodeScannerModal({
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const activeStreamRef = useRef<MediaStream | null>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
+  const nativeSessionRef = useRef<NativeScanSession | null>(null)
+  const nativeStopPromiseRef = useRef<Promise<void>>(Promise.resolve())
   const fileRef = useRef<HTMLInputElement>(null)
   const closedRef = useRef(false)
   const continuousCodesRef = useRef(new Map<string, number>())
@@ -88,6 +96,7 @@ export function BarcodeScannerModal({
   const [error, setError] = useState<string | null>(null)
   const [manual, setManual] = useState("")
   const [manualMode, setManualMode] = useState(false)
+  const [nativeScannerActive, setNativeScannerActive] = useState(false)
 
   // Флаг: действительно ли текущий запущенный трек является селфи-камерой
   const [isFrontCamera, setIsFrontCamera] = useState(false)
@@ -209,6 +218,12 @@ export function BarcodeScannerModal({
     }
     controlsRef.current = null
 
+    const nativeSession = nativeSessionRef.current
+    nativeSessionRef.current = null
+    if (nativeSession) {
+      nativeStopPromiseRef.current = nativeSession.stop().catch(() => undefined)
+    }
+
     const stream = activeStreamRef.current
     if (stream) {
       stream.getTracks().forEach((track) => {
@@ -291,6 +306,16 @@ export function BarcodeScannerModal({
   }, [])
 
   const toggleTorch = async () => {
+    const nativeSession = nativeSessionRef.current
+    if (nativeSession) {
+      try {
+        setTorchOn(await nativeSession.toggleTorch())
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+
     const track = activeStreamRef.current?.getVideoTracks()[0]
     if (!track) return
     try {
@@ -338,12 +363,51 @@ export function BarcodeScannerModal({
 
     const start = async () => {
       stopEverything()
+      await nativeStopPromiseRef.current
+      if (cancelled || closedRef.current) return
       setError(null)
       setIsBadQuality(false)
       checksumErrorCountRef.current = 0
       setTorchOn(false)
       setTorchAvailable(false)
 
+      if (canUseNativeScanner()) {
+        let permissionGranted = false
+        try {
+          permissionGranted = await ensureNativeCameraPermission()
+        } catch {
+          permissionGranted = false
+        }
+        if (cancelled || closedRef.current) return
+        if (!permissionGranted) {
+          setError("Разрешите доступ к камере в настройках iPhone, чтобы сканировать коды.")
+          return
+        }
+
+        try {
+          setNativeScannerActive(true)
+          const nativeSession = await startNativeScan((results) => {
+            if (cancelled || closedRef.current) return
+            for (const result of results) {
+              handleResult(result.rawValue)
+              if (!continuousScan) break
+            }
+          }, facing)
+          if (cancelled || closedRef.current) {
+            await nativeSession.stop()
+            setNativeScannerActive(false)
+            return
+          }
+          nativeSessionRef.current = nativeSession
+          setTorchAvailable(await nativeSession.isTorchAvailable())
+          return
+        } catch {
+          // Retain the browser scanner as a fallback if ML Kit cannot start.
+          setNativeScannerActive(false)
+        }
+      }
+
+      setNativeScannerActive(false)
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
         setError("Браузер не поддерживает камеру или соединение не защищено (HTTPS).")
         return
@@ -607,15 +671,19 @@ export function BarcodeScannerModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex h-screen w-screen flex-col bg-black text-white"
+      className={`fixed inset-0 z-[100] flex h-[100dvh] min-h-[100svh] w-screen flex-col text-white ${
+        nativeScannerActive ? "bg-transparent" : "bg-black"
+      }`}
       onClick={close}
     >
       <div
-        className="relative flex h-full w-full flex-col justify-between overflow-hidden bg-black"
+        className={`relative flex h-full w-full flex-col justify-between overflow-hidden ${
+          nativeScannerActive ? "bg-transparent" : "bg-black"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Шапка */}
-        <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-md">
+        <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/85 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
           <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Сканер кодов
           </span>
@@ -632,7 +700,9 @@ export function BarcodeScannerModal({
 
         {/* Область камеры */}
         <div
-          className="relative flex-1 w-full overflow-hidden bg-black select-none cursor-pointer"
+          className={`relative flex-1 w-full overflow-hidden select-none cursor-pointer ${
+            nativeScannerActive ? "bg-transparent" : "bg-black"
+          }`}
           onClick={handleTapToFocus}
         >
           <video
@@ -641,6 +711,8 @@ export function BarcodeScannerModal({
             playsInline
             muted
             className={`h-full w-full object-cover transform-gpu ${
+              nativeScannerActive ? "invisible" : ""
+            } ${
               isFrontCamera ? "scale-x-[-1]" : ""
             }`}
           />
@@ -722,7 +794,7 @@ export function BarcodeScannerModal({
         </div>
 
         {/* Панель управления */}
-        <div className="z-20 space-y-3 p-4 bg-black/80 backdrop-blur-lg border-t border-white/10 shrink-0">
+        <div className="z-20 shrink-0 space-y-3 border-t border-white/10 bg-black/85 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <div className="flex gap-2">
             <Button
               variant="outline"

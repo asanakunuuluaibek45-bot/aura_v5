@@ -191,8 +191,8 @@ export function AppNav({
       <aside
         aria-label="Основная навигация"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex h-svh flex-col border-r border-border bg-background shadow-xl transition-[transform,width] duration-200 ease-out w-[280px]",
-          "lg:sticky lg:top-0 lg:z-10 lg:h-screen lg:shrink-0 lg:shadow-none",
+          "fixed inset-y-0 left-0 z-50 flex h-[100dvh] max-h-[100dvh] min-h-0 flex-col border-r border-border bg-background pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-xl transition-[transform,width] duration-200 ease-out w-[280px]",
+          "lg:sticky lg:top-0 lg:z-10 lg:h-screen lg:max-h-none lg:shrink-0 lg:pt-0 lg:pb-0 lg:shadow-none",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
           collapsed && "lg:w-[76px]"
         )}
@@ -248,7 +248,7 @@ export function AppNav({
         </div>
 
         {/* Navigation */}
-        <nav aria-label="Разделы CRM" className="min-h-0 flex-1 overflow-y-auto px-2 py-4">
+        <nav aria-label="Разделы CRM" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-4">
           <div className="space-y-5">
             {GROUPS.map((group) => {
               const groupItems = visibleItems.filter((i) => i.group === group.id)
@@ -313,7 +313,7 @@ export function AppNav({
         </nav>
 
         {/* Bottom area */}
-        <div className="shrink-0 border-t border-border p-2">
+        <div className="relative z-10 shrink-0 border-t border-border bg-background p-2">
           <button
             type="button"
             onClick={() => {
@@ -421,3 +421,4 @@ export function AppNav({
     </>
   )
 }
+
