@@ -55,7 +55,8 @@
     "xlsx": "file:vendor/xlsx-0.20.3.tgz",
     "@capacitor/core": "^8.6.0",
     "@capacitor/ios": "^8.6.0",
-    "@capacitor-community/bluetooth-le": "^8.4.0"
+    "@capacitor-community/bluetooth-le": "^8.4.0",
+    "@capacitor/camera": "^8.2.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
