@@ -16,7 +16,12 @@ const config: CapacitorConfig = {
   },
   plugins: {
     BluetoothLe: {
-      displayStringsProvider: true,
+      displayStrings: {
+        scanning: "Поиск устройств...",
+        cancel: "Отмена",
+        availableDevices: "Доступные устройства",
+        noDeviceFound: "Устройства не найдены",
+      },
     },
     Camera: {},
   },
