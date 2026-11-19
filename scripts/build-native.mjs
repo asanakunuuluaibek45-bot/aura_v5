@@ -13,7 +13,16 @@ if (targetPlatform && !["ios", "android"].includes(targetPlatform)) {
 }
 
 // Match Next.js env loading so local .env files and Replit Secrets both work.
-const { loadEnvConfig } = await import("@next/env");
+const nextEnv = await import("@next/env");
+const loadEnvConfig =
+  typeof nextEnv.loadEnvConfig === "function"
+    ? nextEnv.loadEnvConfig
+    : typeof nextEnv.default?.loadEnvConfig === "function"
+      ? nextEnv.default.loadEnvConfig
+      : null;
+if (!loadEnvConfig) {
+  throw new TypeError("@next/env does not expose loadEnvConfig.");
+}
 loadEnvConfig(projectRoot);
 
 for (const key of requiredPublicConfig) {
