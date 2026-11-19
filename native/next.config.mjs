@@ -8,7 +8,7 @@ const projectRoot = path.resolve(nativeDir, "..");
 const nextConfig = {
   output: "export",
   trailingSlash: true,
-  distDir: ".next-native",
+  distDir: "out",
   poweredByHeader: false,
   images: { unoptimized: true },
   env: { NEXT_PUBLIC_BUILD_TARGET: "native" },
