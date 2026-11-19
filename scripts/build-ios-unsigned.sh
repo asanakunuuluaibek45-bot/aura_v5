@@ -15,11 +15,6 @@ fi
 
 npm install --legacy-peer-deps
 npm run build:native -- ios
-if [[ -d "ios" ]]; then
-  npx cap sync ios
-else
-  npx cap add ios
-fi
 node scripts/sync-ios-icon.mjs
 
 PLIST="$ROOT_DIR/ios/App/App/Info.plist"
