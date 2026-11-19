@@ -14,6 +14,7 @@ if ! command -v xcodebuild >/dev/null 2>&1; then
 fi
 
 npm install --legacy-peer-deps
+npm run build:native -- ios
 if [[ -d "ios" ]]; then
   npx cap sync ios
 else
