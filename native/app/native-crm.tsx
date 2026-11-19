@@ -109,9 +109,9 @@ function NativeLogin({
       const profile = { ...account, email: data.user.email ?? email.trim() } as Profile;
       await saveUserSession({
         userId: profile.id,
-        email: profile.email,
+        email: profile.email ?? undefined,
         profile,
-        shopId: profile.shop_id,
+        shopId: profile.shop_id ?? undefined,
         session: data.session,
       });
       onAuthenticated(profile);
@@ -454,9 +454,9 @@ export function NativeCrm() {
         const nextProfile = { ...remoteProfile, email: authData.user.email ?? undefined } as Profile;
         await saveUserSession({
           userId: nextProfile.id,
-          email: nextProfile.email,
+          email: nextProfile.email ?? undefined,
           profile: nextProfile,
-          shopId: nextProfile.shop_id,
+          shopId: nextProfile.shop_id ?? undefined,
         });
         if (!cancelled) {
           setProfile(nextProfile);

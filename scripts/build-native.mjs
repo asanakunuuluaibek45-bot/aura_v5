@@ -6,9 +6,23 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requiredPublicConfig = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
+const targetPlatform = process.argv[2];
+if (targetPlatform && !["ios", "android"].includes(targetPlatform)) {
+  console.error("Native build target must be ios or android.");
+  process.exit(1);
+}
 
 // Match Next.js env loading so local .env files and Replit Secrets both work.
-const { loadEnvConfig } = await import("@next/env");
+const nextEnv = await import("@next/env");
+const loadEnvConfig =
+  typeof nextEnv.loadEnvConfig === "function"
+    ? nextEnv.loadEnvConfig
+    : typeof nextEnv.default?.loadEnvConfig === "function"
+      ? nextEnv.default.loadEnvConfig
+      : null;
+if (!loadEnvConfig) {
+  throw new TypeError("@next/env does not expose loadEnvConfig.");
+}
 loadEnvConfig(projectRoot);
 
 for (const key of requiredPublicConfig) {
@@ -41,10 +55,14 @@ try {
   await run(npx, ["next", "build", "native", "--webpack"]);
   await rm(path.join(projectRoot, "out"), { recursive: true, force: true });
   await cp(path.join(projectRoot, "native", "out"), path.join(projectRoot, "out"), { recursive: true });
-  if (!existsSync(path.join(projectRoot, "android"))) {
+  const androidDir = path.join(projectRoot, "android");
+  const iosDir = path.join(projectRoot, "ios");
+  if (targetPlatform === "ios" && !existsSync(iosDir)) {
+    await run(npx, ["cap", "add", "ios"]);
+  } else if (targetPlatform !== "ios" && !existsSync(androidDir)) {
     await run(npx, ["cap", "add", "android"]);
   }
-  await run(npx, ["cap", "sync"]);
+  await run(npx, ["cap", "sync", ...(targetPlatform ? [targetPlatform] : [])]);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Native build failed.");
   process.exitCode = 1;

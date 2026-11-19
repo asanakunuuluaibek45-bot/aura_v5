@@ -1,3 +1,4 @@
+import { KeyboardResize } from "@capacitor/keyboard";
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const nativeBuild = process.env.BUILD_TARGET === "native";
@@ -34,7 +35,7 @@ const config: CapacitorConfig = {
     },
     Camera: {},
     Keyboard: {
-      resize: "native",
+      resize: KeyboardResize.Native,
     },
   },
 };

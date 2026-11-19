@@ -17,56 +17,11 @@ jobs:
           node-version: 22
           cache: "npm"
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Add or Sync Capacitor iOS
-        run: |
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          else
-            npx cap sync ios
-          fi
-
-      - name: Set GOLDUCHET iOS App Icon
-        run: node scripts/sync-ios-icon.mjs
-
-      - name: Set iOS Permissions in Info.plist
-        run: |
-          PLIST="ios/App/App/Info.plist"
-          if [ -f "$PLIST" ]; then
-            /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Требуется для фотосъемки товаров и сканирования QR-кодов и штрихкодов'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'Требуется для фотосъемки товаров и сканирования QR-кодов и штрихкодов'" "$PLIST" || true
-            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Требуется для выбора фотографий товаров из галереи'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'Требуется для выбора фотографий товаров из галереи'" "$PLIST" || true
-            /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 'Требуется для сохранения фотографий товаров в галерею'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription 'Требуется для сохранения фотографий товаров в галерею'" "$PLIST" || true
-            /usr/libexec/PlistBuddy -c "Add :NSBluetoothAlwaysUsageDescription string 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSBluetoothAlwaysUsageDescription 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || true
-            /usr/libexec/PlistBuddy -c "Add :NSBluetoothPeripheralUsageDescription string 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || /usr/libexec/PlistBuddy -c "Set :NSBluetoothPeripheralUsageDescription 'Требуется для подключения к Bluetooth-термопринтеру Niimbot'" "$PLIST" || true
-          fi
-
-      - name: Build Xcode Archive (Unsigned)
-        run: |
-          cd ios/App
-          ls -la
-          if [ -d "App.xcworkspace" ]; then
-            TARGET_FLAG="-workspace App.xcworkspace"
-          else
-            TARGET_FLAG="-project App.xcodeproj"
-          fi
-          xcodebuild $TARGET_FLAG \
-            -scheme App \
-            -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath App.xcarchive \
-            archive \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
-
-      - name: Package Unsigned IPA
-        run: |
-          cd ios/App
-          mkdir -p Payload
-          cp -r App.xcarchive/Products/Applications/*.app Payload/
-          zip -r ../../aura-crm-ios.ipa Payload
+      - name: Build unsigned iOS IPA
+        run: bash scripts/build-ios-unsigned.sh
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
