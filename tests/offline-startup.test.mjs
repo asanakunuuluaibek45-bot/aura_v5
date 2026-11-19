@@ -132,7 +132,8 @@ test("native camera controls do not overlap and the viewport cannot rubber-band"
   const css = read("app/globals.css")
   const capacitor = read("capacitor.config.ts")
 
-  assert.match(capacitor, /https:\/\/golduchet\.com\/crm\/pos/)
+  assert.match(capacitor, /webDir: nativeBuild \? "out" : "public"/)
+  assert.doesNotMatch(capacitor, /url:\s*["']https:\/\/golduchet\.com/)
   assert.match(modal, /aria-label="Закрыть"/)
   assert.match(modal, /aria-label=\{torchOn \? "Выключить вспышку" : "Включить вспышку"\}/)
   assert.match(modal, /top-\[calc\(env\(safe-area-inset-top,0px\)\+5rem\)\]/)

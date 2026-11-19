@@ -7,6 +7,7 @@
  * поэтому на время сканирования фон страницы делается прозрачным.
  */
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
+import { Haptics, ImpactStyle } from "@capacitor/haptics"
 
 export type NativeScanPoint = { x: number; y: number }
 export type NativeScanResult = { rawValue: string; points: NativeScanPoint[] }
@@ -21,12 +22,12 @@ function loadPlugin() {
 
 export const NATIVE_SCANNER_BODY_CLASS = "barcode-scanner-active"
 
-/** Нативный ML Kit используем только в iOS-оболочке, где плагин зарегистрирован. */
+/** Нативный ML Kit используем в iOS и Android Capacitor-оболочках. */
 export function canUseNativeScanner(): boolean {
   try {
     return (
       Capacitor.isNativePlatform() &&
-      Capacitor.getPlatform() === "ios" &&
+      (Capacitor.getPlatform() === "ios" || Capacitor.getPlatform() === "android") &&
       Capacitor.isPluginAvailable("BarcodeScanner")
     )
   } catch {
@@ -62,6 +63,7 @@ export async function startNativeScan(
 
   let listener: PluginListenerHandle | null = null
   let stopped = false
+  let lastHapticAt = 0
 
   const cleanupDom = () => {
     document.documentElement.classList.remove(NATIVE_SCANNER_BODY_CLASS)
@@ -80,7 +82,14 @@ export async function startNativeScan(
         const points = (barcode.cornerPoints ?? []).map(([x, y]) => ({ x: x / dpr, y: y / dpr }))
         results.push({ rawValue, points })
       }
-      if (results.length) onBarcodes(results)
+      if (results.length) {
+        const now = Date.now()
+        if (now - lastHapticAt > 450) {
+          lastHapticAt = now
+          void Haptics.impact({ style: ImpactStyle.Light }).catch(() => {})
+        }
+        onBarcodes(results)
+      }
     })
 
     await BarcodeScanner.startScan({

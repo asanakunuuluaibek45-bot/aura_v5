@@ -1,4 +1,5 @@
 import { openDB, deleteDB, type IDBPDatabase } from 'idb'
+import { Capacitor } from '@capacitor/core'
 import type { TableName } from './schema'
 import { SHOP_SCOPED_TABLES } from './schema'
 
@@ -70,10 +71,13 @@ export async function saveUserSession(data: Omit<SavedUserSession, 'id' | 'updat
   const prev = (await db.get('user_session', CURRENT_USER_SESSION_ID)) as SavedUserSession | undefined
   // Не затираем сохранённые токены, если вызвали без session (например, из PwaProvider).
   const keepPrev = prev && prev.userId === data.userId
+  const isNative = Capacitor.isNativePlatform()
   await db.put('user_session', {
     ...(keepPrev ? prev : {}),
     ...data,
-    session: data.session ?? (keepPrev ? prev?.session : undefined),
+    // Native auth tokens live in Capacitor Preferences through Supabase's
+    // storage adapter, not alongside the offline profile in IndexedDB.
+    session: isNative ? undefined : data.session ?? (keepPrev ? prev?.session : undefined),
     id: CURRENT_USER_SESSION_ID,
     updatedAt: new Date().toISOString(),
   })
