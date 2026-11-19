@@ -158,7 +158,19 @@ export function useLabelActions(
       const tpl = serializeLayout(canvas, sizeKey, null)
       const serialized = JSON.stringify(tpl)
       saveLocalTemplate(category, serialized, sizeKey)
-      await saveLabelTemplate(category, serialized, sizeKey)
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        toast.success(`Сохранено на устройстве для «${category}» / ${sizeKey}. В базу отправится при сохранении онлайн.`)
+        return
+      }
+      try {
+        await saveLabelTemplate(category, serialized, sizeKey)
+      } catch (err) {
+        if (/failed to fetch|network|fetch failed/i.test((err as Error)?.message ?? "")) {
+          toast.success("Нет связи с сервером — шаблон сохранён на устройстве")
+          return
+        }
+        throw err
+      }
       toast.success(`Расположение сохранено для «${category}» / ${sizeKey}`)
     } catch (err) {
       toast.error((err as Error).message)
@@ -168,6 +180,10 @@ export function useLabelActions(
   const handleReloadTemplate = useCallback(async () => {
     const canvas = fabricRef.current
     if (!canvas) return
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      toast.error("Нет интернета — используется шаблон, сохранённый на устройстве")
+      return
+    }
     try {
       const raw = await getLabelTemplate(category, sizeKey)
       const saved = parseTemplate(raw)
@@ -260,7 +276,7 @@ export function useLabelActions(
     // При отсутствии локального кэша сначала показываем рабочий стандартный
     // макет, а шаблон из БД загружаем в фоне. Если пользователь уже начал
     // редактирование, поздний ответ не должен перезаписать его изменения.
-    if (!raw) {
+    if (!raw && (typeof navigator === "undefined" || navigator.onLine)) {
       void getLabelTemplate(category, sizeKey)
         .then((remoteRaw) => {
           if (
@@ -282,6 +298,8 @@ export function useLabelActions(
         .finally(() => {
           stopTrackingUserEdits()
         })
+    } else {
+      stopTrackingUserEdits()
     }
   }, [fabricRef, category, sizeKey, product, sizeDef])
 

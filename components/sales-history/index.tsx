@@ -86,7 +86,7 @@ export function SalesHistory({
   canReturn = false,
   sellers,
   onReturned,
-  allowOffline = true,
+  allowOffline = false,
 }: SalesHistoryProps) {
   const [visible, setVisible] = useState(PAGE)
   const [query, setQuery] = useState("")

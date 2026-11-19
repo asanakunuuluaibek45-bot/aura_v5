@@ -22,7 +22,7 @@ export function ReturnSearchModal({
   returnedKeys,
   onClose,
   onReturned,
-  allowOffline = true,
+  allowOffline = false,
 }: {
   units: SaleUnit[]
   returnedKeys: Set<string>

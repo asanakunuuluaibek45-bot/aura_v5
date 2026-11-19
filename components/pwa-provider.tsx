@@ -2,6 +2,7 @@
 
 import { registerCapacitorBluetoothPolyfill } from "@/lib/capacitor-bluetooth"
 import { useEffect } from "react"
+import { warmUpLabelEditorOffline } from "@/lib/offline-label-warmup"
 import type { Profile } from "@/lib/types"
 import { getSavedUserSession, saveUserSession } from "@/lib/local-db/db"
 import { updateSyncState } from "@/lib/local-db/sync-store"
@@ -9,6 +10,11 @@ import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 
 export function PwaProvider({ profile }: { profile?: Profile | null }) {
+  useEffect(() => {
+    // Pre-download the label editor so labels can be edited/printed offline.
+    warmUpLabelEditorOffline()
+  }, [])
+
   useEffect(() => {
     registerCapacitorBluetoothPolyfill()
     if (typeof window === "undefined") return

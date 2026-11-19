@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { ArrowDownLeft, Loader2, PackageCheck, X } from "lucide-react"
 import { toast } from "sonner"
+import { useOnline } from "@/hooks/use-online"
 
 /**
  * Подтверждение возврата позиции чека.
@@ -24,7 +25,7 @@ export function ReturnDialog({
   unit,
   onClose,
   onReturned,
-  allowOffline = true,
+  allowOffline = false,
 }: {
   unit: SaleUnit
   onClose: () => void
@@ -33,12 +34,18 @@ export function ReturnDialog({
 }) {
   const [reason, setReason] = useState("")
   const [saving, setSaving] = useState(false)
+  const online = useOnline()
 
   const breakdown = computeRefund(unit.sale, unit.item)
   const isScrap = unit.item.kind === "scrap"
   const isLoss = breakdown.profitDelta < 0
 
   const submit = async () => {
+    // Возврат проводится только онлайн: касса, склад и чек меняются атомарно в БД.
+    if (!navigator.onLine) {
+      toast.error("Возврат недоступен без интернета")
+      return
+    }
     setSaving(true)
     try {
       let created: SaleReturn
@@ -229,9 +236,9 @@ export function ReturnDialog({
           <Button variant="outline" className="flex-1 bg-transparent" disabled={saving} onClick={onClose}>
             Отмена
           </Button>
-          <Button variant="destructive" className="flex-1" disabled={saving} onClick={() => void submit()}>
+          <Button variant="destructive" className="flex-1" disabled={saving || !online} title={online ? undefined : "Возврат доступен только при подключении к интернету"} onClick={() => void submit()}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Вернуть {formatSom(breakdown.amount)}
+            {online ? <>Вернуть {formatSom(breakdown.amount)}</> : "Нет интернета"}
           </Button>
         </div>
       </div>

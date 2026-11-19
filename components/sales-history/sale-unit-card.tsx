@@ -5,6 +5,7 @@ import { RECEIPT_TYPE_LABELS, type ReceiptType } from "@/lib/receipt-type"
 import { formatDateTime, formatSom, formatWeight,formatDateTimeTotal } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useOnline } from "@/hooks/use-online"
 import { AlertTriangle, RotateCcw, Undo2 } from "lucide-react"
 
 /** Позиция чека, подготовленная для отображения в истории продаж. */
@@ -51,6 +52,7 @@ export function SaleUnitCard({
   canReturn: boolean
   onReturn: (row: HistoryRow) => void
 }) {
+  const online = useOnline()
   const isReturned = Boolean(refund)
   const isLoss = row.loss > 0
   const profit = row.price - row.cost
@@ -144,8 +146,9 @@ export function SaleUnitCard({
               size="sm"
               variant="outline"
               className="h-8 gap-1.5 border-destructive/40 bg-transparent px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-              title="Вернуть товар"
-              onClick={() => onReturn(row)}
+              title={online ? "Вернуть товар" : "Возврат доступен только онлайн"}
+              disabled={!online}
+              onClick={() => { if (navigator.onLine) onReturn(row) }}
             >
               <Undo2 className="h-3.5 w-3.5" />
               Вернуть товар

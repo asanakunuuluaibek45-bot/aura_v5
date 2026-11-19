@@ -6,7 +6,8 @@ import dynamic from "next/dynamic"
 import type { Product, Sale } from "@/lib/types"
 import { DEFAULT_SIZE_KEY, getLabelSizeDef, getPrinterProfile, PRINTER_PROFILES, type JewelryLabelSizeKey } from "@/lib/niimbot"
 import { formatDate, formatSom, formatWeight } from "@/lib/format"
-import { deleteProduct, findProductBySku, getShopSeqIdForLabel } from "@/app/actions/products"
+import { deleteProduct, findProductBySku } from "@/app/actions/products"
+import { getShopSeqIdCached, rememberShopSeqId } from "@/lib/shop-seq-cache"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -255,9 +256,16 @@ export function SkladScreen({
     return map
   }, [sales])
 
+  // Remember the short shop number whenever products carry it (for offline labels).
+  useEffect(() => {
+    for (const p of products) {
+      if (isValidShopSeqId(p.shop_seq_id)) { rememberShopSeqId(p.shop_id, p.shop_seq_id); break }
+    }
+  }, [products])
+
   const loadLabelSequence = (product: Product, requestId: number) => {
     setLabelLoadError(null)
-    void getShopSeqIdForLabel(product.shop_id)
+    void getShopSeqIdCached(product.shop_id)
       .then((shopSeqId) => {
         if (!isValidShopSeqId(shopSeqId)) {
           throw new Error("Не удалось получить короткий номер магазина для QR-кода")
@@ -295,7 +303,7 @@ export function SkladScreen({
       return () => { active = false }
     }
 
-    void getShopSeqIdForLabel(backgroundPrintProduct.shop_id)
+    void getShopSeqIdCached(backgroundPrintProduct.shop_id)
       .then((shopSeqId) => {
         if (!isValidShopSeqId(shopSeqId)) {
           throw new Error("Не удалось подготовить QR-код для печати")

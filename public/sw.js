@@ -28,7 +28,7 @@
  * - On logout the page posts AURA_LOGOUT_CLEANUP and every cache is dropped.
  */
 
-const VERSION = 'offline-revisions-20261119-v4'
+const VERSION = 'offline-labels-20261119-v5'
 const SHELL_CACHE = `aura-crm-shell-${VERSION}`
 const STATIC_CACHE = `aura-crm-static-${VERSION}`
 const STATE_CACHE = `aura-crm-state-${VERSION}`
