@@ -51,6 +51,16 @@ export function PwaProvider({ profile }: { profile?: Profile | null }) {
         .then((reg) => {
           reg.update().catch(() => {})
 
+          // Сохраняем кассу для офлайн-запуска, как только worker готов.
+          const warm = () => {
+            if (navigator.onLine) {
+              navigator.serviceWorker.ready
+                .then((r) => r.active?.postMessage({ type: "AURA_WARM_SHELLS" }))
+                .catch(() => {})
+            }
+          }
+          setTimeout(warm, 4000)
+
           // Автоматическая проверка каждые 5 минут отключена — версия проверяется
           // только при открытии приложения.
 

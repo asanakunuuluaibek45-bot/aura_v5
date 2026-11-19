@@ -33,6 +33,7 @@ const SHELL_CACHE = `aura-crm-shell-${VERSION}`
 const STATIC_CACHE = `aura-crm-static-${VERSION}`
 const STATE_CACHE = `aura-crm-state-${VERSION}`
 const CURRENT_CACHES = [SHELL_CACHE, STATIC_CACHE]
+const CACHE_STAMP_KEY = new URL('/__aura_cache_created__', self.location.origin).href
 const CLOUD_FAILURE_KEY = new URL('/__aura_cloud_unreachable__', self.location.origin).href
 
 /** Network-first timeout for navigations: fast enough to feel instant offline. */
@@ -41,10 +42,10 @@ const PRECACHE_TIMEOUT_MS = 5000
 
 // Shell routes pre-cached so the app boots interactive without a network.
 const PRECACHE_SHELL_URLS = [
-  '/',
-  '/crm',
   '/crm/pos',
   '/pos',
+  '/',
+  '/crm',
   '/crm/inventory',
   '/inventory',
   '/crm/revisions',
@@ -76,6 +77,37 @@ const PRECACHE_SHELL_URLS = [
   '/android-chrome-192x192.png',
   '/android-chrome-512x512.png',
 ]
+
+// Every JS/CSS file of the build, filled in by scripts/precache-sw.mjs after
+// `next build`. Lazy chunks (barcode scanner, label editor, sales history…) are
+// not referenced from the HTML, so without this list they were missing offline
+// and opening them showed the "no connection" screen (ChunkLoadError).
+const PRECACHE_ASSETS = [] // AURA_PRECACHE_ASSETS
+
+async function precacheBuildAssets() {
+  if (!PRECACHE_ASSETS.length) return
+  const staticCache = await caches.open(STATIC_CACHE)
+  const oldNames = (await caches.keys()).filter((k) => k.startsWith('aura-crm-static-') && k !== STATIC_CACHE)
+  const queue = [...PRECACHE_ASSETS]
+  const worker = async () => {
+    while (queue.length) {
+      const href = new URL(queue.shift(), self.location.origin).href
+      try {
+        if (await staticCache.match(href)) continue
+        // Hashed build files never change: reuse a copy from an older cache first.
+        let copied = false
+        for (const name of oldNames) {
+          const old = await (await caches.open(name)).match(href)
+          if (old) { await staticCache.put(href, old); copied = true; break }
+        }
+        if (copied) continue
+        const res = await fetchWithTimeout(href, { credentials: 'same-origin' }, 20000)
+        if (res?.status === 200 && !isPrivateResponse(res)) await staticCache.put(href, res)
+      } catch {}
+    }
+  }
+  await Promise.all(Array.from({ length: 6 }, worker))
+}
 
 const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -165,12 +197,15 @@ async function cacheShellDocument(cache, staticCache, pathname, response) {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
+      await Promise.all([SHELL_CACHE, STATIC_CACHE].map(stampCache))
       const cache = await caches.open(SHELL_CACHE)
       const staticCache = await caches.open(STATIC_CACHE)
       for (const url of PRECACHE_SHELL_URLS) {
         try {
           // cache: 'reload' so a new version never precaches a stale HTTP-cached shell.
-          const res = await fetchWithTimeout(url, { credentials: 'same-origin', cache: 'reload' })
+          // The cashier shell is server-rendered and can be slow: give it more time.
+          const timeout = ESSENTIAL_SHELLS.includes(url) ? 15000 : PRECACHE_TIMEOUT_MS
+          const res = await fetchWithTimeout(url, { credentials: 'same-origin', cache: 'reload' }, timeout)
           const parsedUrl = new URL(url, self.location.origin)
           if (isCacheableShell(res, parsedUrl)) {
             await cacheShellDocument(cache, staticCache, parsedUrl.pathname, res)
@@ -181,6 +216,7 @@ self.addEventListener('install', (event) => {
           // A single missing route must not fail the whole install.
         }
       }
+      await precacheBuildAssets()
       await self.skipWaiting()
     })()
   )
@@ -190,6 +226,10 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys()
+      await loadCacheStamps(keys)
+      // Never lose the offline cashier on update: keep older shells the new
+      // install could not fetch (slow server, auth redirect, offline install).
+      await carryOverShells(keys.filter((key) => key.startsWith('aura-crm-shell-') && key !== SHELL_CACHE))
       const previousShell = newestPreviousCache(keys, 'aura-crm-shell-')
       const previousStatic = newestPreviousCache(keys, 'aura-crm-static-')
       const previousState = newestPreviousCache(keys, 'aura-crm-state-')
@@ -209,8 +249,58 @@ function newestPreviousCache(keys, prefix) {
     .sort((a, b) => cacheVersion(b, prefix) - cacheVersion(a, prefix))[0] || null
 }
 
+// Build versions are "<sha>-<base36 time>" and cannot be ordered by digits.
+// Each cache keeps its creation time under CACHE_STAMP_KEY; caches are ordered by it.
+const cacheStamps = new Map()
+async function stampCache(name) {
+  const cache = await caches.open(name)
+  if (!(await cache.match(CACHE_STAMP_KEY))) {
+    await cache.put(CACHE_STAMP_KEY, new Response(String(Date.now()), { headers: { 'Content-Type': 'text/plain' } }))
+  }
+}
+async function loadCacheStamps(keys) {
+  for (const key of keys) {
+    if (!key.startsWith('aura-crm-')) continue
+    try {
+      const res = await (await caches.open(key)).match(CACHE_STAMP_KEY)
+      cacheStamps.set(key, res ? Number(await res.text()) || 0 : 0)
+    } catch { cacheStamps.set(key, 0) }
+  }
+}
 function cacheVersion(name, prefix) {
-  return Number(name.slice(prefix.length).replace(/\D/g, '')) || 0
+  if (CURRENT_CACHES.includes(name) || name === STATE_CACHE) return Number.MAX_SAFE_INTEGER
+  return cacheStamps.get(name) || 0
+}
+
+// Shells the cashier needs offline. Re-fetched after shop switches and on request.
+const ESSENTIAL_SHELLS = ['/crm/pos', '/pos', '/crm', '/crm/inventory', '/crm/cabinet', '/crm/revisions']
+
+async function warmShells(paths) {
+  const cache = await caches.open(SHELL_CACHE)
+  const staticCache = await caches.open(STATIC_CACHE)
+  for (const path of paths) {
+    try {
+      const url = new URL(path, self.location.origin)
+      const res = await fetchWithTimeout(url.href, { credentials: 'same-origin', cache: 'reload' }, 15000)
+      if (isCacheableShell(res, url)) await cacheShellDocument(cache, staticCache, url.pathname, res)
+    } catch {}
+  }
+}
+
+/** Copy shells missing from the new cache out of older caches before they are deleted. */
+async function carryOverShells(oldNames) {
+  const cache = await caches.open(SHELL_CACHE)
+  for (const name of oldNames) {
+    try {
+      const old = await caches.open(name)
+      for (const req of await old.keys()) {
+        if (req.url === CACHE_STAMP_KEY) continue
+        if (await cache.match(req, { ignoreSearch: true, ignoreVary: true })) continue
+        const res = await old.match(req)
+        if (res) await cache.put(req, res)
+      }
+    } catch {}
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,8 +343,18 @@ self.addEventListener('message', (event) => {
         await Promise.all(
           keys.filter((key) => key.startsWith('aura-crm-shell-')).map((key) => caches.delete(key)),
         )
+        // Immediately re-save the cashier for the new shop so it still opens offline.
+        await stampCache(SHELL_CACHE)
+        await warmShells(ESSENTIAL_SHELLS)
+        await precacheBuildAssets()
       })(),
     )
+    return
+  }
+
+  // Page asks to (re)save the offline shells, e.g. after login or app start.
+  if (data.type === 'AURA_WARM_SHELLS') {
+    event.waitUntil(warmShells(ESSENTIAL_SHELLS).then(precacheBuildAssets))
   }
 })
 
@@ -335,6 +435,7 @@ async function updateCloudReachability(unreachable) {
 async function cloudWasRecentlyUnreachable() {
   try {
     const keys = await caches.keys()
+    await loadCacheStamps(keys)
     const stateCaches = keys
       .filter((key) => key.startsWith('aura-crm-state-'))
       .sort((a, b) => cacheVersion(b, 'aura-crm-state-') - cacheVersion(a, 'aura-crm-state-'))
@@ -483,6 +584,7 @@ async function offlineNavigationFallback(cache, url) {
 
 async function findExactCachedShell(cache, pathname) {
   const keys = await caches.keys()
+  await loadCacheStamps(keys)
   const shellCaches = keys
     .filter((key) => key.startsWith('aura-crm-shell-'))
     .sort((a, b) => cacheVersion(b, 'aura-crm-shell-') - cacheVersion(a, 'aura-crm-shell-'))
@@ -500,6 +602,7 @@ async function findExactCachedShell(cache, pathname) {
 
 async function findCachedShell(cache, pathname) {
   const keys = await caches.keys()
+  await loadCacheStamps(keys)
   const shellCaches = keys
     .filter((key) => key.startsWith('aura-crm-shell-'))
     .sort((a, b) => cacheVersion(b, 'aura-crm-shell-') - cacheVersion(a, 'aura-crm-shell-'))

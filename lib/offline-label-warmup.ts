@@ -22,6 +22,10 @@ export function warmUpLabelEditorOffline() {
       import("@/components/screens/sklad/label/label-editor"),
       import("fabric"),
       import("niimbot-web-bluetooth"),
+      import("@/components/BarcodeScannerModal"),
+      import("@/components/sales-history/index"),
+      import("@/components/screens/kassa/cash-history"),
+      import("@/components/screens/kassa/cash-operation-dialog"),
     ]).then((results) => {
       if (results.some((r) => r.status === "rejected")) warmed = false
     })
