@@ -37,6 +37,7 @@ const PRODUCT_COLUMNS = [
   "consignment_by",
   "status",
   "created_at",
+  "updated_at",
 ].join(", ")
 
 const requireProfile = requireApprovedContext

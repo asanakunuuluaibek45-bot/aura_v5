@@ -3,8 +3,10 @@
 import type { Profile } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { AuraMark } from "@/components/brand/aura-mark"
+import { logoutDeviceAccount } from "@/lib/local-db/device-logout"
+import { UnsyncedLogoutError } from "@/lib/offline-policy"
+import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
 import { useRouter } from "next/navigation"
 import { Clock, XCircle, Loader2 } from "lucide-react"
 import { useState, useEffect, useTransition } from "react"
@@ -26,15 +28,18 @@ export function PendingScreen({ profile, email }: { profile: Profile | null; ema
   }, [rejected, router])
 
   const signOut = async () => {
-    // Полная очистка локальных данных и кэшей перед выходом
-    await runLogoutCleanup()
     try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-    } catch {
-      // даже при ошибке сети уводим пользователя на экран входа
+      try { await logoutDeviceAccount() }
+      catch (error) {
+        if (!(error instanceof UnsyncedLogoutError)) throw error
+        if (!window.confirm(error.message + " Восстановление невозможно. Стереть данные и выйти?")) return
+        await logoutDeviceAccount({ discardUnsynced: true })
+      }
+      try { await createClient().auth.signOut({ scope: "local" }) } catch {}
+      window.location.assign("/auth/login")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось завершить выход")
     }
-    router.push("/auth/login")
   }
 
   return (

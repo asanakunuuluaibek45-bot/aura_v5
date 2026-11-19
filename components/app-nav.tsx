@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import type { Profile, Role } from "@/lib/types"
 import { roleLabel } from "@/lib/format"
+import { useOnline } from "@/hooks/use-online"
+import { isOfflineSection } from "@/lib/offline-sections"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -115,6 +117,7 @@ interface AppNavProps {
   onOpenHelp?: () => void
   mobileOpen?: boolean
   onClose?: () => void
+  onlineOnly?: boolean
   collapsed?: boolean
   onToggleCollapsed?: () => void
 }
@@ -131,8 +134,10 @@ export function AppNav({
   mobileOpen = false,
   onClose,
   collapsed = false,
+  onlineOnly = false,
   onToggleCollapsed,
 }: AppNavProps) {
+  const online = useOnline()
   const router = useRouter()
   const [isSigningOut, setIsSigningOut] = useState(false)
 
@@ -155,6 +160,7 @@ export function AppNav({
   )
 
   const handleNavigate = (id: ScreenId) => {
+    if (!online && (onlineOnly || !isOfflineSection(id))) return
     onNavigate(id)
     onClose?.()
   }
@@ -273,12 +279,13 @@ export function AppNav({
                       return (
                         <button
                           key={item.id}
+                          disabled={!online && (onlineOnly || !isOfflineSection(item.id))}
                           type="button"
                           onClick={() => handleNavigate(item.id)}
                           title={collapsed ? `${item.label} — ${item.description}` : item.description}
                           aria-current={active ? "page" : undefined}
                           className={cn(
-                            "group relative flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            "disabled:opacity-40 disabled:grayscale disabled:cursor-not-allowed group relative flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             active
                               ? "bg-primary/10 text-primary shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.16)]"
                               : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",

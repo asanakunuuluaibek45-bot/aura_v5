@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Product } from "@/lib/types"
 import { Button } from "@/components/ui/button"
-import { ProductSearch } from "@/components/product-search"
+import { Input } from "@/components/ui/input"
 import { RevisionLabelScanner } from "@/components/screens/revisions/revision-label-scanner"
 import { createRevisionScanTracker, type RevisionScanTransaction } from "@/lib/revision-label-scan"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
@@ -345,18 +345,18 @@ export function RevisionsScreen({
             {metals.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
           <div className="col-span-2 flex min-w-0 items-center gap-2 sm:col-span-1">
-            <ProductSearch
+            <Input
+              aria-label="Поиск в ревизии"
               value={query}
-              onChange={(value) => {
-                setQuery(value)
+              onChange={(event) => {
+                setQuery(event.target.value)
                 setAutoMarkNotice("")
               }}
               placeholder="Название, точный артикул или вес…"
-              showScanner={false}
-              className="min-w-0 flex-1"
-              inputClassName="h-9"
+              className="h-9 min-w-0 flex-1"
             />
             <RevisionLabelScanner
+              shopId={shopId}
               key={storageKey}
               checkedSkus={checkedSkus}
               stats={{ total: totalCount, checked: checkedCount, remaining: remainingCount }}

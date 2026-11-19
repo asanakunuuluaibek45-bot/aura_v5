@@ -3,8 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   applicationName: "GOLDUCHET",
-  title: "GOLDUCHET — офлайн-касса",
-  description: "Локальная касса GOLDUCHET с офлайн-режимом и фоновой синхронизацией.",
+  title: "GOLDUCHET — касса, склад и кабинет",
+  description: "Касса, склад и кабинет GOLDUCHET с офлайн-режимом и фоновой синхронизацией.",
   appleWebApp: {
     capable: true,
     title: "GOLDUCHET",

@@ -1,5 +1,6 @@
 "use client"
 
+import { useOnline } from "@/hooks/use-online"
 import { useState } from "react"
 import type { Profile, Role } from "@/lib/types"
 // import { AuraMark } from "@/components/brand/aura-mark"
@@ -15,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Bell,
   ChevronDown,
   Menu,
   PackagePlus,
@@ -49,6 +51,7 @@ export function AppHeader({
   onOpenNav: () => void
   onNavigate: (screen: ScreenId) => void
 }) {
+  const online = useOnline()
   const [showShopModal, setShowShopModal] = useState(false)
 
   const goTo = (screen: ScreenId) => {
@@ -140,23 +143,21 @@ export function AppHeader({
               <DropdownMenuItem onClick={() => goTo("kassa")}>
                 <ShoppingCart className="mr-2 h-4 w-4" /> Новая продажа
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goTo("sklad")}>
+              <DropdownMenuItem disabled={!online} onClick={() => goTo("sklad")}>
                 <PackagePlus className="mr-2 h-4 w-4" /> Добавить товар
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => goTo("clients")}>
+              <DropdownMenuItem disabled={!online} onClick={() => goTo("clients")}>
                 <Users className="mr-2 h-4 w-4" /> Добавить клиента
               </DropdownMenuItem>
               {canSwitch && (
-                <DropdownMenuItem onClick={() => goTo("suppliers")}>
+                <DropdownMenuItem disabled={!online} onClick={() => goTo("suppliers")}>
                   <Truck className="mr-2 h-4 w-4" /> Поставщики
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <NotificationBell
-            visible={profile.role === "super_admin"}
-            onSeeAll={onOpenNotifications}
-          />
+          {online ? <NotificationBell visible={profile.role === "super_admin"} onSeeAll={onOpenNotifications} />
+            : profile.role === "super_admin" && <Button disabled variant="ghost" size="icon" aria-label="Уведомления — нужен интернет"><Bell /></Button>}
         </div>
       </div>
     </header>

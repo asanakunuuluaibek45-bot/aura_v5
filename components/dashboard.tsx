@@ -1,5 +1,6 @@
 "use client"
 
+import { isOfflineSection } from "@/lib/offline-sections"
 import { memo, useMemo, useState, useTransition, useEffect, useRef, useCallback } from "react"
 import dynamic from "next/dynamic"
 import type { Customer, Product, Profile, Role, Sale, SaleReturn } from "@/lib/types"
@@ -7,6 +8,9 @@ import { AppHeader } from "@/components/app-header"
 import { SiteHelp } from "@/components/site-help"
 import { AppNav, SCREEN_PATHS, type ScreenId } from "@/components/app-nav"
 import { KassaScreen } from "@/components/screens/kassa/index"
+import { SkladScreen as OfflineSkladScreen } from "@/components/screens/sklad"
+import { KabinetScreen as OfflineKabinetScreen } from "@/components/screens/kabinet"
+import { RevisionsScreen as OfflineRevisionsScreen } from "@/components/screens/revisions"
 import { CashPanel } from "@/components/screens/kassa/cash-panel"
 import type { CabinetData } from "@/app/actions/cabinet"
 import type { MetalRate } from "@/lib/types"
@@ -22,7 +26,8 @@ import { useRouter } from "next/navigation"
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { useLocalCrm } from "@/lib/local-db/use-local-crm"
-import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
+import { logoutDeviceAccount } from "@/lib/local-db/device-logout"
+import { UnsyncedLogoutError } from "@/lib/offline-policy"
 import { saveUserSession } from "@/lib/local-db/db"
 import { supplierIdentityKey } from "@/lib/supplier-identity"
 
@@ -32,13 +37,13 @@ const SectionLoading = () => (
   </div>
 )
 
-// Load infrequently used screens only when opened. Keep the point-of-sale
-// screen in the first bundle; it is the primary workflow.
+// Offline-capable screens belong to the initial dependency graph.
+// Only online-only screens may depend on on-demand network chunks.
 const VitrinaScreen = memo(dynamic(() => import("@/components/screens/vitrina").then((mod) => mod.VitrinaScreen), { loading: SectionLoading }))
-const SkladScreen = memo(dynamic(() => import("@/components/screens/sklad").then((mod) => mod.SkladScreen), { loading: SectionLoading }))
-const RevisionsScreen = memo(dynamic(() => import("@/components/screens/revisions").then((mod) => mod.RevisionsScreen), { loading: SectionLoading }))
+const SkladScreen = memo(OfflineSkladScreen)
+const RevisionsScreen = memo(OfflineRevisionsScreen)
 const OtchetyScreen = memo(dynamic(() => import("@/components/screens/otchety").then((mod) => mod.OtchetyScreen), { loading: SectionLoading }))
-const KabinetScreen = memo(dynamic(() => import("@/components/screens/kabinet").then((mod) => mod.KabinetScreen), { loading: SectionLoading }))
+const KabinetScreen = memo(OfflineKabinetScreen)
 const ClientsScreen = memo(dynamic(() => import("@/components/screens/clients").then((mod) => mod.ClientsScreen), { loading: SectionLoading }))
 const SuppliersScreen = memo(dynamic(() => import("@/components/screens/suppliers").then((mod) => mod.SuppliersScreen), { loading: SectionLoading }))
 const NotificationsPage = memo(dynamic(() => import("@/components/notifications").then((mod) => mod.NotificationsPage), { loading: SectionLoading }))
@@ -144,6 +149,8 @@ export function Dashboard({
 }) {
   const router = useRouter()
   const [activeScreen, setActiveScreen] = useState<ScreenId>(screen)
+  const activeScreenRef = useRef(screen)
+  useEffect(() => { activeScreenRef.current = activeScreen }, [activeScreen])
   const [viewRole, setViewRole] = useState<Role>(profile.role ?? "seller")
   const [supplierDebtData, setSupplierDebtData] = useState(supplierDebts)
   const [supplierDebtLoaded, setSupplierDebtLoaded] = useState(screen === "suppliers")
@@ -195,7 +202,7 @@ export function Dashboard({
     }
     const handleOffline = () => {
       setIsOnline(false)
-      if (!isImpersonating) {
+      if (!isImpersonating && !isOfflineSection(activeScreenRef.current)) {
         setActiveScreen("kassa")
         window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
         toast.info("Нет интернета — открыта офлайн-касса")
@@ -287,10 +294,8 @@ export function Dashboard({
   /** Переключение экрана: переход по отдельному URL. */
   const handleScreenChange = useCallback(
     (next: ScreenId) => {
-      if (!navigator.onLine && next !== "kassa" && !isImpersonating) {
-        setActiveScreen("kassa")
-        window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
-        toast.info("Без интернета доступна только касса")
+      if (!navigator.onLine && (isImpersonating || !isOfflineSection(next))) {
+        toast.info("Этот раздел доступен только с интернетом")
         return
       }
       backCountRef.current = 0 // сбрасываем счётчик при навигации вперёд
@@ -312,7 +317,7 @@ export function Dashboard({
           ([, path]) => path === window.location.pathname,
         )?.[0]
         if (!next) return
-        if (!navigator.onLine && next !== "kassa" && !isImpersonating) {
+        if (!navigator.onLine && !isOfflineSection(next) && !isImpersonating) {
           setActiveScreen("kassa")
           window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
           return
@@ -332,10 +337,10 @@ export function Dashboard({
         ([, path]) => path === window.location.pathname,
       )?.[0]
       if (next && next !== "kassa") {
-        if (!navigator.onLine && !isImpersonating) {
+        if (!navigator.onLine && !isOfflineSection(next) && !isImpersonating) {
           window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
           setActiveScreen("kassa")
-          toast.info("Без интернета доступна только касса")
+          toast.info("Без интернета доступны касса, склад, кабинет и ревизии")
           return
         }
         backCountRef.current = 0
@@ -375,10 +380,20 @@ export function Dashboard({
     exitModalOpenRef.current = false
     setShowExitModal(false)
     // Полная очистка локальных данных и кэшей перед выходом
-    await runLogoutCleanup()
+    try {
+      try { await logoutDeviceAccount() }
+      catch (error) {
+        if (!(error instanceof UnsyncedLogoutError)) throw error
+        if (!window.confirm(error.message + " Восстановление невозможно. Стереть данные и выйти?")) return
+        await logoutDeviceAccount({ discardUnsynced: true })
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось безопасно завершить выход")
+      return
+    }
     try {
       const supabase = createSupabaseBrowserClient()
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({ scope: "local" })
     } catch {
       // даже при ошибке сети уводим пользователя на экран входа
     }
@@ -446,6 +461,7 @@ export function Dashboard({
   viewRole={viewRole}                      
   onChangeViewRole={setViewRole}  
   isSuperAdmin={isSuperAdmin}
+  onlineOnly={isImpersonating}
   onNavigate={handleScreenChange}
   onOpenCabinet={() => handleScreenChange("kabinet")} 
   onOpenHelp={openSiteHelp}

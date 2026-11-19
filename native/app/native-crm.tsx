@@ -13,6 +13,8 @@ import {
   Check,
   Cloud,
   CloudOff,
+  LogOut,
+  UserRound,
   Package,
   ReceiptText,
   RefreshCw,
@@ -31,11 +33,18 @@ import { formatSom } from "@/lib/format";
 import { useLocalCrm } from "@/lib/local-db/use-local-crm";
 import { parseQrCode } from "@/lib/qr-code";
 import type { Customer, Product, Profile, Sale } from "@/lib/types";
-import { createClient } from "@/lib/supabase/client";
+import { Button } from '@/components/ui/button';
+import { CabinetProfileCard } from '@/components/screens/kabinet/profile-card';
+import { RevisionsScreen } from '@/components/screens/revisions';
+import { UnsyncedLogoutError } from '@/lib/offline-policy';
+import { ClipboardCheck } from 'lucide-react';
+import { NativeInventory } from './native-inventory';
+import { logoutDeviceAccount, restoreDeviceProfile } from '@/lib/local-db/device-logout';
+import { createClient, prepareDeviceSignIn, markDeviceSignedIn, clearDeviceAuth } from "@/lib/supabase/client";
 import { getSyncState, subscribeSyncState, type SyncProgressState } from "@/lib/local-db/sync-store";
 import { syncEngine } from "@/lib/sync/sync-engine";
 
-type NativeScreen = "pos" | "sales" | "stock" | "customers" | "sync";
+type NativeScreen = "pos" | "sales" | "stock" | "customers" | "sync" | "cabinet" | "revisions";
 
 const EMPTY_PROFILE: Profile = {
   id: "",
@@ -88,6 +97,7 @@ function NativeLogin({
     setBusy(true);
     setError(null);
     try {
+      prepareDeviceSignIn();
       const supabase = createClient();
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -102,8 +112,7 @@ function NativeLogin({
         .single();
       if (profileError || !account) throw profileError || new Error("Profile not found");
       if (account.status !== "approved" || !account.role || !account.shop_id) {
-        setError("Аккаунт ожидает подтверждения или не привязан к магазину.");
-        return;
+        throw new Error("Аккаунт ожидает подтверждения или не привязан к магазину.");
       }
 
       const profile = { ...account, email: data.user.email ?? email.trim() } as Profile;
@@ -114,9 +123,12 @@ function NativeLogin({
         shopId: profile.shop_id ?? undefined,
         session: data.session,
       });
+      await markDeviceSignedIn();
       onAuthenticated(profile);
       setPassword("");
     } catch (loginError) {
+      createClient().auth.stopAutoRefresh();
+      await clearDeviceAuth();
       setError(networkMessage(loginError));
     } finally {
       setBusy(false);
@@ -258,6 +270,12 @@ export function NativeCrm() {
     unresolvedCount: 0,
     lastError: null as string | null,
   });
+  const [logoutPrompt, setLogoutPrompt] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [discardCount, setDiscardCount] = useState<number | null>(null);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const logoutPromptRef = useRef(false);
+  const accountGeneration = useRef(0);
   const [exitPrompt, setExitPrompt] = useState(false);
   const screenRef = useRef<NativeScreen>("pos");
   const scannerOpenRef = useRef(false);
@@ -285,9 +303,11 @@ export function NativeCrm() {
     let mounted = true;
     const loadSavedProfile = async () => {
       try {
+        const restored = await restoreDeviceProfile();
+        if (!restored) return;
         const saved = await getSavedUserSession();
         if (!mounted) return;
-        if (saved?.profile?.status === "approved" && saved.profile.shop_id) {
+        if (saved?.profile?.status === "approved" && saved.profile.role && saved.profile.shop_id) {
           setProfile(saved.profile as Profile);
           void refreshOutbox(saved.shopId ?? saved.profile.shop_id);
           // Migrate an older session into Capacitor Preferences when possible.
@@ -385,6 +405,10 @@ export function NativeCrm() {
     let active = true;
     let removeBackListener: (() => void) | undefined;
     void CapacitorApp.addListener("backButton", () => {
+      if (logoutPromptRef.current) {
+        setLogoutPrompt(false);
+        return;
+      }
       if (exitPromptRef.current) {
         exitPromptRef.current = false;
         backCountRef.current = 0;
@@ -416,6 +440,8 @@ export function NativeCrm() {
     };
   }, []);
 
+  useEffect(() => { logoutPromptRef.current = logoutPrompt; }, [logoutPrompt]);
+
   useEffect(() => {
     screenRef.current = screen;
   }, [screen]);
@@ -436,6 +462,7 @@ export function NativeCrm() {
   useEffect(() => {
     if (!online) return;
     let cancelled = false;
+    const generation = accountGeneration.current;
     void (async () => {
       try {
         const supabase = createClient();
@@ -446,8 +473,13 @@ export function NativeCrm() {
           .select("*")
           .eq("id", authData.user.id)
           .maybeSingle();
-        if (profileError || !remoteProfile || cancelled) return;
+        if (profileError || !remoteProfile || cancelled || generation !== accountGeneration.current) return;
         if (remoteProfile.status !== "approved" || !remoteProfile.role || !remoteProfile.shop_id) {
+          // Do not silently delete pending transactions when access is revoked.
+          // Fence offline entry and stop writes, but retain rows for recovery.
+          accountGeneration.current++;
+          syncEngine.stop();
+          await clearDeviceAuth();
           setProfile(null);
           return;
         }
@@ -486,6 +518,7 @@ export function NativeCrm() {
   const cartIds = useMemo(() => new Set(cart.map((product) => product.id)), [cart]);
 
   const authenticate = useCallback((nextProfile: Profile) => {
+    accountGeneration.current++;
     setProfile(nextProfile);
     setScreen("pos");
     void refreshOutbox(nextProfile.shop_id);
@@ -716,13 +749,39 @@ export function NativeCrm() {
     </div>
   );
 
-  const renderStock = () => (
-    <div className="space-y-2">
-      {productsInStock.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-          Товары появятся после синхронизации.
-        </p>
-      ) : productsInStock.slice(0, 200).map((product) => <ProductRow key={product.id} product={product} />)}
+  const handleLogout = async (discardUnsynced = false) => {
+    if (loggingOut || checkoutBusy) return;
+    setLoggingOut(true);
+    setLogoutError(null);
+    accountGeneration.current++;
+    try {
+      await logoutDeviceAccount({ discardUnsynced });
+      setCart([]);
+      setSearch('');
+      setReceiptType(null);
+      setCheckoutMessage(null);
+      setScreen('pos');
+      setLogoutPrompt(false);
+      setProfile(null);
+    } catch (error) {
+      if (error instanceof UnsyncedLogoutError) setDiscardCount(error.count);
+      setLogoutError(error instanceof Error ? error.message : 'Не удалось завершить выход.');
+      void refreshOutbox(profile?.shop_id);
+    } finally { setLoggingOut(false); }
+  };
+
+  const renderCabinet = () => profile && (
+    <div className="space-y-4">
+      <CabinetProfileCard profile={profile} email={profile.email ?? ''} />
+      <div className="space-y-2 border-t border-border py-4 text-sm">
+        <p>{profile.shop_name ?? 'Магазин'}</p>
+        {profile.phone && <p>{profile.phone}</p>}
+        <p className="text-muted-foreground">Операций без подтверждения: {outboxSummary.unresolvedCount}</p>
+        <Button variant="outline" onClick={() => setScreen('sync')}><Cloud />Синхронизация</Button>
+      </div>
+      <Button variant="destructive" className="w-full" disabled={checkoutBusy} onClick={() => {
+        setDiscardCount(null); setLogoutError(null); setLogoutPrompt(true);
+      }}><LogOut />Выйти из системы</Button>
     </div>
   );
 
@@ -742,13 +801,17 @@ export function NativeCrm() {
     stock: "Склад",
     customers: "Клиенты",
     sync: "Синхронизация",
+    cabinet: "Кабинет",
+    revisions: "Ревизии",
   };
   const tabs: { id: NativeScreen; label: string; icon: typeof ShoppingCart }[] = [
     { id: "pos", label: "Касса", icon: ShoppingCart },
     { id: "sales", label: "Продажи", icon: ReceiptText },
     { id: "stock", label: "Склад", icon: Package },
+    { id: "revisions", label: "Ревизии", icon: ClipboardCheck },
     { id: "customers", label: "Клиенты", icon: UsersRound },
     { id: "sync", label: "Синхр.", icon: Cloud },
+    { id: "cabinet", label: "Кабинет", icon: UserRound },
   ];
 
   if (sessionLoading) {
@@ -777,7 +840,7 @@ export function NativeCrm() {
 
       <main className="mx-auto w-full max-w-3xl space-y-4 px-4 pt-4">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">{titles[screen]}</h1>
+          {screen !== "revisions" && <h1 className="text-xl font-semibold">{titles[screen]}</h1>}
           {screen === "sync" && (
             <button
               type="button"
@@ -793,7 +856,10 @@ export function NativeCrm() {
 
         {screen === "pos" && renderPos()}
         {screen === "sales" && renderSales()}
-        {screen === "stock" && renderStock()}
+        {screen === "stock" && <NativeInventory profile={profile} products={localCrm.products}
+          online={online} ready={localCrm.isReady} onSave={localCrm.localSaveProduct} onDelete={localCrm.localDeleteProduct} />}
+        {screen === "revisions" && <RevisionsScreen products={localCrm.products} shopId={profile.shop_id} productsReady={localCrm.isReady} />}
+        {screen === "cabinet" && renderCabinet()}
         {screen === "customers" && renderCustomers()}
         {screen === "sync" && (
           <section className="space-y-3 rounded-2xl border border-border bg-card p-4">
@@ -835,21 +901,35 @@ export function NativeCrm() {
         aria-label="Основная навигация"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
-        <div className="mx-auto grid max-w-3xl grid-cols-5 px-1">
+        <div className="mx-auto grid max-w-3xl grid-cols-7 px-1">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setScreen(id)}
               aria-current={screen === id ? "page" : undefined}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-[11px] ${screen === id ? "text-primary" : "text-muted-foreground"}`}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-[10px] ${screen === id ? "text-primary" : "text-muted-foreground"}`}
             >
               <Icon className="h-5 w-5" aria-hidden="true" />
-              <span>{label}</span>
+              <span className="max-w-full truncate">{label}</span>
             </button>
           ))}
         </div>
       </nav>
+
+      {logoutPrompt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby="logout-title" className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-card p-5">
+            <h2 id="logout-title" className="font-semibold">{discardCount !== null ? "Данные будут стёрты навсегда" : "Выйти из учётной записи?"}</h2>
+            <p className="text-sm text-muted-foreground">{discardCount !== null ? `Не синхронизировано операций: ${discardCount}. Эти данные будут стёрты навсегда, не попадут на сервер и не смогут быть восстановлены. Вы согласны?` : "Локальные данные будут очищены. Для повторного входа нужен интернет."}</p>
+            {logoutError && <p role="alert" className="text-sm text-destructive">{logoutError}</p>}
+            <div className="flex gap-2">
+              <Button variant="outline" disabled={loggingOut} onClick={() => setLogoutPrompt(false)}>Отмена</Button>
+              <Button variant="destructive" disabled={loggingOut} onClick={() => void handleLogout(discardCount !== null)}><LogOut />{loggingOut ? 'Выходим…' : discardCount !== null ? 'Стереть данные и выйти' : 'Выйти'}</Button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {exitPrompt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">

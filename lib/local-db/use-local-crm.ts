@@ -15,6 +15,7 @@ import {
 import { enqueueOutbox } from './outbox'
 import { syncEngine } from '../sync/sync-engine'
 import { createLocalId } from './id'
+import { persistOfflineProduct } from './product-record'
 import { persistOfflineSale } from './sale-record'
 import { isReceiptType, type ReceiptType } from '@/lib/receipt-type'
 import { toast } from 'sonner'
@@ -103,6 +104,7 @@ export function useLocalCrm(initialData: {
       }
     }
 
+    setIsReady(false)
     async function initData() {
       try {
         await getLocalDB()
@@ -172,7 +174,7 @@ export function useLocalCrm(initialData: {
         }
 
         // Start background Sync Engine
-        syncEngine.init(shopId)
+        if (mounted) void syncEngine.init(shopId)
       } catch (err) {
         console.error('Error initializing local CRM database:', err)
         if (mounted) setIsReady(true)
@@ -429,7 +431,7 @@ export function useLocalCrm(initialData: {
       setProducts(updatedProducts)
       setSales((prev) => [newSale, ...prev])
       if (newCashOp) {
-        setCash((prev) => ({ ...prev, operations: [newCashOp!, ...prev.operations] }))
+        setCash((prev) => ({ ...prev, operations: [newCashOp, ...prev.operations] }))
       }
 
       return { success: true, sale: newSale }
@@ -513,31 +515,8 @@ export function useLocalCrm(initialData: {
   // 4. Offline-first Product Management
   const localSaveProduct = useCallback(
     async (productData: Partial<Product>) => {
-      const nowIso = new Date().toISOString()
-      const clientOpId = createLocalId()
-      const productId = productData.id || createLocalId()
-
-      const fullProduct: Product = {
-        ...productData,
-        id: productId,
-        shop_id: shopId,
-        status: productData.status || 'in_stock',
-        created_at: productData.created_at || nowIso,
-        updated_at: nowIso,
-      } as Product
-
-      await bulkPut('products', [fullProduct])
-
-      await enqueueOutbox({
-        client_op_id: clientOpId,
-        shop_id: shopId,
-        entity: 'products',
-        op_type: productData.id ? 'product_update' : 'product_add',
-        payload: {
-          ...fullProduct,
-          original_updated_at: productData.updated_at || null,
-        },
-      })
+      const fullProduct = await persistOfflineProduct({ profile: initialData.profile, product: productData })
+      const productId = fullProduct.id
 
       setProducts((prev) => {
         const exists = prev.some((p) => p.id === productId)
@@ -549,7 +528,7 @@ export function useLocalCrm(initialData: {
 
       return fullProduct
     },
-    [shopId]
+    [initialData.profile]
   )
 
   // Cache a product already saved by the server without queuing a duplicate
@@ -626,27 +605,11 @@ export function useLocalCrm(initialData: {
   const localDeleteProduct = useCallback(
     async (productOrId: Product | string) => {
       const productId = typeof productOrId === 'string' ? productOrId : productOrId.id
-      const nowIso = new Date().toISOString()
-      const clientOpId = createLocalId()
-
-      const target = products.find((p) => p.id === productId)
-        ?? (typeof productOrId === 'string' ? undefined : productOrId)
-      if (!target) throw new Error('Товар не найден в локальной базе')
-
-      const softDeleted = { ...target, deleted_at: nowIso, updated_at: nowIso }
-      await bulkPut('products', [softDeleted])
-
-      await enqueueOutbox({
-        client_op_id: clientOpId,
-        shop_id: shopId,
-        entity: 'products',
-        op_type: 'product_delete',
-        payload: { id: productId },
-      })
+      await persistOfflineProduct({ profile: initialData.profile, product: { id: productId }, remove: true })
 
       setProducts((prev) => prev.filter((p) => p.id !== productId))
     },
-    [products, shopId]
+    [initialData.profile]
   )
 
   /** Убирает товар после серверного удаления, не ставя операцию в очередь повторно. */

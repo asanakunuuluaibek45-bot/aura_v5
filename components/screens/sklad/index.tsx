@@ -1,5 +1,6 @@
 "use client"
 
+import { useOnline } from "@/hooks/use-online"
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import dynamic from "next/dynamic"
 import type { Product, Sale } from "@/lib/types"
@@ -100,6 +101,7 @@ export function SkladScreen({
   focusProduct?: Pick<Product, "id" | "name" | "sku"> | null
   onFocusProductHandled?: (productId: string) => void
 }) {
+  const online = useOnline()
   const router = useRouter()
   const [, startTransition] = useTransition()
   const printerConnection = usePrinterConnection()
@@ -157,7 +159,7 @@ export function SkladScreen({
     const skuQuery = debouncedQuery.trim().toUpperCase()
     const isExactSku = /^[A-Z]{2}\d{1,8}$/.test(skuQuery)
     const isLoadedLocally = visibleProducts.some((product) => String(product.sku ?? "").trim().toUpperCase() === skuQuery)
-    if (!isExactSku || isLoadedLocally) {
+    if (!online || !isExactSku || isLoadedLocally) {
       setRemoteSkuMatch(null)
       return
     }
@@ -175,7 +177,7 @@ export function SkladScreen({
     return () => {
       active = false
     }
-  }, [debouncedQuery, visibleProducts])
+  }, [debouncedQuery, visibleProducts, online])
 
   const filtered = useMemo(() => filterProducts(productsForSearch, debouncedQuery), [productsForSearch, debouncedQuery])
 
@@ -400,48 +402,25 @@ export function SkladScreen({
   }
 
   const onAdd = () => {
+    if (!navigator.onLine) return
     labelReturnScrollY.current = window.scrollY
     setEditing(null)
     setProductDialogOpen(true)
   }
 
   const onEdit = (p: Product) => {
+    if (!navigator.onLine) return
     labelReturnScrollY.current = window.scrollY
     setEditing(p)
     setProductDialogOpen(true)
   }
 
   const onDelete = async (p: Product) => {
-    if (!confirm(`Удалить «${p.name}»?`)) return
+    if (!navigator.onLine || !confirm(`Удалить «${p.name}»?`)) return
     try {
-      const queueOfflineDelete = async () => {
-        if (!allowOffline || !onOfflineDeleteProduct) return false
-        await onOfflineDeleteProduct(p)
-        setDeletedProductIds((previous) => new Set(previous).add(p.id))
-        toast.success("Удаление сохранено", {
-          description: "Товар будет удалён на сервере после восстановления подключения",
-        })
-        return true
-      }
-
-      if (!navigator.onLine) {
-        if (!(await queueOfflineDelete())) {
-          throw new Error("Для удаления товара требуется подключение к интернету")
-        }
-        return
-      }
-
-      let res: Awaited<ReturnType<typeof deleteProduct>>
-      try {
-        res = await deleteProduct(p.id)
-      } catch (error) {
-        if (isConnectivityError(error) && await queueOfflineDelete()) return
-        throw error
-      }
-      if (!res.ok) {
-        if (isConnectivityError(res.error) && await queueOfflineDelete()) return
-        throw new Error(res.error)
-      }
+      if (!navigator.onLine) throw new Error("Для удаления товара требуется интернет")
+      const res = await deleteProduct(p.id)
+      if (!res.ok) throw new Error(res.error)
       setDeletedProductIds((previous) => new Set(previous).add(p.id))
       await onProductDeleted?.(p.id)
       toast.success("Товар удалён")
@@ -464,7 +443,7 @@ export function SkladScreen({
           <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
         {showAdd && (
-          <Button onClick={onAdd} className="gap-1.5 w-full sm:w-auto">
+          <Button disabled={!online} onClick={onAdd} className="gap-1.5 w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             Добавить товар
           </Button>
@@ -506,6 +485,7 @@ export function SkladScreen({
           canSeePurchasePrice={canSeePurchasePrice}
           isAdmin={isAdmin}
           onPrint={onPrintLabel}
+          mutationsDisabled={!online}
           onEdit={onEdit}
           onDelete={(id) => {
             const p = products.find((item) => item.id === id)
@@ -586,6 +566,7 @@ export function SkladScreen({
                     <ActionButtons
                       p={p}
                       isAdmin={isAdmin}
+                      mutationsDisabled={!online}
                       onPrint={onPrintLabel}
                       onEdit={onEdit}
                        onDelete={onDelete}
@@ -681,6 +662,7 @@ export function SkladScreen({
                   variant="ghost"
                   size="sm"
                   className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                  disabled={!online}
                   onClick={() => onEdit(p)}
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -691,6 +673,7 @@ export function SkladScreen({
                     variant="ghost"
                     size="sm"
                     className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-destructive ml-auto"
+                    disabled={!online}
                     onClick={() => onDelete(p)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -976,7 +959,7 @@ export function SkladScreen({
         onOpenChange={setProductDialogOpen}
         product={editing}
         canSeePurchasePrice={canSeePurchasePrice}
-        allowOffline={allowOffline}
+        allowOffline={false}
         onProductSaved={handleProductSaved}
         onPrintLabel={queueAutoPrintLabel}
       />
@@ -990,10 +973,11 @@ function QtyBadge({ status }: { status: Product["status"] }) {
 }
 
 function ActionButtons({
-  p, isAdmin, onPrint, onEdit, onDelete,
+  p, isAdmin, onPrint, onEdit, onDelete, mutationsDisabled,
 }: {
   p: Product
   isAdmin: boolean
+  mutationsDisabled: boolean
   onPrint: (p: Product) => void
   onEdit: (p: Product) => void
   onDelete: (p: Product) => void
@@ -1016,6 +1000,7 @@ function ActionButtons({
         className="h-8 w-8 text-muted-foreground hover:text-primary"
         aria-label="Редактировать товар"
         title="Редактировать"
+        disabled={mutationsDisabled}
         onClick={() => onEdit(p)}
       >
         <Pencil className="h-3.5 w-3.5" />
@@ -1026,6 +1011,7 @@ function ActionButtons({
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-destructive"
           aria-label="Удалить товар"
+          disabled={mutationsDisabled}
           onClick={() => onDelete(p)}
         >
           <Trash2 className="h-3.5 w-3.5" />

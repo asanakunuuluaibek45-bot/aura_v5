@@ -1,32 +1,22 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
-import dynamic from "next/dynamic"
+import { BarcodeScannerModal } from "@/components/BarcodeScannerModal"
 import { Camera } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { parseQrCode } from "@/lib/qr-code"
-import { checkQrShop } from "@/app/actions/qr"
+import { getLocalDB } from "@/lib/local-db/db"
+import { checkLocalRevisionShop } from "@/lib/revision-offline"
 import { processRevisionLabel, type RevisionScanTransaction } from "@/lib/revision-label-scan"
 
-const BarcodeScannerModal = dynamic(
-  () => import("@/components/BarcodeScannerModal").then((mod) => mod.BarcodeScannerModal),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="p-6 text-center text-sm text-muted-foreground" role="status">
-        Подготавливаем сканер этикеток…
-      </div>
-    ),
-  },
-)
-
 type RevisionLabelScannerProps = {
+  shopId: string | null
   onScan: (sku: string) => RevisionScanTransaction
   checkedSkus: Set<string>
   stats: { total: number; checked: number; remaining: number }
 }
 
-export function RevisionLabelScanner({ onScan, checkedSkus, stats }: RevisionLabelScannerProps) {
+export function RevisionLabelScanner({ onScan, checkedSkus, stats, shopId }: RevisionLabelScannerProps) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState("")
   const pendingSkusRef = useRef(new Set<string>())
@@ -51,7 +41,20 @@ export function RevisionLabelScanner({ onScan, checkedSkus, stats }: RevisionLab
       const outcome = await processRevisionLabel(
         { ...parsed, sku },
         onScan,
-        checkQrShop,
+        async (seqId) => {
+          if (!shopId) return { ok: false, reason: "unauthorized" }
+          const db = await getLocalDB()
+          const settings = await db.get("shop_settings", shopId)
+          const ownSeqId = typeof settings?.seq_id === "number" ? settings.seq_id : null
+          if (ownSeqId !== null) return checkLocalRevisionShop(seqId, ownSeqId)
+          if (!navigator.onLine) return { ok: false, reason: "unauthorized" }
+          // Browser SDK respects the existing RLS, and works in both native and web.
+          const { createClient } = await import("@/lib/supabase/client")
+          const { data, error } = await createClient().from("shop_settings").select("shop_id, seq_id, shop_name").eq("shop_id", shopId).maybeSingle()
+          if (error || !data) return { ok: false, reason: "unauthorized" }
+          await db.put("shop_settings", data)
+          return checkLocalRevisionShop(seqId, data.seq_id)
+        },
         (result, pending) => {
           const message = result.status === "not_found"
             ? "Не найдено на складе: " + sku
@@ -79,7 +82,7 @@ export function RevisionLabelScanner({ onScan, checkedSkus, stats }: RevisionLab
     } finally {
       pendingSkusRef.current.delete(sku)
     }
-  }, [onScan])
+  }, [onScan, shopId])
 
   return (
     <>

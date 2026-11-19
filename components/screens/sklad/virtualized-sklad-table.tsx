@@ -13,6 +13,7 @@ interface VirtualizedSkladTableProps {
   products: Product[]
   canSeePurchasePrice: boolean
   isAdmin: boolean
+  mutationsDisabled?: boolean
   onPrint: (product: Product) => void
   onEdit: (product: Product) => void
   onDelete: (id: string) => void
@@ -27,6 +28,7 @@ export function VirtualizedSkladTable({
   products,
   canSeePurchasePrice,
   isAdmin,
+  mutationsDisabled = false,
   onPrint,
   onEdit,
   onDelete,
@@ -147,6 +149,7 @@ export function VirtualizedSkladTable({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    disabled={mutationsDisabled}
                     onClick={() => onEdit(product)}
                     title="Редактировать"
                   >
@@ -157,6 +160,7 @@ export function VirtualizedSkladTable({
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      disabled={mutationsDisabled}
                       onClick={() => onDelete(product.id)}
                       title="Удалить"
                     >

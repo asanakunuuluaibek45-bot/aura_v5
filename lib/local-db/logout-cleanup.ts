@@ -1,4 +1,6 @@
+import { requireLogoutConsent, type LogoutOptions } from '../offline-policy'
 import { wipeLocalDatabase } from './db'
+import { getUnresolvedOutboxOperationCount } from './outbox'
 import { syncEngine } from '../sync/sync-engine'
 
 /**
@@ -9,17 +11,16 @@ import { syncEngine } from '../sync/sync-engine'
  * cache it owns. After this runs there is no cached page, no cached response and no
  * local row left from the previous user.
  */
-export async function runLogoutCleanup(): Promise<void> {
-  try {
-    syncEngine.stop()
-  } catch (err) {
-    console.warn('[Logout] Failed to stop sync engine:', err)
-  }
+export async function runLogoutCleanup(options: LogoutOptions = {}): Promise<void> {
+  requireLogoutConsent(await getUnresolvedOutboxOperationCount(), options)
+  await syncEngine.stopAndDrain()
+  requireLogoutConsent(await getUnresolvedOutboxOperationCount(), options)
 
   try {
     await wipeLocalDatabase()
   } catch (err) {
     console.error('[Logout] Failed to wipe local database:', err)
+    throw err
   }
 
   await clearServiceWorkerCaches()
@@ -33,7 +34,10 @@ export async function clearServiceWorkerCaches(): Promise<void> {
       const worker = registration?.active
       if (worker) {
         await new Promise<void>((resolve) => {
-          const timeout = setTimeout(resolve, 1500)
+          const timeout = setTimeout(() => {
+            navigator.serviceWorker.removeEventListener('message', onMessage)
+            resolve()
+          }, 1500)
           const onMessage = (event: MessageEvent) => {
             if (event.data?.type === 'AURA_CACHES_CLEARED') {
               clearTimeout(timeout)
@@ -53,7 +57,7 @@ export async function clearServiceWorkerCaches(): Promise<void> {
   if (typeof caches !== 'undefined') {
     try {
       const keys = await caches.keys()
-      await Promise.all(keys.map((key) => caches.delete(key)))
+      await Promise.all(keys.filter((key) => key.startsWith('aura-crm-')).map((key) => caches.delete(key)))
     } catch (err) {
       console.warn('[Logout] Cache Storage cleanup failed:', err)
     }

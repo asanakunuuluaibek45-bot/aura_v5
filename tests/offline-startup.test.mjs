@@ -160,12 +160,11 @@ test("the selected light or dark theme also colors browser chrome and offline sc
   assert.equal(manifest.theme_color, "#29233d")
 })
 
-test("losing the connection returns CRM navigation to the cashier", () => {
-  const dashboard = read("components/dashboard.tsx")
-
-  assert.match(dashboard, /const handleOffline = \(\) => \{\s*setIsOnline\(false\)/)
-  assert.match(dashboard, /toast\.info\("Нет интернета — открыта офлайн-касса"\)/)
-  assert.match(dashboard, /if \(!navigator\.onLine && next !== "kassa" && !isImpersonating\)/)
-  assert.match(dashboard, /if \(!navigator\.onLine && !isImpersonating\)/)
-  assert.match(dashboard, /toast\.info\("Без интернета доступна только касса"\)/)
+test("cached inventory and cabinet shells open offline without exposing unrelated reports", async () => {
+  for (const path of ['/crm/inventory', '/inventory', '/crm/cabinet', '/cabinet', '/crm/revisions', '/revisions']) {
+    const worker = await createOfflineWorker({ '/crm/pos': 'CASHIER', [path]: 'LOCAL_SECTION' })
+    const response = await worker.navigate(path)
+    assert.equal(response.status, 200)
+    assert.equal(await response.text(), 'LOCAL_SECTION')
+  }
 })

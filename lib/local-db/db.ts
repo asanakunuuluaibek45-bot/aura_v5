@@ -1,5 +1,6 @@
 import { openDB, deleteDB, type IDBPDatabase } from 'idb'
 import { Capacitor } from '@capacitor/core'
+import { isDeviceSignedOut } from '../supabase/client'
 import type { TableName } from './schema'
 import { SHOP_SCOPED_TABLES } from './schema'
 
@@ -67,11 +68,13 @@ function readLegacyOfflineSession(): SavedUserSession | null {
 
 /** Keep the offline profile in the same IndexedDB used by the local CRM. */
 export async function saveUserSession(data: Omit<SavedUserSession, 'id' | 'updatedAt'>): Promise<void> {
+  if (await isDeviceSignedOut()) return
   const db = await getLocalDB()
   const prev = (await db.get('user_session', CURRENT_USER_SESSION_ID)) as SavedUserSession | undefined
   // Не затираем сохранённые токены, если вызвали без session (например, из PwaProvider).
   const keepPrev = prev && prev.userId === data.userId
   const isNative = Capacitor.isNativePlatform()
+  if (await isDeviceSignedOut()) return
   await db.put('user_session', {
     ...(keepPrev ? prev : {}),
     ...data,
@@ -88,6 +91,7 @@ export async function saveUserSession(data: Omit<SavedUserSession, 'id' | 'updat
 
 /** Load the offline profile, migrating the previous localStorage copy once. */
 export async function getSavedUserSession(): Promise<SavedUserSession | null> {
+  if (await isDeviceSignedOut()) return null
   try {
     const db = await getLocalDB()
     const saved = await db.get('user_session', CURRENT_USER_SESSION_ID)
@@ -620,6 +624,7 @@ export async function wipeLocalDatabase(): Promise<void> {
       await tx.done
     } catch (innerErr) {
       console.error('[LocalDB] Fallback clear failed:', innerErr)
+      throw innerErr
     }
   }
 
@@ -628,7 +633,7 @@ export async function wipeLocalDatabase(): Promise<void> {
       const keys: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
-        if (key && (key.startsWith('aura_') || key.startsWith('kassa_'))) keys.push(key)
+        if (key && ((key.startsWith('aura_') && key !== 'aura_device_signed_out') || key.startsWith('kassa_') || key.startsWith('inventory-revision-v1:'))) keys.push(key)
       }
       for (const key of keys) localStorage.removeItem(key)
     } catch {}

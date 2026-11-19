@@ -28,7 +28,7 @@
  * - On logout the page posts AURA_LOGOUT_CLEANUP and every cache is dropped.
  */
 
-const VERSION = 'local-mwmd8h9f'
+const VERSION = 'offline-revisions-20261119-v4'
 const SHELL_CACHE = `aura-crm-shell-${VERSION}`
 const STATIC_CACHE = `aura-crm-static-${VERSION}`
 const STATE_CACHE = `aura-crm-state-${VERSION}`
@@ -47,6 +47,8 @@ const PRECACHE_SHELL_URLS = [
   '/pos',
   '/crm/inventory',
   '/inventory',
+  '/crm/revisions',
+  '/revisions',
   '/crm/showcase',
   '/showcase',
   '/crm/customers',
@@ -68,6 +70,7 @@ const PRECACHE_SHELL_URLS = [
   '/favicon-32x32.png',
   '/favicon-16x16.png',
   '/icon.svg',
+  '/golduchet-icon-transparent.svg',
   '/apple-icon.png',
   '/apple-touch-icon.png',
   '/android-chrome-192x192.png',
@@ -93,6 +96,7 @@ const OFFLINE_FALLBACK_HTML = `<!DOCTYPE html><html lang="ru"><head><meta charse
 // ---------------------------------------------------------------------------
 
 function shellCacheKey(pathname) {
+  pathname = pathname === '/' ? pathname : pathname.replace(/\/+$/, '')
   return new Request(new URL(pathname, self.location.origin).href, {
     method: 'GET',
     credentials: 'same-origin',
@@ -148,7 +152,12 @@ async function cacheBuildAssetsFromHtml(response, staticCache) {
 }
 
 async function cacheShellDocument(cache, staticCache, pathname, response) {
-  await cache.put(shellCacheKey(pathname), response.clone())
+  // A followed trailing-slash redirect has redirected=true, which Chromium
+  // rejects as a navigation fallback with redirect mode "manual".
+  const shell = response.redirected
+    ? new Response(await response.clone().arrayBuffer(), { status: response.status, headers: response.headers })
+    : response.clone()
+  await cache.put(shellCacheKey(pathname), shell)
   // The clone is consumed separately so the HTML response can still be returned.
   await cacheBuildAssetsFromHtml(response.clone(), staticCache)
 }
@@ -226,7 +235,7 @@ self.addEventListener('message', (event) => {
     event.waitUntil(
       (async () => {
         const keys = await caches.keys()
-        await Promise.all(keys.map((key) => caches.delete(key)))
+        await Promise.all(keys.filter((key) => key.startsWith('aura-crm-')).map((key) => caches.delete(key)))
         const clients = await self.clients.matchAll({ includeUncontrolled: true })
         for (const client of clients) {
           client.postMessage({ type: 'AURA_CACHES_CLEARED' })
@@ -357,10 +366,17 @@ function isStaticAsset(url) {
 }
 
 async function handleNavigation(request, url) {
+  // Static Capacitor exports use trailing slashes; website routes do not.
+  url = new URL(url.href)
+  url.pathname = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '')
   const cache = await caches.open(SHELL_CACHE)
   const staticCache = await caches.open(STATIC_CACHE)
 
   try {
+    if (navigator.onLine === false) {
+      const fallback = await offlineNavigationFallback(cache, url)
+      if (fallback) return fallback
+    }
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), NAV_TIMEOUT_MS)
     let network
@@ -422,6 +438,8 @@ async function offlineNavigationFallback(cache, url) {
       '/pos',
       '/showcase',
       '/inventory',
+  '/crm/revisions',
+  '/revisions',
       '/customers',
       '/stores',
       '/notifications',
@@ -429,6 +447,16 @@ async function offlineNavigationFallback(cache, url) {
       '/cabinet',
       '/reports',
     ].includes(pathname)
+  const localSectionPaths = ['/crm/cabinet', '/cabinet', '/crm/inventory', '/inventory', '/crm/revisions', '/revisions']
+  if (localSectionPaths.includes(pathname)) {
+    // Exact sections only; never serve a stale reports HTML as an offline screen.
+    const canonical = pathname.startsWith('/crm/') ? pathname : `/crm${pathname}`
+    const section = await findExactCachedShell(cache, canonical) || await findExactCachedShell(cache, pathname)
+    if (section) {
+      notifyClients({ type: 'AURA_OFFLINE_SHELL', path: canonical })
+      return section
+    }
+  }
   const shouldOpenCashier =
     pathname === '/' ||
     pathname.startsWith('/auth/') ||
@@ -479,6 +507,8 @@ async function findCachedShell(cache, pathname) {
     '/pos',
     '/showcase',
     '/inventory',
+  '/crm/revisions',
+  '/revisions',
     '/customers',
     '/stores',
     '/notifications',

@@ -1,5 +1,6 @@
 "use client"
 
+import { useOnline } from "@/hooks/use-online"
 import { useEffect, useState, useTransition } from "react"
 import type { Product } from "@/lib/types"
 import { createProduct, updateProduct, type ProductInput } from "@/app/actions/products"
@@ -38,6 +39,7 @@ export function ProductDialog({
   /** Переиспользует печать этикеток из списка товаров (см. SkladScreen). */
   onPrintLabel?: (product: Product) => void | Promise<void>
 }) {
+  const online = useOnline()
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [saving, setSaving] = useState(false)
@@ -79,6 +81,10 @@ export function ProductDialog({
   }, [open, product])
 
   const submit = async (printAfterSave = false) => {
+    if (!navigator.onLine || saving) {
+      toast.error("Для изменения товаров требуется интернет")
+      return
+    }
     if (!form.name.trim()) {
       toast.error("Укажите название")
       return
@@ -111,53 +117,14 @@ export function ProductDialog({
       // 1) Сначала сохраняем в БД и получаем реальную строку товара
       //    (с id / sku / shop_id / shop_seq_id) — именно она нужна для QR-кода.
       let saved: Product
-      let savedOffline = false
-      try {
-        if (!navigator.onLine) throw new Error("Offline")
-        if (product) {
-          saved = await updateProduct(product.id, payload)
-          toast.success("Товар обновлён")
-        } else {
-          saved = await createProduct(payload)
-          clearDraft()
-          toast.success("Товар добавлен")
-        }
-      } catch (saveErr) {
-        if (!allowOffline) throw saveErr
-        savedOffline = true
-        // Offline fallback: save locally to IndexedDB and queue in Outbox.
-        const { bulkPut } = await import("@/lib/local-db/db")
-        const { enqueueOutbox } = await import("@/lib/local-db/outbox")
-        const clientOpId = typeof crypto !== "undefined" ? crypto.randomUUID() : Math.random().toString(36).substring(2)
-        const nowIso = new Date().toISOString()
-        const prodId = product?.id || (typeof crypto !== "undefined" ? crypto.randomUUID() : Math.random().toString(36).substring(2))
-
-        saved = {
-          ...product,
-          ...payload,
-          id: prodId,
-          sku: product?.sku || payload.sku || `OFF-${Math.floor(1000 + Math.random() * 9000)}`,
-          status: product?.status || "in_stock",
-          created_at: product?.created_at || nowIso,
-          updated_at: nowIso,
-        } as Product
-
-        await bulkPut("products", [saved])
-        await enqueueOutbox({
-          client_op_id: clientOpId,
-          shop_id: saved.shop_id || "",
-          entity: "products",
-          op_type: product ? "product_update" : "product_add",
-          payload: {
-            ...saved,
-            original_updated_at: product?.updated_at || null,
-          },
-        })
-
-        if (!product) clearDraft()
-        toast.success(product ? "Товар обновлён (локально)" : "Товар добавлен (локально)", {
-          description: "Операция сохранена в очереди и будет синхронизирована при появлении сети",
-        })
+      if (!navigator.onLine) throw new Error("Для изменения товаров требуется интернет")
+      if (product) {
+        saved = await updateProduct(product.id, payload)
+        toast.success("Товар обновлён")
+      } else {
+        saved = await createProduct(payload)
+        clearDraft()
+        toast.success("Товар добавлен")
       }
 
       setNameHistory(pushNameHistory(form.name))
@@ -186,14 +153,9 @@ export function ProductDialog({
         onOpenChange(false)
       }
       if (printAfterSave && onPrintLabel) {
-        if (savedOffline) {
-          toast.info("Товар сохранён локально. Печать будет доступна после синхронизации.")
-        } else {
-          // Queue printing without leaving the add form so the next item can be entered.
-          void Promise.resolve(onPrintLabel(saved)).catch((printError) => {
-            toast.error(printError instanceof Error ? printError.message : "Не удалось начать печать")
-          })
-        }
+        void Promise.resolve(onPrintLabel(saved)).catch((printError) => {
+          toast.error(printError instanceof Error ? printError.message : "Не удалось начать печать")
+        })
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Не удалось сохранить")
@@ -450,7 +412,7 @@ export function ProductDialog({
             <Button type="button" variant="outline" disabled={saving} onClick={cancel}>
               Отмена
             </Button>
-            <Button type="button" onClick={() => void submit()} disabled={saving}>
+            <Button type="button" onClick={() => void submit()} disabled={saving || !online}>
               {saving ? (
                 <span className="flex items-center gap-2">
                   <InlineLoader />
@@ -466,7 +428,7 @@ export function ProductDialog({
                 variant="secondary"
                 className="col-span-2 sm:col-span-1"
                 onClick={() => void submit(true)}
-                disabled={saving}
+                disabled={saving || !online}
               >
                 {saving ? (
                   <span className="flex items-center gap-2">

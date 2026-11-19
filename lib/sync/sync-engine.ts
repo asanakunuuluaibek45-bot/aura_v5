@@ -1,3 +1,4 @@
+import { editableProductPatch, validateOfflineProduct } from '../local-db/product-record'
 import { classifySyncError as classifyError } from './sync-errors'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -82,6 +83,19 @@ interface PullSpec {
 }
 
 class SyncEngine {
+  private initializing = 0
+  private draining = false
+
+  /** Stop scheduling, then wait until in-flight pulls/writes cannot repopulate a wiped DB. */
+  public async stopAndDrain(): Promise<void> {
+    this.draining = true
+    this.stop()
+    while (this.initializing > 0 || this.isRunning || this.outboxFlushing) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+    }
+    this.draining = false
+  }
+
   private isRunning = false
   private outboxFlushing = false
   private isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -131,9 +145,17 @@ class SyncEngine {
   // -------------------------------------------------------------------------
 
   public async init(shopId: string) {
-    if (!shopId) return
+    if (this.draining) return
+    this.initializing++
+    try { await this.initializeShop(shopId) }
+    finally { this.initializing-- }
+  }
+
+  private async initializeShop(shopId: string) {
+    if (!shopId || this.draining) return
 
     this.stopped = false
+    this.isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
     this.bindListeners()
 
     const previousShop = this.activeShopId
@@ -147,6 +169,7 @@ class SyncEngine {
       this.notifyServiceWorker({ type: 'AURA_SHOP_CHANGED', shopId })
     }
 
+    if (this.stopped || this.draining || this.activeShopId !== shopId) return
     updateSyncState({ scopeShopId: shopId })
 
     // Одноразово освобождаем место от данных старых версий: проданные товары
@@ -161,6 +184,7 @@ class SyncEngine {
       }
     }
 
+    if (this.stopped || this.draining || this.activeShopId !== shopId) return
     this.startPeriodicSync()
     this.startStalenessWatch()
     this.startRealtime(shopId)
@@ -192,7 +216,6 @@ class SyncEngine {
     this.outboxTimer = null
     this.pullRetryTimer = null
     this.stalenessTimer = null
-    this.isRunning = false
     this.pullFailures = 0
     resetSyncState()
   }
@@ -204,11 +227,13 @@ class SyncEngine {
   public handleOnlineState(online: boolean) {
     this.isOnline = online
     if (!online) {
+      this.stopRealtime()
       updateSyncState({ status: 'offline', phaseLabel: 'Офлайн', isStale: true })
       return
     }
     updateSyncState({ status: 'idle', phaseLabel: 'Подключено' })
     this.pullFailures = 0
+    if (this.activeShopId && !this.stopped && !this.draining) this.startRealtime(this.activeShopId)
     this.triggerSync()
   }
 
@@ -225,6 +250,7 @@ class SyncEngine {
   /** Instant updates: any change in the cloud for this shop triggers a delta pull. */
   private startRealtime(shopId: string) {
     this.stopRealtime()
+    if (!this.isOnline || this.stopped || this.draining || (typeof navigator !== 'undefined' && !navigator.onLine)) return
     try {
       const supabase = createSupabaseClient()
       const tables = [
@@ -425,11 +451,18 @@ class SyncEngine {
       const live = data.filter((row: any) => !isGone(row))
       const removed = data.filter((row: any) => isGone(row)).map((row: any) => row.id)
 
-      if (live.length > 0) await bulkPut(spec.table, live)
-      if (removed.length > 0) {
-        await bulkDelete(spec.table, removed)
-        deletedCount += removed.length
+      const db = await getLocalDB()
+      const tx = db.transaction([spec.table, 'outbox'], 'readwrite')
+      const queued = await tx.objectStore('outbox').getAll() as OutboxItem[]
+      const pendingIds = new Set(queued.filter((item) => item.shop_id === shopId && item.entity === spec.table)
+        .map((item) => item.payload?.id).filter(Boolean))
+      const store = tx.objectStore(spec.table)
+      for (const row of live) if (!pendingIds.has(row.id)) await store.put(row)
+      for (const id of removed) if (!pendingIds.has(id)) {
+        await store.delete(id)
+        deletedCount++
       }
+      await tx.done
 
       fetched += data.length
       options.onProgress?.(fetched)
@@ -946,7 +979,7 @@ class SyncEngine {
 
     // Conflict detection for updates and stock changes (unchanged behaviour).
     if (
-      (item.op_type === 'product_update' || item.op_type === 'stock_change' || item.op_type === 'update') &&
+      item.op_type === 'update' &&
       item.payload?.id &&
       item.payload?.original_updated_at
     ) {
@@ -1105,28 +1138,37 @@ class SyncEngine {
     }
 
     if (item.op_type === 'product_add') {
-      const { original_updated_at, ...cleanPayload } = item.payload
-      await this.run(supabase, (client, signal) =>
-        client
-          .from('products')
-          .upsert(
-            { ...cleanPayload, shop_id: item.shop_id, updated_at: nowIso },
-            { onConflict: 'id', ignoreDuplicates: false }
-          )
-          .abortSignal(signal)
-      )
+      const { original_updated_at, shop_seq_id, ...cleanPayload } = item.payload
+      // Insert-once, never upsert over a remotely sold/edited product on retry.
+      await this.run(supabase, (client, signal) => client.from('products')
+        .upsert({ ...cleanPayload, shop_id: item.shop_id, updated_at: nowIso },
+          { onConflict: 'id', ignoreDuplicates: true }).abortSignal(signal))
+      const confirmed = await this.run(supabase, (client, signal) => client.from('products')
+        .select('*').eq('shop_id', item.shop_id).eq('id', item.payload.id).abortSignal(signal).single())
+      if (confirmed.client_op_id !== item.client_op_id) {
+        throw Object.assign(new Error('Идентификатор товара занят другой операцией'), { status: 422 })
+      }
+      await this.cacheConfirmedProduct(item, confirmed)
       return
     }
 
     if (item.op_type === 'product_update' || item.op_type === 'stock_change') {
-      const { id: prodId, original_updated_at, ...cleanPayload } = item.payload
-      await this.run(supabase, (client, signal) =>
-        client
-          .from('products')
-          .update({ ...cleanPayload, updated_at: nowIso })
-          .eq('id', prodId)
-          .abortSignal(signal)
-      )
+      const { id: prodId, original_updated_at } = item.payload
+      const current = await this.run(supabase, (client, signal) => client.from('products')
+        .select('*').eq('shop_id', item.shop_id).eq('id', prodId).abortSignal(signal).single())
+      if (current.client_op_id === item.client_op_id) {
+        await this.cacheConfirmedProduct(item, current)
+        return
+      }
+      validateOfflineProduct(item.payload, current)
+      const confirmed = await this.run(supabase, (client, signal) => {
+        let query = client.from('products').update({ ...editableProductPatch(item.payload),
+          updated_at: nowIso, client_op_id: item.client_op_id })
+          .eq('id', prodId).eq('shop_id', item.shop_id).is('deleted_at', null).neq('status', 'sold')
+        if (original_updated_at) query = query.eq('updated_at', original_updated_at)
+        return query.select('*').abortSignal(signal).single()
+      })
+      await this.cacheConfirmedProduct(item, confirmed)
       return
     }
 
@@ -1147,7 +1189,21 @@ class SyncEngine {
       return
     }
 
-    if (item.op_type === 'delete' || item.op_type === 'product_delete') {
+    if (item.op_type === 'product_delete') {
+      const current = await this.run(supabase, (client, signal) => client.from('products')
+        .select('*').eq('shop_id', item.shop_id).eq('id', item.payload.id).abortSignal(signal).maybeSingle())
+      if (!current || current.deleted_at) return
+      const confirmed = await this.run(supabase, (client, signal) => {
+        let query = client.from('products').update({ deleted_at: nowIso, updated_at: nowIso,
+          client_op_id: item.client_op_id }).eq('shop_id', item.shop_id).eq('id', item.payload.id).neq('status', 'sold')
+        if (item.payload.original_updated_at) query = query.eq('updated_at', item.payload.original_updated_at)
+        return query.select('*').abortSignal(signal).single()
+      })
+      await this.cacheConfirmedProduct(item, confirmed)
+      return
+    }
+
+    if (item.op_type === 'delete') {
       const targetTable = item.entity || 'products'
       await this.run(supabase, (client, signal) =>
         client
@@ -1157,6 +1213,25 @@ class SyncEngine {
           .abortSignal(signal)
       )
     }
+  }
+
+  private async cacheConfirmedProduct(item: OutboxItem, confirmed: any): Promise<void> {
+    const db = await getLocalDB()
+    const tx = db.transaction(['products', 'outbox'], 'readwrite')
+    const outbox = tx.objectStore('outbox')
+    const later = (await outbox.getAll() as OutboxItem[]).filter((row) => row.id !== item.id &&
+      row.shop_id === item.shop_id && row.entity === 'products' && row.payload?.id === confirmed.id)
+    if (later.length === 0) await tx.objectStore('products').put(confirmed)
+    // Rebase successors only from this acknowledged predecessor. A later remote
+    // mutation still fails the compare-and-set instead of silently overwriting.
+    for (const row of later) {
+      if (row.payload.original_updated_at === item.payload.updated_at ||
+          row.payload.original_updated_at === item.payload.original_updated_at) {
+        await outbox.put({ ...row, payload: { ...row.payload, original_updated_at: confirmed.updated_at } })
+      }
+    }
+    await tx.done
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('aura:data_changed'))
   }
 
   /** Execute one write with a timeout and Supabase error unwrapping. */

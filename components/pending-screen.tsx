@@ -3,6 +3,9 @@
 import type { Profile } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { AuraMark } from "@/components/brand/aura-mark"
+import { logoutDeviceAccount } from "@/lib/local-db/device-logout"
+import { UnsyncedLogoutError } from "@/lib/offline-policy"
+import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Clock, XCircle } from "lucide-react"
@@ -12,10 +15,18 @@ export function PendingScreen({ profile, email }: { profile: Profile | null; ema
   const rejected = profile?.status === "rejected"
 
   const signOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push("/auth/login")
-    router.refresh()
+    try {
+      try { await logoutDeviceAccount() }
+      catch (error) {
+        if (!(error instanceof UnsyncedLogoutError)) throw error
+        if (!window.confirm(error.message + " Восстановление невозможно. Стереть данные и выйти?")) return
+        await logoutDeviceAccount({ discardUnsynced: true })
+      }
+      try { await createClient().auth.signOut({ scope: "local" }) } catch {}
+      window.location.assign("/auth/login")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось завершить выход")
+    }
   }
 
   return (

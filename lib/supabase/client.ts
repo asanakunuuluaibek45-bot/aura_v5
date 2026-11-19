@@ -3,12 +3,56 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 
+const DEVICE_SIGNED_OUT_KEY = 'aura_device_signed_out'
+let deviceSignInInProgress = false
+
+export function deviceAuthStorageKey(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!url) throw new Error('Supabase URL is not configured')
+  return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`
+}
+
+export async function isDeviceSignedOut(): Promise<boolean> {
+  if (Capacitor.isNativePlatform()) {
+    return (await Preferences.get({ key: DEVICE_SIGNED_OUT_KEY })).value === 'true'
+  }
+  return typeof localStorage !== 'undefined' && localStorage.getItem(DEVICE_SIGNED_OUT_KEY) === 'true'
+}
+
+export function prepareDeviceSignIn(): void {
+  deviceSignInInProgress = true
+  nativeClient = null
+}
+
+export async function markDeviceSignedIn(): Promise<void> {
+  deviceSignInInProgress = false
+  if (Capacitor.isNativePlatform()) await Preferences.remove({ key: DEVICE_SIGNED_OUT_KEY })
+  else localStorage.removeItem(DEVICE_SIGNED_OUT_KEY)
+  createClient().auth.startAutoRefresh()
+}
+
+export async function clearDeviceAuth(): Promise<void> {
+  deviceSignInInProgress = false
+  const key = deviceAuthStorageKey()
+  if (Capacitor.isNativePlatform()) {
+    await Preferences.set({ key: DEVICE_SIGNED_OUT_KEY, value: 'true' })
+    for (const item of [key, `${key}-code-verifier`, `${key}-user`]) await Preferences.remove({ key: item })
+  } else {
+    localStorage.setItem(DEVICE_SIGNED_OUT_KEY, 'true')
+    for (const item of [key, `${key}-code-verifier`, `${key}-user`]) localStorage.removeItem(item)
+  }
+  // A fresh instance on next login cannot resurrect its in-memory old session.
+  nativeClient = null
+}
+
 const nativeAuthStorage = {
   async getItem(key: string) {
+    if (await isDeviceSignedOut()) return null
     const { value } = await Preferences.get({ key })
     return value
   },
   async setItem(key: string, value: string) {
+    if (await isDeviceSignedOut() && !deviceSignInInProgress) return
     await Preferences.set({ key, value })
   },
   async removeItem(key: string) {
@@ -29,6 +73,7 @@ export function createClient() {
         {
           auth: {
             storage: nativeAuthStorage,
+            storageKey: deviceAuthStorageKey(),
             persistSession: true,
             autoRefreshToken: true,
             detectSessionInUrl: false,

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useTransition } from "react"
+import { useOnline } from "@/hooks/use-online"
 import { createClient } from "@/lib/supabase/client"
 import type { SuperadminNotification } from "@/lib/types"
 import {
@@ -20,6 +21,7 @@ export type NotificationState = {
 }
 
 export function useNotifications() {
+  const online = useOnline()
   const [state, setState] = useState<NotificationState>({
     items: [],
     unreadCount: 0,
@@ -33,6 +35,10 @@ export function useNotifications() {
   // компонент просто показывает пустое состояние без ошибок.
   // -------------------------------------------------------------------------
   const refresh = useCallback(async () => {
+    if (!navigator.onLine) {
+      setState((prev) => ({ ...prev, isLoading: false }))
+      return
+    }
     const [notifResult, countResult] = await Promise.all([
       getNotifications(50, 0),
       getUnreadCount(),
@@ -47,8 +53,8 @@ export function useNotifications() {
   }, [])
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    void refresh().catch(() => setState((prev) => ({ ...prev, isLoading: false })))
+  }, [refresh, online])
 
   // -------------------------------------------------------------------------
   // Supabase Realtime: live-обновления при изменении таблицы уведомлений.
@@ -61,6 +67,7 @@ export function useNotifications() {
   }, [refresh])
 
   useEffect(() => {
+    if (!online || !navigator.onLine) return
     const supabase = createClient()
 
     // Уникальное имя канала предотвращает конфликт при повторном монтировании
@@ -79,7 +86,7 @@ export function useNotifications() {
         },
         () => {
           // При любом INSERT/UPDATE — перечитываем список с сервера
-          refreshRef.current()
+          void refreshRef.current().catch(() => {})
         },
       )
       .subscribe((status) => {
@@ -97,7 +104,7 @@ export function useNotifications() {
     // Резервный polling каждые 15 сек — на случай если Realtime не настроен
     const pollInterval = setInterval(() => {
       if (!realtimeWorking) {
-        refreshRef.current()
+        void refreshRef.current().catch(() => {})
       }
     }, 15_000)
 
@@ -105,7 +112,7 @@ export function useNotifications() {
       clearInterval(pollInterval)
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [online])
 
   // -------------------------------------------------------------------------
   // Actions

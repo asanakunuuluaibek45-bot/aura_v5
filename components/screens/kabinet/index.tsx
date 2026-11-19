@@ -1,5 +1,6 @@
 "use client"
 
+import { useOnline } from "@/hooks/use-online"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import type { Profile, Role, Sale, SaleReturn } from "@/lib/types"
 import { formatSom, roleLabel } from "@/lib/format"
@@ -37,7 +38,8 @@ import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { BadgeCheck, Coins, LogOut, Package, RotateCcw, Trash2, UserCheck, UserX, Users, Wifi } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { runLogoutCleanup } from "@/lib/local-db/logout-cleanup"
+import { logoutDeviceAccount } from "@/lib/local-db/device-logout"
+import { UnsyncedLogoutError } from "@/lib/offline-policy"
 import { getUnresolvedOutboxOperationCount } from "@/lib/local-db/outbox"
 import { syncEngine } from "@/lib/sync/sync-engine"
 import { ActionHistory } from "./action-history"
@@ -563,6 +565,7 @@ export function KabinetScreen({
   historyShopId?: string | null
   onActionUndone?: (result: UndoActionResult, baseline: UndoLocalBaseline) => Promise<boolean>
 }) {
+  const connected = useOnline()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [defaultRate, setDefaultRate] = useState(String(data.defaultBonusRate))
@@ -574,15 +577,16 @@ export function KabinetScreen({
   })
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [discardCount, setDiscardCount] = useState<number | null>(null)
 
-  const handleLogout = async () => {
+  const handleLogout = async (discardUnsynced = false) => {
     if (loggingOut) return
     setLoggingOut(true)
 
     let pendingOperations = 0
     try {
       pendingOperations = await getUnresolvedOutboxOperationCount()
-      if (pendingOperations > 0 && typeof navigator !== "undefined" && navigator.onLine) {
+      if (!discardUnsynced && pendingOperations > 0 && typeof navigator !== "undefined" && navigator.onLine) {
         try {
           await Promise.race([
             syncEngine.flushOutbox({ forceRetry: true }),
@@ -602,32 +606,26 @@ export function KabinetScreen({
       return
     }
 
-    if (pendingOperations > 0) {
-      const online = typeof navigator !== "undefined" && navigator.onLine
+    if (pendingOperations > 0 && !discardUnsynced) {
+      setDiscardCount(pendingOperations)
       setLoggingOut(false)
       toast.error("Выход остановлен: есть несинхронизированные изменения", {
-        description: online
-          ? `Операций без подтверждения: ${pendingOperations}. Проверьте синхронизацию и повторите выход; очередь сохранена.`
-          : `Операций без подтверждения: ${pendingOperations}. Подключитесь к интернету; очередь сохранена.`,
+        description: "Подтвердите отдельное предупреждение, только если согласны потерять эти данные.",
       })
       return
     }
 
-    // Полная очистка локальных данных и кэшей перед выходом.
-    // Ограничиваем очистку по времени: если IndexedDB заблокирована
-    // другой вкладкой или service worker не отвечает, выход всё равно
-    // должен сработать.
     try {
-      await Promise.race([
-        runLogoutCleanup(),
-        new Promise<void>((resolve) => setTimeout(resolve, 3000)),
-      ])
-    } catch {
-      // игнорируем — выход важнее очистки
+      await logoutDeviceAccount({ discardUnsynced })
+    } catch (error) {
+      if (error instanceof UnsyncedLogoutError) setDiscardCount(error.count)
+      setLoggingOut(false)
+      toast.error(error instanceof Error ? error.message : "Не удалось безопасно завершить выход")
+      return
     }
     try {
       const supabase = createClient()
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({ scope: "local" })
     } catch {
       // игнорируем ошибку сети — всё равно перенаправляем
     }
@@ -640,23 +638,27 @@ export function KabinetScreen({
   const usageShopId = historyShopId ?? profile.shop_id ?? null
 
   useEffect(() => {
-    if (!isAdmin || !usageShopId) return
+    if (!isAdmin || !usageShopId || !navigator.onLine) return
     let active = true
     void getProductUnitUsageCount().then((count) => {
       if (active) setProductUnitUsage({ shopId: usageShopId, count })
-    })
+    }).catch(() => {})
     return () => { active = false }
   }, [isAdmin, usageShopId])
 
   // Отметка присутствия для виджета «онлайн».
   useEffect(() => {
-    void touchPresence()
-    const id = setInterval(() => void touchPresence(), 60_000)
+    const touch = () => {
+      if (navigator.onLine) void touchPresence().catch(() => {})
+    }
+    touch()
+    const id = setInterval(touch, 60_000)
     return () => clearInterval(id)
   }, [])
 
   const run = (fn: () => Promise<unknown>, ok: string) =>
     start(async () => {
+      if (!navigator.onLine) { toast.error("Это действие доступно только с интернетом"); return }
       try {
         await fn()
         toast.success(ok)
@@ -749,7 +751,7 @@ export function KabinetScreen({
           returns={returns}
           profile={profile}
           team={data.team}
-          busy={pending}
+          busy={pending || !connected}
           onResetBonus={(id, name) => {
             if (confirm(`Обнулить бонусы: ${name}?`)) run(() => resetBonusPoints(id), "Бонусы обнулены")
           }}
@@ -779,7 +781,7 @@ export function KabinetScreen({
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        disabled={pending}
+                        disabled={pending || !connected}
                         onClick={() =>
                           run(
                             () => approveRequest(r.id, r.requested_role === "admin" ? "admin" : "seller"),
@@ -794,7 +796,7 @@ export function KabinetScreen({
                         size="sm"
                         variant="outline"
                         className="bg-transparent text-destructive"
-                        disabled={pending}
+                        disabled={pending || !connected}
                         onClick={() => run(() => rejectRequest(r.id), "Заявка отклонена")}
                       >
                         <UserX className="mr-1.5 h-3.5 w-3.5" />
@@ -828,7 +830,7 @@ export function KabinetScreen({
               />
             </div>
             <Button
-              disabled={pending}
+              disabled={pending || !connected}
               onClick={() => run(() => setDefaultBonusRate(Number(defaultRate)), "Процент бонусов обновлён")}
             >
               Сохранить
@@ -854,7 +856,7 @@ export function KabinetScreen({
                   type="button"
                   role="radio"
                   aria-checked={receiptDefault === option.value}
-                  disabled={pending}
+                  disabled={pending || !connected}
                   onClick={() => setReceiptDefault(option.value)}
                   className={cn(
                     "rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors",
@@ -869,7 +871,7 @@ export function KabinetScreen({
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button
-                disabled={pending || receiptDefault === data.defaultReceiptType}
+                disabled={pending || !connected || receiptDefault === data.defaultReceiptType}
                 onClick={() => run(() => setDefaultReceiptType(receiptDefault), "Тип чека по умолчанию сохранён")}
               >
                 Сохранить
@@ -900,7 +902,7 @@ export function KabinetScreen({
                   <MemberRow
                     key={m.id}
                     member={m}
-                    busy={pending}
+                    busy={pending || !connected}
                     canEditRate={isSuper || m.role === "seller"}
                     canDelete={isSuper || m.role === "seller"}
                     onDelete={(id) => run(() => removeMember(id), "Сотрудник удалён")}
@@ -919,7 +921,7 @@ export function KabinetScreen({
         <Button
           variant="outline"
           className="flex-1 gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => setLogoutOpen(true)}
+          onClick={() => { setDiscardCount(null); setLogoutOpen(true) }}
         >
           <LogOut className="h-4 w-4" />
           Выйти из системы
@@ -929,9 +931,11 @@ export function KabinetScreen({
       <Dialog open={logoutOpen} onOpenChange={(open) => !loggingOut && setLogoutOpen(open)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Выйти из учётной записи?</DialogTitle>
+            <DialogTitle>{discardCount !== null ? "Данные будут стёрты навсегда" : "Выйти из учётной записи?"}</DialogTitle>
             <DialogDescription>
-              Локальные данные и кэш будут очищены. Если в очереди есть неподтверждённые изменения, выход остановится и сохранит очередь на устройстве.
+              {discardCount !== null
+                ? `Не синхронизировано операций: ${discardCount}. Эти данные будут стёрты навсегда и не попадут на сервер. Восстановить их будет невозможно. Вы согласны удалить их и выйти?`
+                : "Локальные данные и кэш будут очищены. Для повторного входа нужен интернет."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">
@@ -945,11 +949,11 @@ export function KabinetScreen({
             <Button
               variant="destructive"
               className="gap-2"
-              onClick={handleLogout}
+              onClick={() => void handleLogout(discardCount !== null)}
               disabled={loggingOut}
             >
               <LogOut className="h-4 w-4" />
-              {loggingOut ? "Выходим…" : "Выйти"}
+              {loggingOut ? "Выходим…" : discardCount !== null ? "Стереть данные и выйти" : "Выйти"}
             </Button>
           </DialogFooter>
         </DialogContent>

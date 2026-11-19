@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useOnline } from "@/hooks/use-online"
 import type { Sale } from "@/lib/types"
 import { getSalesInRange, type ReportProductInfo } from "@/app/actions/sales"
 
@@ -47,6 +48,7 @@ export function useServerSalesRange(options: {
   includeSaleIds?: string[]
 }) {
   const { localSales, enabled = true, withProducts = false } = options
+  const online = useOnline()
   const includeKey = useMemo(
     () => [...new Set(options.includeSaleIds ?? [])].sort().join(","),
     [options.includeSaleIds],
@@ -69,8 +71,7 @@ export function useServerSalesRange(options: {
   }, [])
 
   useEffect(() => {
-    if (!enabled) return
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
+    if (!enabled || !online || !navigator.onLine) {
       setState({ key, entry: null, loading: false })
       return
     }
@@ -84,6 +85,11 @@ export function useServerSalesRange(options: {
     setState((prev) => ({ key, entry: prev.key === key ? prev.entry : null, loading: true }))
     // Небольшая задержка: быстрые переключения периода не порождают лишних запросов.
     const timer = window.setTimeout(() => {
+      // The connection can disappear during the debounce window.
+      if (cancelled || !navigator.onLine) {
+        if (!cancelled) setState({ key, entry: null, loading: false })
+        return
+      }
       getSalesInRange({
         from: fromIso,
         to: toIsoValue,
@@ -92,8 +98,9 @@ export function useServerSalesRange(options: {
       })
         .then((result) => {
           const entry: CacheEntry = { at: Date.now(), sales: result.sales, products: result.products }
+          if (cancelled || !navigator.onLine) return
           cache.set(key, entry)
-          if (!cancelled) setState({ key, entry, loading: false })
+          setState({ key, entry, loading: false })
         })
         .catch((err) => {
           console.warn("[sales] Server range unavailable, using local history:", err)
@@ -105,7 +112,7 @@ export function useServerSalesRange(options: {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [key, fromIso, toIsoValue, withProducts, includeKey, enabled, version])
+  }, [key, fromIso, toIsoValue, withProducts, includeKey, enabled, online, version])
 
   const entry = state.key === key ? state.entry : null
 
