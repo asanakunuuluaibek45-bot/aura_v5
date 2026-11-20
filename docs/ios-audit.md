@@ -90,8 +90,8 @@ separate signed distribution workflow.
 `Build iOS App` runs manually or for relevant pull requests. The IPA and
 dependency lock files are uploaded as artifacts. The first macOS resolution
 must be reviewed; check in the generated `ios/App/Podfile.lock` when accepted
-to pin transitive Apple dependencies (it cannot be truthfully generated here
-without CocoaPods resolution).
+to pin transitive Apple dependencies. The resolved lock is available in the
+successful CI run's `aura-ios-dependency-locks` artifact.
 
 Local checks performed:
 
@@ -102,14 +102,29 @@ Local checks performed:
 - `git diff --check`: passed.
 - Full dependency installation did not complete in this environment.
   Native TypeScript check was attempted but blocked by missing packages,
-  including Next, Lucide and ZXing. It is **not a passing typecheck**.
-- Xcode/CocoaPods compile, signed IPA, simulator and physical-device tests
-  have **not** been run here.
-- GitHub reported an earlier successful iOS run
-  `https://github.com/asanakunuuluaibek45-bot/aura_v5/actions/runs/44518282538`
-  for an older commit. An updated GitHub connection restored job-detail access;
-  its unsigned archive/upload steps succeeded. This is not evidence that this
-  branch builds or that ML Kit was linked in that older archive.
+  including Next, Lucide and ZXing. Local typecheck is not counted as passing;
+  the subsequent CI typecheck below passed.
+
+Verified macOS CI results for code commit
+`24b876ed548c9caead1becbf969c5e2738581a7e`:
+
+- [Build iOS App](https://github.com/asanakunuuluaibek45-bot/aura_v5/actions/runs/44730000220)
+  succeeded on macOS 15 / Xcode 16.4 with Node 22.
+- All 155 regression tests passed on the runner.
+- Native Next.js compile, TypeScript and static export passed.
+- CocoaPods install/sync found 10 native Capacitor plugins, including ML Kit
+  8.2.2, Bluetooth LE 8.4.0 and Camera 8.2.6.
+- Native dependency and packaged-shell verification passed.
+- Xcode archive finished with `ARCHIVE SUCCEEDED`.
+- [Unsigned IPA artifact](https://github.com/asanakunuuluaibek45-bot/aura_v5/actions/runs/44730000220/artifacts/14624774890)
+  was uploaded successfully (artifact size 8,215,544 bytes).
+- [Resolved dependency locks](https://github.com/asanakunuuluaibek45-bot/aura_v5/actions/runs/44730000220/artifacts/14626017005)
+  were uploaded successfully.
+- The lockfile-portability job and both Vercel web preview statuses also passed.
+
+No signed IPA, simulator session, physical-device camera scan, BLE print job
+or production deployment has been performed. The PR remains a draft because
+full cashier/label parity and device acceptance are still outstanding.
 
 ## Device acceptance checklist (required before release)
 
