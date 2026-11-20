@@ -4,9 +4,10 @@
 // загрузка SVG-рамки, сохранение работы в файл, масштаб элементов
 // ---------------------------------------------------------------------------
 import { useCallback } from "react"
-import { Textbox } from "fabric"
+import { Textbox, Image as FabricImage } from "fabric"
 import type { Canvas as FabricCanvas } from "fabric"
 import { toast } from "sonner"
+import { compressToWebp } from "@/lib/image"
 import type { LabelSizeDef, JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { Product } from "@/lib/types"
 import { saveLabelTemplate, getLabelTemplate, restoreShopLabelTemplates } from "@/app/actions/labels"
@@ -21,9 +22,18 @@ import type { BorderStyleKey } from "../constants"
 import { createTextbox, refitTextbox, setAutoFit, setFitRatio, clampRatio } from "../canvas/text-fit"
 import { addBorderToCanvas } from "../canvas/borders"
 import { buildDefaultLayout } from "../canvas/layout"
-import { serializeLayout, parseTemplate, applyTemplate, applyBgRect } from "../data/template"
+import { serializeLayout, parseTemplate, applyTemplate, applyTemplateImages, applyBgRect } from "../data/template"
 import { refreshLiveData } from "../canvas/layout"
 import { saveLocalTemplate, getLocalTemplate, clearLocalTemplateCache } from "../data/local-template-storage"
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Не удалось подготовить фото"))
+    reader.onerror = () => reject(new Error("Не удалось подготовить фото"))
+    reader.readAsDataURL(blob)
+  })
+}
 
 export function useLabelActions(
   fabricRef:  React.RefObject<FabricCanvas | null>,
@@ -223,6 +233,7 @@ export function useLabelActions(
     await buildDefaultLayout(canvas, product, sizeDef)
     if (saved) {
       applyTemplate(canvas, saved)
+      await applyTemplateImages(canvas, saved)
       await refreshLiveData(canvas, product)
       applyBgRect(canvas, sizeDef, saved.bg ?? null)
     }
@@ -291,6 +302,7 @@ export function useLabelActions(
       // Повторное применение нужно для сохранённых координат QR: сам объект
       // добавляется после асинхронного создания изображения.
       applyTemplate(canvas, saved)
+      await applyTemplateImages(canvas, saved)
       applyBgRect(canvas, sizeDef, saved.bg ?? null)
     }
     canvas.renderAll()
@@ -300,7 +312,7 @@ export function useLabelActions(
     // редактирование, поздний ответ не должен перезаписать его изменения.
     if (!raw && (typeof navigator === "undefined" || navigator.onLine)) {
       void getLabelTemplate(category, sizeKey)
-        .then((remoteRaw) => {
+        .then(async (remoteRaw) => {
           if (
             !remoteRaw ||
             userEdited ||
@@ -310,6 +322,7 @@ export function useLabelActions(
           const remote = parseTemplate(remoteRaw)
           if (!remote) return
           applyTemplate(canvas, remote)
+          await applyTemplateImages(canvas, remote)
           applyBgRect(canvas, sizeDef, remote.bg ?? null)
           canvas.requestRenderAll()
           saveLocalTemplate(product.shop_id, category, remoteRaw, sizeKey)
@@ -324,6 +337,33 @@ export function useLabelActions(
       stopTrackingUserEdits()
     }
   }, [fabricRef, category, sizeKey, product, sizeDef])
+
+  const loadPhoto = useCallback(async (file: File) => {
+    const canvas = fabricRef.current
+    if (!canvas) throw new Error("Холст этикетки ещё не готов")
+    const webp = await compressToWebp(file, { monochrome: true })
+    const dataUrl = await blobToDataUrl(webp)
+    const image = await FabricImage.fromURL(dataUrl)
+    if (!canvas.lowerCanvasEl) return
+    const width = image.width || sizeDef.w_px
+    const height = image.height || sizeDef.h_px
+    const scale = Math.min(sizeDef.w_px / width, sizeDef.h_px / height)
+    image.set({
+      left: (sizeDef.w_px - width * scale) / 2,
+      top: (sizeDef.h_px - height * scale) / 2,
+      scaleX: scale, scaleY: scale,
+      selectable: true, evented: true,
+      data: { role: "label-photo", filename: file.name },
+    })
+    const previous = canvas.getObjects().find((obj) => getRole(obj) === "label-photo")
+    if (previous) canvas.remove(previous)
+    canvas.add(image)
+    const backgroundIndex = canvas.getObjects().findIndex((obj) => getRole(obj) === "bg")
+    canvas.moveObjectTo(image, backgroundIndex >= 0 ? backgroundIndex + 1 : 0)
+    canvas.setActiveObject(image)
+    canvas.requestRenderAll()
+    toast.success("Чёрно-белое фото добавлено")
+  }, [fabricRef, sizeDef])
 
   // ── Загрузка SVG-рамки из файловой системы ───────────────────────────────
   const loadSvgFrame = useCallback(async (svgText: string, filename: string, preserveAspectRatio = false) => {
@@ -399,6 +439,6 @@ export function useLabelActions(
     handleBoldToggle, handleItalicToggle, handleUnderlineToggle, handleLinethroughToggle,
     handleTextAlignChange, handleCharSpacingChange, handleLineHeightChange,
     handleSaveTemplate, handleReloadTemplate, loadTemplate,
-    loadSvgFrame, saveToFile,
+    loadSvgFrame, loadPhoto, saveToFile,
   }
 }

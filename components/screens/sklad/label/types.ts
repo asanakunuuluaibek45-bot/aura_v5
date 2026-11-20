@@ -46,6 +46,8 @@ export interface TemplateItem {
   autoFit?:    boolean
   fitRatio?:   number
   format?:     import("./data/live-format").LiveFormat
+  // raster image data (compressed WebP, for photo items)
+  src?:         string
   // rect-specific
   stroke?:      string
   strokeWidth?: number

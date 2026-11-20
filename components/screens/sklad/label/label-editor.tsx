@@ -683,6 +683,7 @@ export function LabelEditor({
     onScaleUp:        handleScaleUp,
     onScaleDown:      handleScaleDown,
     onLoadSvgFrame:   actions.loadSvgFrame,
+    onLoadPhoto:      actions.loadPhoto,
     onSaveToFile:     actions.saveToFile,
     backgroundCalibration,
     backgroundCalibrationOpen,

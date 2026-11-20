@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Сериализация / десериализация / применение шаблонов
 // ---------------------------------------------------------------------------
-import { Canvas, Textbox, Rect } from "fabric"
+import { Canvas, Textbox, Rect, Image as FabricImage } from "fabric"
 import type { FabricObject } from "fabric"
 import type { LabelSizeDef } from "@/lib/niimbot"
 import { TEMPLATE_VERSION, LIVE_ROLES } from "../constants"
@@ -47,6 +47,11 @@ export function serializeLayout(
       item.fitRatio   = r2(getFitRatio(tb), 1)
       if (isFormattable(tb) && hasFormat(getTbData(tb).format)) item.format = getTbData(tb).format
       if (role.startsWith("custom-")) item.text = String(tb.text ?? "").slice(0, 200)
+    }
+
+    if (kind === "image") {
+      const src = (obj as FabricImage).getSrc()
+      if (src.startsWith("data:image/webp;base64,")) item.src = src
     }
 
     if (kind === "rect") {
@@ -128,6 +133,25 @@ export function applyTemplate(canvas: Canvas, tpl: LabelTemplate): void {
   }
 
   canvas.renderAll()
+}
+
+export async function applyTemplateImages(canvas: Canvas, tpl: LabelTemplate): Promise<void> {
+  for (const item of tpl.items) {
+    if (item.kind !== "image" || !item.src?.startsWith("data:image/webp;base64,")) continue
+    const existing = canvas.getObjects().find((obj) => getRole(obj) === item.role)
+    if (existing) continue
+    const image = await FabricImage.fromURL(item.src)
+    if (!canvas.lowerCanvasEl) return
+    image.set({
+      left: item.left, top: item.top, angle: item.angle ?? 0,
+      scaleX: item.scaleX ?? 1, scaleY: item.scaleY ?? 1,
+      selectable: true, evented: true, data: { role: item.role },
+    })
+    canvas.add(image)
+    const backgroundIndex = canvas.getObjects().findIndex((obj) => getRole(obj) === "bg")
+    canvas.moveObjectTo(image, backgroundIndex >= 0 ? backgroundIndex + 1 : 0)
+  }
+  canvas.requestRenderAll()
 }
 
 export function applyItemToObject(obj: FabricObject, item: TemplateItem): void {

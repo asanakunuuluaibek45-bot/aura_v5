@@ -2,6 +2,7 @@
 
 import { MAX_IMAGE_BYTES, requireWebpWithinLimit } from "./image-policy"
 import { isHeicImage } from "./image-format"
+import { convertRgbaToMonochrome } from "./monochrome-image"
 
 /**
  * Клиентское сжатие изображений в WebP.
@@ -72,7 +73,7 @@ function toBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null
 }
 
 /** Сжимает изображение до webp размером не более MAX_BYTES. */
-export async function compressToWebp(file: Blob): Promise<Blob> {
+export async function compressToWebp(file: Blob, options: { monochrome?: boolean } = {}): Promise<Blob> {
   const src = await loadSourceImage(file)
 
   let scale = Math.min(1, MAX_SIDE / Math.max(src.width, src.height))
@@ -88,6 +89,11 @@ export async function compressToWebp(file: Blob): Promise<Blob> {
     const ctx = canvas.getContext("2d")
     if (!ctx) break
     src.draw(ctx, w, h)
+    if (options.monochrome) {
+      const pixels = ctx.getImageData(0, 0, w, h)
+      convertRgbaToMonochrome(pixels.data, w, h)
+      ctx.putImageData(pixels, 0, 0)
+    }
 
     out = await toBlob(canvas, quality)
     if (!out) break

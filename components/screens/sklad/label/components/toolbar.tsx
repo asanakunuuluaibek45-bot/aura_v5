@@ -15,8 +15,6 @@ import {
   AlignLeft, AlignCenter, AlignRight, SlidersHorizontal,
 } from "lucide-react"
 import { Button }    from "@/components/ui/button"
-import { compressToWebp } from "@/lib/image"
-import { convertWebpBlobToSvg } from "@/lib/raster-image-svg"
 import { toast } from "sonner"
 import { Switch }    from "@/components/ui/switch"
 import { Slider }    from "@/components/ui/slider"
@@ -73,6 +71,7 @@ export interface LabelEditorToolbarProps {
   onScaleDown?:       () => void
   // SVG рамка
   onLoadSvgFrame?:    (svgText: string, filename: string, preserveAspectRatio?: boolean) => void
+  onLoadPhoto?:       (file: File) => void | Promise<void>
   onSaveToFile?:      () => void
   onExportPng?:       () => void
   // Форматирование текста
@@ -409,7 +408,7 @@ function BottomZone({
   onToggleBold, onToggleItalic, onToggleUnderline, onToggleLinethrough,
   onTextAlignChange, onCharSpacingChange, onLineHeightChange,
   onScaleUp, onScaleDown,
-  onLoadSvgFrame,
+  onLoadSvgFrame, onLoadPhoto,
   onPrint,
   onReconnectPrinter,
 }: LabelEditorToolbarProps) {
@@ -425,6 +424,7 @@ function BottomZone({
     if (!file) return
     const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")
     if (isSvg) {
+      if (!onLoadSvgFrame) { toast.error("Загрузка SVG недоступна"); return }
       const reader = new FileReader()
       reader.onload = (ev) => {
         const text = ev.target?.result
@@ -440,11 +440,10 @@ function BottomZone({
       toast.error("Выберите SVG или файл изображения")
       return
     }
-    void compressToWebp(file)
-      .then(convertWebpBlobToSvg)
-      .then((svgText) => onLoadSvgFrame?.(svgText, file.name, true))
+    if (!onLoadPhoto) { toast.error("Загрузка фото недоступна"); return }
+    void Promise.resolve().then(() => onLoadPhoto(file))
       .catch((error) => toast.error(error instanceof Error ? error.message : "Не удалось преобразовать изображение"))
-  }, [onLoadSvgFrame])
+  }, [onLoadSvgFrame, onLoadPhoto])
 
   const updateBorderMenuPos = useCallback(() => {
     const el = borderBtnRef.current
@@ -489,7 +488,7 @@ function BottomZone({
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", zIndex: 9990, position: "relative" }}
     >
       {/* hidden SVG file input (перенесён из HeaderZone) */}
-      {onLoadSvgFrame && (
+      {(onLoadSvgFrame || onLoadPhoto) && (
         <input
           ref={svgInputRef}
           type="file"
@@ -552,8 +551,8 @@ function BottomZone({
               document.body,
             )}
 
-          {onLoadSvgFrame && (
-            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG или фотографию" stretch>
+          {(onLoadSvgFrame || onLoadPhoto) && (
+            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG или чёрно-белое фото" stretch>
               <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline">SVG/Фото</span>
             </ToolBtn>
           )}
