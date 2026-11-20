@@ -41,3 +41,17 @@ test("photo picker accepts common image formats and keeps SVG import", () => {
   const image = read("lib/image.ts")
   assert.ok(image.includes("convertRgbaToMonochrome(pixels.data, w, h)"))
 })
+
+test("template confirmation dialogs fit mobile without internal scrolling", () => {
+  const editor = read("components/screens/sklad/label/label-editor.tsx")
+  const start = editor.indexOf('<DialogContent\n          className="z-[10101]')
+  const end = editor.indexOf("</DialogContent>", start)
+  assert.ok(start >= 0 && end > start, "template dialog markup should be present")
+  const dialog = editor.slice(start, end)
+  assert.ok(dialog.includes("overflow-hidden"))
+  assert.ok(dialog.includes("overscroll-none"))
+  assert.ok(!dialog.includes("overflow-y-auto"))
+  assert.ok(dialog.includes("showCloseButton={false}"))
+  assert.ok(dialog.includes("grid-cols-2"), "reset choices should use compact paired controls")
+  assert.ok(dialog.includes("line-clamp-2"), "long status messages should not create a scrolling dialog")
+})
