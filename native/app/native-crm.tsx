@@ -13,13 +13,28 @@ import { getSavedUserSession, getMeta, setMeta, saveUserSession } from "@/lib/lo
 import { isDeviceSignedOut, createClient } from "@/lib/supabase/client"
 import { getCabinetData } from "@/app/actions/cabinet"
 import { getOwnShopPublicState } from "@/app/actions/shops"
-import { getSuperAdminShops } from "@/app/actions/superadmin"
+import { getSuperAdminShops, getImpersonatedShop } from "@/app/actions/superadmin"
+import { getProducts } from "@/app/actions/products"
+import { getSales } from "@/app/actions/sales"
+import { getSaleReturns } from "@/app/actions/returns"
+import { getCashData } from "@/app/actions/cash"
+import { getMetalRates } from "@/app/actions/rates"
+import { getClients } from "@/app/actions/clients"
 import type { Profile } from "@/lib/types"
 
 type WebMetadata = {
   cabinet: Awaited<ReturnType<typeof getCabinetData>>
   publicStorefrontState: Awaited<ReturnType<typeof getOwnShopPublicState>>
   superAdminShops?: Awaited<ReturnType<typeof getSuperAdminShops>>
+  impersonatedShop?: Awaited<ReturnType<typeof getImpersonatedShop>>
+  onlineData?: {
+    products: Awaited<ReturnType<typeof getProducts>>
+    sales: Awaited<ReturnType<typeof getSales>>
+    returns: Awaited<ReturnType<typeof getSaleReturns>>
+    cash: Awaited<ReturnType<typeof getCashData>>
+    rates: Awaited<ReturnType<typeof getMetalRates>>
+    clients: Awaited<ReturnType<typeof getClients>>
+  }
 }
 const defaults: WebMetadata = {
   cabinet: { team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask" },
@@ -48,28 +63,33 @@ export function NativeCrm() {
     const refreshMetadata = async (profile: Profile) => {
       if (!navigator.onLine || await isDeviceSignedOut()) return
       try {
-        const [cabinet, publicStorefrontState, superAdminShops] = await Promise.all([
+        const [cabinet, publicStorefrontState, superAdminShops, impersonatedShop] = await Promise.all([
           getCabinetData(),
           getOwnShopPublicState(),
           profile.role === "super_admin" ? getSuperAdminShops() : Promise.resolve(undefined),
+          profile.role === "super_admin" ? getImpersonatedShop() : Promise.resolve(null),
         ])
+        // As in the PWA, an impersonated shop is online-only. Never seed its
+        // records into the account's own IndexedDB/outbox or offline metadata.
+        let onlineData: WebMetadata["onlineData"]
+        if (impersonatedShop) {
+          const [products, sales, returns, cash, rates, clients] = await Promise.all([
+            getProducts(), getSales(), getSaleReturns(), getCashData(), getMetalRates(), getClients(),
+          ])
+          onlineData = { products, sales, returns, cash, rates, clients }
+        }
         if (!active || await isDeviceSignedOut()) return
-        const next = { cabinet, publicStorefrontState, superAdminShops }
+        const next = { cabinet, publicStorefrontState, superAdminShops, impersonatedShop, onlineData }
         setMetadata(next)
-        await setMeta(`native_web_metadata:${profile.id}:${profile.impersonated_shop_id ?? profile.shop_id ?? "global"}`, next)
+        if (!impersonatedShop) {
+          await setMeta(`native_web_metadata:${profile.id}:${profile.shop_id ?? "global"}`, next)
+        }
       } catch {
         // An unavailable backend must not replace the working offline PWA UI.
       }
     }
     let currentProfile: Profile | null = null
     const refresh = () => { if (currentProfile) void refreshMetadata(currentProfile) }
-    const onAction = (event: Event) => {
-      const detail = (event as CustomEvent).detail
-      if (detail?.module === "superadmin" && detail?.action === "impersonateShop") {
-        // Refresh the persisted identity/shop scope before rendering another shop.
-        window.location.reload()
-      } else refresh()
-    }
     void (async () => {
       try {
         if (await isDeviceSignedOut()) { router.replace("/auth/login"); return }
@@ -79,9 +99,12 @@ export function NativeCrm() {
           return
         }
         currentProfile = saved.profile
-        const cached = await getMeta<WebMetadata>(`native_web_metadata:${saved.userId}:${saved.profile.impersonated_shop_id ?? saved.profile.shop_id ?? "global"}`, defaults)
+        const cached = await getMeta<WebMetadata>(`native_web_metadata:${saved.userId}:${saved.profile.shop_id ?? "global"}`, defaults)
         if (!active) return
         setMetadata(cached)
+        if (saved.profile.role === "super_admin" && navigator.onLine) {
+          await refreshMetadata(saved.profile)
+        }
         setIdentity({ profile: saved.profile, email: saved.email ?? "" })
         // Display the persisted UI immediately, before any session/network call.
         refresh()
@@ -93,7 +116,12 @@ export function NativeCrm() {
             if (active && profile && !(await isDeviceSignedOut())) {
               currentProfile = profile as Profile
               setIdentity({ profile: currentProfile, email: saved.email ?? "" })
-              await saveUserSession({ ...saved, profile: currentProfile, shopId: currentProfile.shop_id, session: data.session })
+              await saveUserSession({
+                ...saved,
+                profile: { ...currentProfile, impersonated_shop_id: undefined },
+                shopId: currentProfile.shop_id ?? undefined,
+                session: data.session,
+              })
               refresh()
             }
           }
@@ -104,7 +132,7 @@ export function NativeCrm() {
     })().catch(() => { if (active) router.replace("/auth/login") })
 
     window.addEventListener("online", refresh)
-    window.addEventListener("aura:native_action_complete", onAction)
+    window.addEventListener("aura:native_action_complete", refresh)
     void retain(Network.addListener("networkStatusChange", ({ connected }) => {
       window.dispatchEvent(new Event(connected ? "online" : "offline"))
     }))
@@ -116,7 +144,7 @@ export function NativeCrm() {
     return () => {
       active = false
       window.removeEventListener("online", refresh)
-      window.removeEventListener("aura:native_action_complete", onAction)
+      window.removeEventListener("aura:native_action_complete", refresh)
       for (const handle of handles) void handle.remove()
     }
   }, [router])
@@ -125,6 +153,7 @@ export function NativeCrm() {
   const { profile, email } = identity
   if (profile.status !== "approved") return <PendingScreen profile={profile} email={email} />
   const screen = (Object.entries(SCREEN_PATHS).find(([, path]) => path === pathname?.replace(/\/$/, ""))?.[0] ?? "kassa") as ScreenId
+  const { onlineData, ...webMetadata } = metadata
   return (
     <Dashboard
       key={profile.id}
@@ -138,10 +167,9 @@ export function NativeCrm() {
       rates={[]}
       cash={{ operations: [], presets: [] }}
       supplierDebts={{ suppliers: [], operations: [], profiles: [] }}
-      {...metadata}
-      impersonatedShop={profile.impersonated_shop_id ? {
-        shop_id: profile.impersonated_shop_id, shop_name: null,
-      } : undefined}
+      {...onlineData}
+      {...webMetadata}
+      impersonatedShop={webMetadata.impersonatedShop ?? undefined}
     />
   )
 }

@@ -111,7 +111,7 @@ export function VitrinaScreen({
     setStoreQrOpen(true)
     setStoreQrPending(true)
     try {
-      const url = new URL("/store/" + encodeURIComponent(storeId), window.location.origin).toString()
+      const url = new URL("/store/" + encodeURIComponent(storeId), process.env.NEXT_PUBLIC_SITE_URL || window.location.origin).toString()
       const dataUrl = await QRCode.toDataURL(url, {
         margin: 2,
         width: 480,
