@@ -8,6 +8,7 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8"
 test("section cards start their matching tour in help without navigating away", () => {
   const help = read("components/site-help.tsx")
   assert.match(help, /onClick=\{\(\) => startTour\(section\.id\)\}/)
+  assert.match(help, /onClick=\{\(\) => startTour\(\)\}[^>]*>Пройти тур/)
   assert.match(help, /setTourIndex\(getTourStartIndex\(tourSteps, sectionId\)\)/)
   assert.match(help, /setOpen\(true\)/)
   assert.doesNotMatch(help, /onNavigate|closeHelp\(\).*section\.id/)
