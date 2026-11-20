@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { compressToWebp, humanSize, MAX_BYTES } from "@/lib/image"
+import { hasUnsupportedDeclaredImageType } from "@/lib/image-policy"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
@@ -54,7 +55,7 @@ export function ProductImages({
       const supabase = createClient()
       const shopId = await requireCurrentShopId(supabase)
       for (const file of Array.from(files)) {
-        if (!file.type.startsWith("image/")) continue
+        if (hasUnsupportedDeclaredImageType(file)) throw new Error("Выберите файл изображения")
         const compressed = await compressToWebp(file)
         urls.push(await uploadOne(supabase, shopId, compressed))
       }
