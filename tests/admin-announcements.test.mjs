@@ -62,6 +62,8 @@ test("announcement APIs enforce server-side roles and the client uses one feed-v
   assert.match(actions, /getUserAnnouncementFeed[\s\S]*?requireShopContext\(\)/);
   assert.match(actions, /markAnnouncementFeedViewed[\s\S]*?requireShopContext\(\)/);
   assert.match(actions, /onConflict: "user_id,shop_id"/);
+  assert.match(panel, /setFeed\(result\)[\s\S]*?await markAnnouncementFeedViewed\(\)/);
+  assert.doesNotMatch(panel, /setFeed\(\{\s*\.\.\.result,\s*lastViewedAt:/);
   assert.doesNotMatch(panel, /setInterval|setTimeout/);
   assert.equal(isOfflineSection("announcements"), false);
 });

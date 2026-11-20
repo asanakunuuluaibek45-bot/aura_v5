@@ -32,8 +32,7 @@ export function UserAnnouncementsPanel() {
         const result = await getUserAnnouncementFeed()
         if (!active) return
         setFeed(result)
-        const viewedAt = await markAnnouncementFeedViewed()
-        if (active) setFeed({ ...result, lastViewedAt: viewedAt })
+        await markAnnouncementFeedViewed()
       } catch (cause) {
         if (active) {
           setError(cause instanceof Error ? cause.message : "Не удалось загрузить объявления")
