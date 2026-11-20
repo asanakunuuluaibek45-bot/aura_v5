@@ -326,7 +326,7 @@ export function useLabelActions(
   }, [fabricRef, category, sizeKey, product, sizeDef])
 
   // ── Загрузка SVG-рамки из файловой системы ───────────────────────────────
-  const loadSvgFrame = useCallback(async (svgText: string, filename: string) => {
+  const loadSvgFrame = useCallback(async (svgText: string, filename: string, preserveAspectRatio = false) => {
     const canvas = fabricRef.current
     if (!canvas) return
     try {
@@ -335,11 +335,16 @@ export function useLabelActions(
       // Группируем объекты SVG в одну группу
       const group = util.groupSVGElements(objects.filter(Boolean) as import("fabric").FabricObject[], options)
       // Масштабируем рамку под размер холста
-      const scaleX = sizeDef.w_px / (group.width  || sizeDef.w_px)
-      const scaleY = sizeDef.h_px / (group.height || sizeDef.h_px)
+      const groupWidth = group.width || sizeDef.w_px
+      const groupHeight = group.height || sizeDef.h_px
+      const scaleX = sizeDef.w_px / groupWidth
+      const scaleY = sizeDef.h_px / groupHeight
+      const scale = Math.min(scaleX, scaleY)
       group.set({
-        left: 0, top: 0,
-        scaleX, scaleY,
+        left: preserveAspectRatio ? (sizeDef.w_px - groupWidth * scale) / 2 : 0,
+        top: preserveAspectRatio ? (sizeDef.h_px - groupHeight * scale) / 2 : 0,
+        scaleX: preserveAspectRatio ? scale : scaleX,
+        scaleY: preserveAspectRatio ? scale : scaleY,
         selectable: true,
         evented:    true,
         data: { role: "svg-frame", filename },
@@ -352,7 +357,7 @@ export function useLabelActions(
       canvas.add(group)
       canvas.sendObjectToBack(group)
       canvas.requestRenderAll()
-      toast.success(`SVG-рамка загружена: ${filename}`)
+      toast.success(preserveAspectRatio ? `Фото добавлено в SVG-рамку: ${filename}` : `SVG-рамка загружена: ${filename}`)
     } catch (err) {
       toast.error(`Ошибка загрузки SVG: ${(err as Error).message}`)
     }

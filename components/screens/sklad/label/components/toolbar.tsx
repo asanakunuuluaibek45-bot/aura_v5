@@ -15,6 +15,8 @@ import {
   AlignLeft, AlignCenter, AlignRight, SlidersHorizontal,
 } from "lucide-react"
 import { Button }    from "@/components/ui/button"
+import { convertRasterFileToSvg } from "@/lib/raster-image-svg"
+import { toast } from "sonner"
 import { Switch }    from "@/components/ui/switch"
 import { Slider }    from "@/components/ui/slider"
 import { Label }     from "@/components/ui/label"
@@ -69,7 +71,7 @@ export interface LabelEditorToolbarProps {
   onScaleUp?:         () => void
   onScaleDown?:       () => void
   // SVG рамка
-  onLoadSvgFrame?:    (svgText: string, filename: string) => void
+  onLoadSvgFrame?:    (svgText: string, filename: string, preserveAspectRatio?: boolean) => void
   onSaveToFile?:      () => void
   onExportPng?:       () => void
   // Форматирование текста
@@ -418,14 +420,28 @@ function BottomZone({
 
   const handleSvgFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result
-      if (typeof text === "string") onLoadSvgFrame?.(text, file.name)
-    }
-    reader.readAsText(file)
     e.target.value = ""
+    if (!file) return
+    const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")
+    if (isSvg) {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const text = ev.target?.result
+        if (typeof text === "string") onLoadSvgFrame?.(text, file.name)
+        else toast.error("Не удалось прочитать SVG-файл")
+      }
+      reader.onerror = () => toast.error("Не удалось прочитать SVG-файл")
+      reader.readAsText(file)
+      return
+    }
+    const looksLikeImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|avif|bmp|gif|tiff?|heic|heif)$/i.test(file.name)
+    if (!looksLikeImage) {
+      toast.error("Выберите SVG или файл изображения")
+      return
+    }
+    void convertRasterFileToSvg(file)
+      .then((svgText) => onLoadSvgFrame?.(svgText, file.name, true))
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Не удалось преобразовать изображение"))
   }, [onLoadSvgFrame])
 
   const updateBorderMenuPos = useCallback(() => {
@@ -475,7 +491,7 @@ function BottomZone({
         <input
           ref={svgInputRef}
           type="file"
-          accept=".svg,image/svg+xml"
+          accept="image/*,.svg,.heic,.heif"
           className="hidden"
           onChange={handleSvgFileChange}
         />
@@ -535,8 +551,8 @@ function BottomZone({
             )}
 
           {onLoadSvgFrame && (
-            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG-рамку из файла" stretch>
-              <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline">SVG</span>
+            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG или фотографию" stretch>
+              <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline">SVG/Фото</span>
             </ToolBtn>
           )}
 

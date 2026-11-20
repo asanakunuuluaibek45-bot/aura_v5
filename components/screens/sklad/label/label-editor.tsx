@@ -2,7 +2,7 @@
 import React, {
   useRef, useState, useMemo, useCallback, useEffect, useLayoutEffect,
 } from "react"
-import { Loader2, X } from "lucide-react"
+import { Info, Loader2, X } from "lucide-react"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
 import { getLabelTemplate } from "@/app/actions/labels"
@@ -102,6 +102,7 @@ export function LabelEditor({
     [category, availableShopCategories],
   )
   const [templateDialog, setTemplateDialog] = useState<"save" | "reset" | null>(null)
+  const [templateHelpOpen, setTemplateHelpOpen] = useState(false)
   const [templateDialogBusy, setTemplateDialogBusy] = useState(false)
   const [templateBusyAction, setTemplateBusyAction] = useState<"save-category" | "save-shop" | "reset" | null>(null)
   const templateActionLock = useRef(false)
@@ -627,10 +628,12 @@ export function LabelEditor({
     onRemoveSelected: () => { deactivatePanMode(); actions.removeSelected() },
     onSaveTemplate:   () => {
       setTemplateActionMessage(null)
+      setTemplateHelpOpen(false)
       setTemplateDialog("save")
     },
     onReloadTemplate: () => {
       setTemplateActionMessage(null)
+      setTemplateHelpOpen(false)
       setResetScope("category")
       setResetSource("global")
       setTemplateDialog("reset")
@@ -812,190 +815,78 @@ export function LabelEditor({
         }}
       >
         <DialogContent
-          className="z-[10101] max-h-[90dvh] overflow-y-auto sm:max-w-md"
+          className="z-[10101] w-[calc(100vw-1rem)] max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain p-3 sm:max-w-md sm:p-6"
           overlayClassName="z-[10100]"
           showCloseButton={!templateDialogBusy}
         >
           {templateDialog === "save" ? (
             <>
-              <DialogHeader>
-                <DialogTitle>Сохранить шаблон этикетки</DialogTitle>
-                <DialogDescription>
-                  Выберите область применения для размера {LABEL_SIZES[sizeKey]?.label ?? sizeKey}.
-                </DialogDescription>
+              <DialogHeader className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <DialogTitle className="text-base">Сохранить шаблон этикетки</DialogTitle>
+                    <DialogDescription className="text-xs">Формат {LABEL_SIZES[sizeKey]?.label ?? sizeKey} · выберите область сохранения.</DialogDescription>
+                  </div>
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Пояснение к сохранению" aria-expanded={templateHelpOpen} onClick={() => setTemplateHelpOpen((open) => !open)}>
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </div>
               </DialogHeader>
+              {templateHelpOpen && <div role="note" className="rounded-md border bg-muted/60 px-3 py-2 text-xs leading-relaxed">Текущая категория меняет только «{category}». Вариант для всех категорий затрагивает только активный магазин; другие магазины и формат печати не меняются.</div>}
               <div className="grid gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy}
-                  onClick={() => void saveTemplate("category")}
-                >
-                  <span className="flex flex-col items-start gap-1">
-                    <span className="flex items-center gap-2">
-                      {templateBusyAction === "save-category" && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {templateBusyAction === "save-category" ? "Сохраняем…" : `Только для текущей категории «${category}»`}
-                    </span>
-                    <span className="text-xs font-normal text-muted-foreground">Другие категории не изменятся</span>
+                <Button type="button" variant="outline" className="h-auto min-h-10 justify-start px-3 py-2 text-left text-sm" disabled={templateDialogBusy} onClick={() => void saveTemplate("category")}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    {templateBusyAction === "save-category" && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                    <span className="break-words">{templateBusyAction === "save-category" ? "Сохраняем…" : "Только для текущей категории «" + category + "»"}</span>
                   </span>
                 </Button>
-                <Button
-                  type="button"
-                  className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy || !product.shop_id}
-                  onClick={() => void saveTemplate("shop")}
-                >
-                  <span className="flex flex-col items-start gap-1">
-                    <span className="flex items-center gap-2">
-                      {templateBusyAction === "save-shop" && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {templateBusyAction === "save-shop" ? "Сохраняем…" : "Для всех категорий этого магазина"}
-                    </span>
-                    <span className="text-xs font-normal text-primary-foreground/80">
-                      {shopCategories.length} категорий · другие магазины не затрагиваются
-                    </span>
+                <Button type="button" className="h-auto min-h-10 justify-start px-3 py-2 text-left text-sm" disabled={templateDialogBusy || !product.shop_id} onClick={() => void saveTemplate("shop")}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    {templateBusyAction === "save-shop" && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+                    <span className="break-words">{templateBusyAction === "save-shop" ? "Сохраняем…" : "Для всех категорий этого магазина"}</span>
                   </span>
                 </Button>
               </div>
-              {templateActionMessage && (
-                <p
-                  role={templateActionMessage.kind === "error" ? "alert" : "status"}
-                  className={templateActionMessage.kind === "error"
-                    ? "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-                    : "rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"}
-                >
-                  {templateActionMessage.text}
-                </p>
-              )}
-              <DialogFooter>
-                <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>
-                  Отмена
-                </Button>
+              {templateActionMessage && <p role={templateActionMessage.kind === "error" ? "alert" : "status"} className={templateActionMessage.kind === "error" ? "max-h-16 overflow-y-auto break-words rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" : "max-h-16 overflow-y-auto break-words rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"}>{templateActionMessage.text}</p>}
+              <DialogFooter className="gap-2">
+                <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>Отмена</Button>
               </DialogFooter>
             </>
           ) : (
             <>
-              <DialogHeader>
-                <DialogTitle>Подтвердите сброс шаблонов</DialogTitle>
-                <DialogDescription>
-                  Выберите область и источник. Сброс начнётся только после нажатия кнопки внизу.
-                </DialogDescription>
-              </DialogHeader>
-              <section className="grid gap-2" aria-label="Область сброса">
-                <p className="text-sm font-medium">Что сбросить?</p>
-                <Button
-                  type="button"
-                  variant={resetScope === "category" ? "default" : "outline"}
-                  className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy}
-                  aria-pressed={resetScope === "category"}
-                  onClick={() => setResetScope("category")}
-                >
-                  <span className="flex flex-col items-start gap-1">
-                    <span>Только этот шаблон</span>
-                    <span className="text-xs font-normal opacity-80">Категория «{category}» · формат {LABEL_SIZES[sizeKey]?.label ?? sizeKey}</span>
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant={resetScope === "shop" ? "default" : "outline"}
-                  className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy || !product.shop_id}
-                  aria-pressed={resetScope === "shop"}
-                  onClick={() => setResetScope("shop")}
-                >
-                  <span className="flex flex-col items-start gap-1">
-                    <span>Все категории этого магазина</span>
-                    <span className="text-xs font-normal opacity-80">Только активный магазин · другие магазины не затрагиваются</span>
-                  </span>
-                </Button>
-              </section>
-              <section className="grid gap-2" aria-label="Источник восстановления">
-                <p className="text-sm font-medium">Что восстановить?</p>
-                <Button
-                  type="button"
-                  variant={resetSource === "global" ? "default" : "outline"}
-                  className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy || !product.shop_id}
-                  aria-pressed={resetSource === "global"}
-                  onClick={() => setResetSource("global")}
-                >
-                  <span className="flex flex-col items-start gap-1">
-                    <span>Глобальный шаблон</span>
-                    <span className="text-xs font-normal opacity-80">
-                      {resetScope === "category"
-                        ? `Удалит сохранённую настройку категории «${category}» в активном магазине`
-                        : "Удалит переопределения активного магазина для этого формата во всех категориях"}
-                    </span>
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant={resetSource === "shop" ? "default" : "outline"}
-                  className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy || !product.shop_id || shopTemplateAvailable !== true}
-                  aria-pressed={resetSource === "shop"}
-                  onClick={() => setResetSource("shop")}
-                >
-                  <span className="flex flex-col items-start gap-1">
-                    <span className="flex items-center gap-2">
-                      {shopTemplateAvailable === null && !shopTemplateCheckError && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Восстановить сохранённый шаблон магазина
-                    </span>
-                    <span className="text-xs font-normal opacity-80">
-                      {shopTemplateCheckError
-                        ? "Не удалось проверить наличие сохранённого шаблона"
-                        : shopTemplateAvailable === null
-                          ? "Проверяем, есть ли сохранённая версия…"
-                          : shopTemplateAvailable
-                            ? resetScope === "category"
-                              ? `Загрузит последнюю сохранённую версию категории «${category}»`
-                              : "Загрузит сохранённые версии категорий активного магазина; несохранённые останутся без шаблона магазина"
-                            : "В активном магазине нет сохранённого шаблона для текущей категории"}
-                    </span>
-                  </span>
-                </Button>
-                {shopTemplateCheckError && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    <span>{shopTemplateCheckError}</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={templateDialogBusy}
-                      onClick={() => setShopTemplateCheckAttempt((attempt) => attempt + 1)}
-                    >
-                      Повторить проверку
-                    </Button>
+              <DialogHeader className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <DialogTitle className="text-base">Сбросить шаблон</DialogTitle>
+                    <DialogDescription className="text-xs">Выберите область и источник. Изменения применятся после подтверждения.</DialogDescription>
                   </div>
-                )}
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Пояснение к сбросу" aria-expanded={templateHelpOpen} onClick={() => setTemplateHelpOpen((open) => !open)}>
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </div>
+              </DialogHeader>
+              {templateHelpOpen && <div role="note" className="rounded-md border bg-muted/60 px-3 py-2 text-xs leading-relaxed">«Глобальный шаблон» удалит переопределение активного магазина. «Сохранённый шаблон магазина» вернёт его последнюю сохранённую версию, если она есть. Другие магазины не меняются.</div>}
+              <section className="grid gap-1.5" aria-label="Область сброса">
+                <p className="text-xs font-medium">Что сбросить?</p>
+                <Button type="button" variant={resetScope === "category" ? "default" : "outline"} className="h-10 justify-start px-3 text-left text-sm" disabled={templateDialogBusy} aria-pressed={resetScope === "category"} onClick={() => setResetScope("category")}>Только этот шаблон · «{category}»</Button>
+                <Button type="button" variant={resetScope === "shop" ? "default" : "outline"} className="h-10 justify-start px-3 text-left text-sm" disabled={templateDialogBusy || !product.shop_id} aria-pressed={resetScope === "shop"} onClick={() => setResetScope("shop")}>Все категории этого магазина</Button>
               </section>
-              {templateActionMessage && (
-                <p
-                  role={templateActionMessage.kind === "error" ? "alert" : "status"}
-                  className={templateActionMessage.kind === "error"
-                    ? "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-                    : "rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"}
-                >
-                  {templateActionMessage.text}
-                </p>
-              )}
-              <DialogFooter>
-                <Button
-                  type="button"
-                  disabled={
-                    templateDialogBusy ||
-                    !product.shop_id ||
-                    (resetSource === "shop" && shopTemplateAvailable !== true)
-                  }
-                  onClick={() => void reloadTemplate()}
-                >
-                  {templateBusyAction === "reset" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {templateBusyAction === "reset" ? "Сбрасываем…" : "Сбросить шаблон"}
+              <section className="grid gap-1.5" aria-label="Источник восстановления">
+                <p className="text-xs font-medium">Что восстановить?</p>
+                <Button type="button" variant={resetSource === "global" ? "default" : "outline"} className="h-10 justify-start px-3 text-left text-sm" disabled={templateDialogBusy || !product.shop_id} aria-pressed={resetSource === "global"} onClick={() => setResetSource("global")}>Глобальный шаблон</Button>
+                <Button type="button" variant={resetSource === "shop" ? "default" : "outline"} className="h-auto min-h-10 justify-start px-3 py-2 text-left text-sm" disabled={templateDialogBusy || !product.shop_id || shopTemplateAvailable !== true} aria-pressed={resetSource === "shop"} onClick={() => setResetSource("shop")}>
+                  <span className="flex min-w-0 flex-col items-start gap-0.5">
+                    <span className="flex items-center gap-2">{shopTemplateAvailable === null && !shopTemplateCheckError && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}Сохранённый шаблон магазина</span>
+                    {shopTemplateAvailable === null && !shopTemplateCheckError && <span className="text-xs font-normal opacity-80">Проверяем наличие…</span>}
+                    {shopTemplateAvailable === false && <span className="text-xs font-normal opacity-80">Нет шаблона для этой категории</span>}
+                  </span>
                 </Button>
-                <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>
-                  Отмена
-                </Button>
+                {shopTemplateCheckError && <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"><span className="line-clamp-2 min-w-0">{shopTemplateCheckError}</span><Button type="button" variant="outline" size="sm" className="h-7 shrink-0 px-2 text-xs" disabled={templateDialogBusy} onClick={() => setShopTemplateCheckAttempt((attempt) => attempt + 1)}>Повторить</Button></div>}
+              </section>
+              {templateActionMessage && <p role={templateActionMessage.kind === "error" ? "alert" : "status"} className={templateActionMessage.kind === "error" ? "max-h-16 overflow-y-auto break-words rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" : "max-h-16 overflow-y-auto break-words rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"}>{templateActionMessage.text}</p>}
+              <DialogFooter className="gap-2">
+                <Button type="button" disabled={templateDialogBusy || !product.shop_id || (resetSource === "shop" && shopTemplateAvailable !== true)} onClick={() => void reloadTemplate()}>{templateBusyAction === "reset" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{templateBusyAction === "reset" ? "Сбрасываем…" : "Сбросить шаблон"}</Button>
+                <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>Отмена</Button>
               </DialogFooter>
             </>
           )}
