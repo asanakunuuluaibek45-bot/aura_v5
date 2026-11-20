@@ -876,7 +876,7 @@ export function LabelEditor({
                 <Button type="button" variant={resetSource === "global" ? "default" : "outline"} className="h-10 justify-start px-3 text-left text-sm" disabled={templateDialogBusy || !product.shop_id} aria-pressed={resetSource === "global"} onClick={() => setResetSource("global")}>Глобальный шаблон</Button>
                 <Button type="button" variant={resetSource === "shop" ? "default" : "outline"} className="h-auto min-h-10 justify-start px-3 py-2 text-left text-sm" disabled={templateDialogBusy || !product.shop_id || shopTemplateAvailable !== true} aria-pressed={resetSource === "shop"} onClick={() => setResetSource("shop")}>
                   <span className="flex min-w-0 flex-col items-start gap-0.5">
-                    <span className="flex items-center gap-2">{shopTemplateAvailable === null && !shopTemplateCheckError && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}Сохранённый шаблон магазина</span>
+                    <span className="flex items-center gap-2">{shopTemplateAvailable === null && !shopTemplateCheckError && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />}Восстановить сохранённый шаблон магазина</span>
                     {shopTemplateAvailable === null && !shopTemplateCheckError && <span className="text-xs font-normal opacity-80">Проверяем наличие…</span>}
                     {shopTemplateAvailable === false && <span className="text-xs font-normal opacity-80">Нет шаблона для этой категории</span>}
                   </span>
