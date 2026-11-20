@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { AlertTriangle, EyeOff, Image as ImageIcon, Keyboard, RefreshCw, X, Zap, ZapOff } from "lucide-react"
 import { playScanBeep } from "@/lib/sound"
 import { parseQrCode } from "@/lib/qr-code"
+import { getCameraPermissionError, readCameraPermissionState } from "@/lib/camera-permission"
 import { toast } from "sonner"
 import {
   getVideoCoverTransform,
@@ -80,6 +81,7 @@ export function BarcodeScannerModal({
   const videoRef = useRef<HTMLVideoElement>(null)
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const activeStreamRef = useRef<MediaStream | null>(null)
+  const pendingBrowserStreamRef = useRef<MediaStream | null>(null)
   const controlsRef = useRef<IScannerControls | null>(null)
   const nativeSessionRef = useRef<NativeScanSession | null>(null)
   const nativeStopPromiseRef = useRef<Promise<void>>(Promise.resolve())
@@ -98,6 +100,9 @@ export function BarcodeScannerModal({
   const [manual, setManual] = useState("")
   const [manualMode, setManualMode] = useState(false)
   const [nativeScannerActive, setNativeScannerActive] = useState(false)
+  const [cameraRetrying, setCameraRetrying] = useState(false)
+  const [canRetryBrowserCamera, setCanRetryBrowserCamera] = useState(false)
+  const [cameraRetrySequence, setCameraRetrySequence] = useState(0)
 
   // Флаг: действительно ли текущий запущенный трек является селфи-камерой
   const [isFrontCamera, setIsFrontCamera] = useState(false)
@@ -252,6 +257,8 @@ export function BarcodeScannerModal({
 
   const close = useCallback(() => {
     closedRef.current = true
+    pendingBrowserStreamRef.current?.getTracks().forEach((track) => track.stop())
+    pendingBrowserStreamRef.current = null
     stopEverything()
     onCloseRef.current()
   }, [stopEverything])
@@ -303,6 +310,8 @@ export function BarcodeScannerModal({
     closedRef.current = false
     return () => {
       closedRef.current = true
+      pendingBrowserStreamRef.current?.getTracks().forEach((track) => track.stop())
+      pendingBrowserStreamRef.current = null
     }
   }, [])
 
@@ -371,6 +380,7 @@ export function BarcodeScannerModal({
       checksumErrorCountRef.current = 0
       setTorchOn(false)
       setTorchAvailable(false)
+      setCanRetryBrowserCamera(false)
 
       if (canUseNativeScanner()) {
         let permissionGranted = false
@@ -430,19 +440,27 @@ export function BarcodeScannerModal({
         },
       }
 
-      let stream: MediaStream
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints)
-      } catch (err) {
-        const name = (err as DOMException)?.name
-        setError(
-          name === "NotAllowedError"
-            ? "Доступ к камере запрещён. Разрешите доступ в настройках."
-            : name === "NotFoundError"
-              ? "Камера не найдена на устройстве."
-              : "Не удалось запустить камеру.",
-        )
-        return
+      let stream = pendingBrowserStreamRef.current
+      if (stream) {
+        pendingBrowserStreamRef.current = null
+      } else {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints)
+        } catch (err) {
+          const name = (err as DOMException)?.name
+          if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+            const permissionState = await readCameraPermissionState(navigator.permissions)
+            setCanRetryBrowserCamera(true)
+            setError(getCameraPermissionError(permissionState))
+          } else {
+            setError(
+              name === "NotFoundError"
+                ? "Камера не найдена на устройстве."
+                : "Не удалось запустить камеру.",
+            )
+          }
+          return
+        }
       }
 
       if (cancelled || closedRef.current) {
@@ -638,7 +656,44 @@ export function BarcodeScannerModal({
     handleResult,
     releaseContinuousScanLock,
     stopEverything,
+    cameraRetrySequence,
   ])
+
+  const retryBrowserCamera = async () => {
+    if (cameraRetrying || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return
+    setCameraRetrying(true)
+    setError(null)
+    try {
+      const chosen = camerasRef.current[deviceIndex]
+      const constraints: MediaStreamConstraints = {
+        audio: false,
+        video: {
+          ...(chosen?.deviceId
+            ? { deviceId: { exact: chosen.deviceId } }
+            : { facingMode: { ideal: facing } }),
+          width: { ideal: 960, max: 1280 },
+          height: { ideal: 540, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        },
+      }
+      // Call getUserMedia inside the tap handler so Chrome receives a direct
+      // user gesture and can show its permission prompt again when allowed.
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      if (closedRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
+      pendingBrowserStreamRef.current?.getTracks().forEach((track) => track.stop())
+      pendingBrowserStreamRef.current = stream
+      setCameraRetrySequence((sequence) => sequence + 1)
+    } catch {
+      const permissionState = await readCameraPermissionState(navigator.permissions)
+      setCanRetryBrowserCamera(true)
+      setError(getCameraPermissionError(permissionState))
+    } finally {
+      setCameraRetrying(false)
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -795,6 +850,20 @@ export function BarcodeScannerModal({
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 px-6 text-center">
               <AlertTriangle className="h-10 w-10 text-destructive" />
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">{error}</p>
+              {canRetryBrowserCamera && (
+                <Button
+                  type="button"
+                  variant="default"
+                  disabled={cameraRetrying}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void retryBrowserCamera()
+                  }}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${cameraRetrying ? "animate-spin" : ""}`} />
+                  {cameraRetrying ? "Запрашиваем доступ…" : "Повторить запрос"}
+                </Button>
+              )}
             </div>
           )}
         </div>
