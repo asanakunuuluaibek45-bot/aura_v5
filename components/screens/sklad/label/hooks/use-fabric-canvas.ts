@@ -63,7 +63,32 @@ export function useFabricCanvas(
 
     const cleanupAutoH = attachTextAutoHeight(canvas)
     const cleanupSnap  = attachSmartGuides(canvas, sizeDef)
-    cleanupRef.current = [cleanupAutoH, cleanupSnap]
+    const highlightSelectionControls = () => {
+      const activeObject = canvas.getActiveObject()
+      if (!activeObject) return
+      ;(activeObject as unknown as { set: (options: Record<string, unknown>) => void }).set({
+        cornerColor: "#2563eb",
+        cornerStrokeColor: "#ffffff",
+        cornerStyle: "rect",
+        cornerSize: 14,
+        transparentCorners: false,
+        borderColor: "#1d4ed8",
+        borderScaleFactor: 2,
+        rotatingPointOffset: 24,
+      })
+      activeObject.setCoords()
+      canvas.requestRenderAll()
+    }
+    canvas.on("selection:created", highlightSelectionControls)
+    canvas.on("selection:updated", highlightSelectionControls)
+    cleanupRef.current = [
+      cleanupAutoH,
+      cleanupSnap,
+      () => {
+        canvas.off("selection:created", highlightSelectionControls)
+        canvas.off("selection:updated", highlightSelectionControls)
+      },
+    ]
 
     try {
       const maybePromise = onReady(canvas)

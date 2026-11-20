@@ -1,7 +1,11 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
-import { getLabelTemplateCategories, getLabelTemplateStorageKey } from "../lib/label-template-policy.ts"
+import {
+  getLabelTemplateCategories,
+  getLabelTemplateResetCategories,
+  getLabelTemplateStorageKey,
+} from "../lib/label-template-policy.ts"
 import { resolveShopSeqId } from "../lib/shop-seq-cache-core.ts"
 import { buildShopLabelQrPayload } from "../lib/label-qr-payload.ts"
 
@@ -14,6 +18,17 @@ test("saving for a category targets only that category; shop scope deduplicates 
   )
   assert.deepEqual(
     getLabelTemplateCategories("Кольца", ["Кольца", " Серьги ", "Прочее", ""], "shop"),
+    ["Кольца", "Серьги", "Прочее"],
+  )
+})
+
+test("reset scope targets one category or all active-shop categories without duplicates", () => {
+  assert.deepEqual(
+    getLabelTemplateResetCategories("Кольца", ["Кольца", "Серьги", "Прочее"], "category"),
+    ["Кольца"],
+  )
+  assert.deepEqual(
+    getLabelTemplateResetCategories("Кольца", ["Кольца", " Серьги ", "Прочее", "Серьги"], "shop"),
     ["Кольца", "Серьги", "Прочее"],
   )
 })
@@ -41,17 +56,33 @@ test("saving all shop categories cannot write to the global or another shop scop
   assert.match(action, /\.upsert\(\s*normalizedCategories\.map/)
 })
 
-test("reset offers explicit source choices and global reset deletes only the active shop override", () => {
+test("reset source is explicit, shop restore is read-only, and global reset is active-shop scoped", () => {
   const editor = read("components/screens/sklad/label/label-editor.tsx")
   const action = read("app/actions/labels.ts")
-  assert.match(editor, /Только категория/)
+  assert.match(editor, /Только этот шаблон/)
   assert.match(editor, /Все категории этого магазина/)
-  assert.match(editor, /Восстановить глобальный шаблон/)
-  assert.match(editor, /Восстановить шаблон магазина/)
-  assert.match(editor, /reloadTemplate\(\"global\"\)/)
-  assert.match(editor, /reloadTemplate\(\"shop\"\)/)
-  assert.match(action, /deleteShopLabelTemplate/)
-  assert.match(action, /\.eq\(\"scope_key\", shopId\)\s*\.eq\(\"category\", normalizedCategory\)\s*\.eq\(\"size_key\", normalizedSize\)/)
+  assert.match(editor, /Глобальный шаблон/)
+  assert.match(editor, /Восстановить сохранённый шаблон магазина/)
+  assert.match(editor, /shopTemplateAvailable !== true/)
+  assert.match(editor, /await actions\.handleReloadTemplate\(resetScope, resetSource\)/)
+  assert.match(action, /restoreShopLabelTemplates\(/)
+  assert.match(action, /\.eq\("scope_key", source === "global" \? GLOBAL_SCOPE : shopId\)/)
+  assert.match(action, /\.eq\("scope_key", shopId\)\s*\.eq\("size_key", normalizedSize\)/)
+  assert.match(action, /if \(scope === "category"\)\s*\{\s*deleteQuery = deleteQuery\.eq\("category", normalizedCategory\)/)
+  assert.doesNotMatch(action, /deleteQuery\.eq\("scope_key", GLOBAL_SCOPE\)/)
+})
+
+test("save and reset show operation-specific pending states and preserve retry on failure", () => {
+  const editor = read("components/screens/sklad/label/label-editor.tsx")
+  const hook = read("components/screens/sklad/label/hooks/use-label-actions.ts")
+  assert.match(editor, /Сохраняем…/)
+  assert.match(editor, /Сбрасываем…/)
+  assert.match(editor, /templateActionLock\.current/)
+  assert.match(editor, /setTemplateDialog\(null\)/)
+  assert.match(editor, /templateActionMessage\.kind === "error" \? "alert" : "status"/)
+  assert.match(hook, /await saveLabelTemplate\(categories, serialized, sizeKey, scope\)/)
+  assert.match(hook, /Update the local cache only after the server confirms the upsert/)
+  assert.doesNotMatch(hook, /toast\.success\("Нет связи/)
 })
 
 test("offline QR sequence cache is saved online, reused offline, and isolated per shop", async () => {

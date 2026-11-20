@@ -163,21 +163,58 @@ export async function getLabelTemplate(
   return globalTemplate?.template_json ?? null
 }
 
-/** Deletes only the selected category's override in the active shop. */
-export async function deleteShopLabelTemplate(category: string, sizeKey?: string): Promise<void> {
+/**
+ * Restores templates only inside the authenticated user's active shop.
+ * "shop" source reloads the last server-saved shop templates; "global" removes
+ * the selected shop overrides so the global templates become effective.
+ */
+export async function restoreShopLabelTemplates(
+  category: string,
+  sizeKey: string | undefined,
+  scope: "category" | "shop",
+  source: "global" | "shop",
+): Promise<Record<string, string>> {
   const { supabase, shopId } = await getContext()
   if (!shopId) throw new Error("Сначала выберите магазин")
 
   const { category: normalizedCategory, sizeKey: normalizedSize } = normalizeKey(category, sizeKey)
-  const { error } = await supabase
+  const sourceQuery = supabase
     .from("label_templates")
-    .delete()
-    .eq("scope_key", shopId)
-    .eq("category", normalizedCategory)
+    .select("category, template_json")
+    .eq("scope_key", source === "global" ? GLOBAL_SCOPE : shopId)
     .eq("size_key", normalizedSize)
-  if (error) throw new Error(`Не удалось восстановить глобальный шаблон: ${error.message}`)
+  const { data, error: loadError } = scope === "category"
+    ? await sourceQuery.eq("category", normalizedCategory)
+    : await sourceQuery
+  if (loadError) {
+    throw new Error(`Не удалось загрузить сохранённые шаблоны: ${loadError.message}`)
+  }
 
-  revalidatePath("/crm/inventory", "page")
+  const templates = Object.fromEntries(
+    (data ?? []).map((row) => [row.category, row.template_json]),
+  ) as Record<string, string>
+
+  if (source === "shop" && !templates[normalizedCategory]) {
+    throw new Error(`Для категории «${normalizedCategory}» нет сохранённого шаблона магазина`)
+  }
+
+  if (source === "global") {
+    let deleteQuery = supabase
+      .from("label_templates")
+      .delete()
+      .eq("scope_key", shopId)
+      .eq("size_key", normalizedSize)
+    if (scope === "category") {
+      deleteQuery = deleteQuery.eq("category", normalizedCategory)
+    }
+    const { error: deleteError } = await deleteQuery
+    if (deleteError) {
+      throw new Error(`Не удалось восстановить глобальные шаблоны: ${deleteError.message}`)
+    }
+  }
+
+  if (source === "global") revalidatePath("/crm/inventory", "page")
+  return templates
 }
 
 export async function deleteLabelTemplate(category: string, sizeKey?: string): Promise<void> {

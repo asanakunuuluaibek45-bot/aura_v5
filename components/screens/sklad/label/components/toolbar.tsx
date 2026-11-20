@@ -15,6 +15,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, SlidersHorizontal,
 } from "lucide-react"
 import { Button }    from "@/components/ui/button"
+import { toast } from "sonner"
 import { Switch }    from "@/components/ui/switch"
 import { Slider }    from "@/components/ui/slider"
 import { Label }     from "@/components/ui/label"
@@ -69,7 +70,8 @@ export interface LabelEditorToolbarProps {
   onScaleUp?:         () => void
   onScaleDown?:       () => void
   // SVG рамка
-  onLoadSvgFrame?:    (svgText: string, filename: string) => void
+  onLoadSvgFrame?:    (svgText: string, filename: string, preserveAspectRatio?: boolean) => void
+  onLoadPhoto?:       (file: File) => void | Promise<void>
   onSaveToFile?:      () => void
   onExportPng?:       () => void
   // Форматирование текста
@@ -330,7 +332,7 @@ function HeaderZone({
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={onSaveTemplate}
+              onClick={() => { setOpen(false); onSaveTemplate() }}
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted transition-colors"
               title="Сохранить расположение"
             >
@@ -339,7 +341,7 @@ function HeaderZone({
             </button>
             <button
               type="button"
-              onClick={onReloadTemplate}
+              onClick={() => { setOpen(false); onReloadTemplate() }}
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted transition-colors"
               title="Восстановить глобальный или сохранённый шаблон магазина"
             >
@@ -406,7 +408,7 @@ function BottomZone({
   onToggleBold, onToggleItalic, onToggleUnderline, onToggleLinethrough,
   onTextAlignChange, onCharSpacingChange, onLineHeightChange,
   onScaleUp, onScaleDown,
-  onLoadSvgFrame,
+  onLoadSvgFrame, onLoadPhoto,
   onPrint,
   onReconnectPrinter,
 }: LabelEditorToolbarProps) {
@@ -418,15 +420,30 @@ function BottomZone({
 
   const handleSvgFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result
-      if (typeof text === "string") onLoadSvgFrame?.(text, file.name)
-    }
-    reader.readAsText(file)
     e.target.value = ""
-  }, [onLoadSvgFrame])
+    if (!file) return
+    const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")
+    if (isSvg) {
+      if (!onLoadSvgFrame) { toast.error("Загрузка SVG недоступна"); return }
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const text = ev.target?.result
+        if (typeof text === "string") onLoadSvgFrame?.(text, file.name)
+        else toast.error("Не удалось прочитать SVG-файл")
+      }
+      reader.onerror = () => toast.error("Не удалось прочитать SVG-файл")
+      reader.readAsText(file)
+      return
+    }
+    const looksLikeImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|avif|bmp|gif|tiff?|heic|heif)$/i.test(file.name)
+    if (!looksLikeImage) {
+      toast.error("Выберите SVG или файл изображения")
+      return
+    }
+    if (!onLoadPhoto) { toast.error("Загрузка фото недоступна"); return }
+    void Promise.resolve().then(() => onLoadPhoto(file))
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Не удалось преобразовать изображение"))
+  }, [onLoadSvgFrame, onLoadPhoto])
 
   const updateBorderMenuPos = useCallback(() => {
     const el = borderBtnRef.current
@@ -471,11 +488,11 @@ function BottomZone({
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", zIndex: 9990, position: "relative" }}
     >
       {/* hidden SVG file input (перенесён из HeaderZone) */}
-      {onLoadSvgFrame && (
+      {(onLoadSvgFrame || onLoadPhoto) && (
         <input
           ref={svgInputRef}
           type="file"
-          accept=".svg,image/svg+xml"
+          accept="image/*,.svg,.heic,.heif"
           className="hidden"
           onChange={handleSvgFileChange}
         />
@@ -534,9 +551,9 @@ function BottomZone({
               document.body,
             )}
 
-          {onLoadSvgFrame && (
-            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG-рамку из файла" stretch>
-              <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline">SVG</span>
+          {(onLoadSvgFrame || onLoadPhoto) && (
+            <ToolBtn onClick={() => svgInputRef.current?.click()} title="Загрузить SVG или чёрно-белое фото" stretch>
+              <Upload className="h-3.5 w-3.5" /><span className="hidden sm:inline">SVG/Фото</span>
             </ToolBtn>
           )}
 

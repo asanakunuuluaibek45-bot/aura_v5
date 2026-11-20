@@ -4,24 +4,37 @@
 // загрузка SVG-рамки, сохранение работы в файл, масштаб элементов
 // ---------------------------------------------------------------------------
 import { useCallback } from "react"
-import { Textbox } from "fabric"
+import { Textbox, Image as FabricImage } from "fabric"
 import type { Canvas as FabricCanvas } from "fabric"
 import { toast } from "sonner"
+import { compressToWebp } from "@/lib/image"
 import type { LabelSizeDef, JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { Product } from "@/lib/types"
-import { saveLabelTemplate, getLabelTemplate, deleteShopLabelTemplate } from "@/app/actions/labels"
+import { saveLabelTemplate, getLabelTemplate, restoreShopLabelTemplates } from "@/app/actions/labels"
 import {
   getLabelTemplateCategories,
+  getLabelTemplateResetCategories,
   type LabelTemplateResetSource,
+  type LabelTemplateResetScope,
   type LabelTemplateSaveScope,
 } from "@/lib/label-template-policy"
 import type { BorderStyleKey } from "../constants"
+import { getRole } from "../types"
 import { createTextbox, refitTextbox, setAutoFit, setFitRatio, clampRatio } from "../canvas/text-fit"
 import { addBorderToCanvas } from "../canvas/borders"
 import { buildDefaultLayout } from "../canvas/layout"
-import { serializeLayout, parseTemplate, applyTemplate, applyBgRect } from "../data/template"
+import { serializeLayout, parseTemplate, applyTemplate, applyTemplateImages, applyBgRect } from "../data/template"
 import { refreshLiveData } from "../canvas/layout"
 import { saveLocalTemplate, getLocalTemplate, clearLocalTemplateCache } from "../data/local-template-storage"
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Не удалось подготовить фото"))
+    reader.onerror = () => reject(new Error("Не удалось подготовить фото"))
+    reader.readAsDataURL(blob)
+  })
+}
 
 export function useLabelActions(
   fabricRef:  React.RefObject<FabricCanvas | null>,
@@ -157,89 +170,83 @@ export function useLabelActions(
 
   const handleSaveTemplate = useCallback(async (scope: LabelTemplateSaveScope) => {
     const canvas = fabricRef.current
-    if (!canvas) return
-    try {
-      canvas.discardActiveObject()
-      canvas.renderAll()
-      const tpl = serializeLayout(canvas, sizeKey, null)
-      const serialized = JSON.stringify(tpl)
-      const categories = getLabelTemplateCategories(category, shopCategories, scope)
-      if (scope === "shop" && !product.shop_id) {
-        throw new Error("Не выбран магазин для применения шаблона")
-      }
+    if (!canvas) throw new Error("Холст этикетки ещё не готов")
+    canvas.discardActiveObject()
+    canvas.renderAll()
+    const tpl = serializeLayout(canvas, sizeKey, null)
+    const serialized = JSON.stringify(tpl)
+    const categories = getLabelTemplateCategories(category, shopCategories, scope)
+    if (!product.shop_id) {
+      throw new Error("Не выбран активный магазин")
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
       categories.forEach((targetCategory) => {
         saveLocalTemplate(product.shop_id, targetCategory, serialized, sizeKey)
       })
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        toast.success(
-          scope === "shop"
-            ? `Шаблон сохранён офлайн на этом устройстве для ${categories.length} категорий магазина`
-            : `Шаблон сохранён офлайн на этом устройстве для «${category}»`,
-        )
-        return
-      }
-      try {
-        await saveLabelTemplate(categories, serialized, sizeKey, scope)
-      } catch (err) {
-        if (/failed to fetch|network|fetch failed/i.test((err as Error)?.message ?? "")) {
-          toast.success("Нет связи с сервером — шаблон сохранён на устройстве")
-          return
-        }
-        throw err
-      }
-      toast.success(
-        scope === "shop"
-          ? `Шаблон сохранён для ${categories.length} категорий магазина`
-          : `Расположение сохранено для «${category}» / ${sizeKey}`,
-      )
-    } catch (err) {
-      toast.error((err as Error).message)
+      return { status: "local-only" as const, categoryCount: categories.length }
     }
+
+    // Update the local cache only after the server confirms the upsert. Otherwise
+    // a failed request could make an unsaved design look like the saved template.
+    await saveLabelTemplate(categories, serialized, sizeKey, scope)
+    categories.forEach((targetCategory) => {
+      saveLocalTemplate(product.shop_id, targetCategory, serialized, sizeKey)
+    })
+    return { status: "server" as const, categoryCount: categories.length }
   }, [fabricRef, sizeKey, category, shopCategories, product.shop_id])
 
-  const handleReloadTemplate = useCallback(async (source: LabelTemplateResetSource) => {
+  const handleReloadTemplate = useCallback(async (
+    scope: LabelTemplateResetScope,
+    source: LabelTemplateResetSource,
+  ) => {
     const canvas = fabricRef.current
-    if (!canvas) return
+    if (!canvas) throw new Error("Холст этикетки ещё не готов")
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      toast.error("Для восстановления шаблона подключитесь к интернету")
-      return
+      throw new Error("Для восстановления сохранённого шаблона подключитесь к интернету")
     }
-    try {
-      const raw = await getLabelTemplate(category, sizeKey, source)
-      if (source === "shop" && !raw) {
-        toast.info(`Для «${category}» ещё не сохранён отдельный шаблон магазина`)
-        return
-      }
-      const saved = parseTemplate(raw)
-      if (raw && !saved) {
-        throw new Error("Сохранённый шаблон имеет неподдерживаемый формат")
-      }
+    if (!product.shop_id) throw new Error("Не выбран активный магазин")
 
-      if (source === "global") {
-        await deleteShopLabelTemplate(category, sizeKey)
-      }
-      clearLocalTemplateCache(product.shop_id, category, sizeKey)
-      if (raw && saved) saveLocalTemplate(product.shop_id, category, raw, sizeKey)
-      if (!canvas.lowerCanvasEl) return
+    const targetCategories = getLabelTemplateResetCategories(category, shopCategories, scope)
+    const templates = await restoreShopLabelTemplates(
+      category,
+      sizeKey,
+      scope,
+      source,
+    )
+    const affectedCategories = scope === "shop"
+      ? [...new Set([...targetCategories, ...Object.keys(templates)])]
+      : [category]
 
-      await buildDefaultLayout(canvas, product, sizeDef)
-      if (saved) {
-        applyTemplate(canvas, saved)
-        await refreshLiveData(canvas, product)
-        applyBgRect(canvas, sizeDef, saved.bg ?? null)
-      }
-      canvas.setViewportTransform([1, 0, 0, 1, offsetX, offsetY])
-      canvas.renderAll()
-      toast.success(
-        source === "global"
-          ? saved ? "Глобальный шаблон восстановлен для этой категории" : "Восстановлен стандартный глобальный макет"
-          : "Шаблон магазина восстановлен",
-      )
-    } catch (error) {
-      console.error("[label] Не удалось восстановить шаблон:", error)
-      toast.error(error instanceof Error ? error.message : "Не удалось восстановить шаблон")
+    affectedCategories.forEach((targetCategory) => {
+      clearLocalTemplateCache(product.shop_id, targetCategory, sizeKey)
+      const raw = templates[targetCategory]
+      if (raw) saveLocalTemplate(product.shop_id, targetCategory, raw, sizeKey)
+    })
+
+    if (!canvas.lowerCanvasEl) throw new Error("Холст этикетки закрыт до завершения сброса")
+    const raw = templates[category] ?? null
+    const saved = parseTemplate(raw)
+    if (raw && !saved) {
+      throw new Error("Сохранённый шаблон имеет неподдерживаемый формат")
     }
-  }, [fabricRef, category, sizeKey, product, sizeDef, offsetX, offsetY])
+
+    await buildDefaultLayout(canvas, product, sizeDef)
+    if (saved) {
+      applyTemplate(canvas, saved)
+      await applyTemplateImages(canvas, saved)
+      await refreshLiveData(canvas, product)
+      applyBgRect(canvas, sizeDef, saved.bg ?? null)
+    }
+    canvas.setViewportTransform([1, 0, 0, 1, offsetX, offsetY])
+    canvas.renderAll()
+    return {
+      scope,
+      source,
+      categoryCount: source === "shop" ? Object.keys(templates).length : affectedCategories.length,
+      hasTemplate: Boolean(saved),
+    }
+  }, [fabricRef, category, sizeKey, product, sizeDef, offsetX, offsetY, shopCategories])
 
   const loadTemplate = useCallback(async (canvas: FabricCanvas) => {
     // Локальный шаблон применяется до асинхронной генерации QR, поэтому
@@ -296,6 +303,7 @@ export function useLabelActions(
       // Повторное применение нужно для сохранённых координат QR: сам объект
       // добавляется после асинхронного создания изображения.
       applyTemplate(canvas, saved)
+      await applyTemplateImages(canvas, saved)
       applyBgRect(canvas, sizeDef, saved.bg ?? null)
     }
     canvas.renderAll()
@@ -305,7 +313,7 @@ export function useLabelActions(
     // редактирование, поздний ответ не должен перезаписать его изменения.
     if (!raw && (typeof navigator === "undefined" || navigator.onLine)) {
       void getLabelTemplate(category, sizeKey)
-        .then((remoteRaw) => {
+        .then(async (remoteRaw) => {
           if (
             !remoteRaw ||
             userEdited ||
@@ -315,6 +323,7 @@ export function useLabelActions(
           const remote = parseTemplate(remoteRaw)
           if (!remote) return
           applyTemplate(canvas, remote)
+          await applyTemplateImages(canvas, remote)
           applyBgRect(canvas, sizeDef, remote.bg ?? null)
           canvas.requestRenderAll()
           saveLocalTemplate(product.shop_id, category, remoteRaw, sizeKey)
@@ -330,8 +339,35 @@ export function useLabelActions(
     }
   }, [fabricRef, category, sizeKey, product, sizeDef])
 
+  const loadPhoto = useCallback(async (file: File) => {
+    const canvas = fabricRef.current
+    if (!canvas) throw new Error("Холст этикетки ещё не готов")
+    const webp = await compressToWebp(file, { monochrome: true })
+    const dataUrl = await blobToDataUrl(webp)
+    const image = await FabricImage.fromURL(dataUrl)
+    if (!canvas.lowerCanvasEl) return
+    const width = image.width || sizeDef.w_px
+    const height = image.height || sizeDef.h_px
+    const scale = Math.min(sizeDef.w_px / width, sizeDef.h_px / height)
+    image.set({
+      left: (sizeDef.w_px - width * scale) / 2,
+      top: (sizeDef.h_px - height * scale) / 2,
+      scaleX: scale, scaleY: scale,
+      selectable: true, evented: true,
+      data: { role: "label-photo", filename: file.name },
+    })
+    const previous = canvas.getObjects().find((obj) => getRole(obj) === "label-photo")
+    if (previous) canvas.remove(previous)
+    canvas.add(image)
+    const backgroundIndex = canvas.getObjects().findIndex((obj) => getRole(obj) === "bg")
+    canvas.moveObjectTo(image, backgroundIndex >= 0 ? backgroundIndex + 1 : 0)
+    canvas.setActiveObject(image)
+    canvas.requestRenderAll()
+    toast.success("Чёрно-белое фото добавлено")
+  }, [fabricRef, sizeDef])
+
   // ── Загрузка SVG-рамки из файловой системы ───────────────────────────────
-  const loadSvgFrame = useCallback(async (svgText: string, filename: string) => {
+  const loadSvgFrame = useCallback(async (svgText: string, filename: string, preserveAspectRatio = false) => {
     const canvas = fabricRef.current
     if (!canvas) return
     try {
@@ -340,11 +376,16 @@ export function useLabelActions(
       // Группируем объекты SVG в одну группу
       const group = util.groupSVGElements(objects.filter(Boolean) as import("fabric").FabricObject[], options)
       // Масштабируем рамку под размер холста
-      const scaleX = sizeDef.w_px / (group.width  || sizeDef.w_px)
-      const scaleY = sizeDef.h_px / (group.height || sizeDef.h_px)
+      const groupWidth = group.width || sizeDef.w_px
+      const groupHeight = group.height || sizeDef.h_px
+      const scaleX = sizeDef.w_px / groupWidth
+      const scaleY = sizeDef.h_px / groupHeight
+      const scale = Math.min(scaleX, scaleY)
       group.set({
-        left: 0, top: 0,
-        scaleX, scaleY,
+        left: preserveAspectRatio ? (sizeDef.w_px - groupWidth * scale) / 2 : 0,
+        top: preserveAspectRatio ? (sizeDef.h_px - groupHeight * scale) / 2 : 0,
+        scaleX: preserveAspectRatio ? scale : scaleX,
+        scaleY: preserveAspectRatio ? scale : scaleY,
         selectable: true,
         evented:    true,
         data: { role: "svg-frame", filename },
@@ -357,7 +398,7 @@ export function useLabelActions(
       canvas.add(group)
       canvas.sendObjectToBack(group)
       canvas.requestRenderAll()
-      toast.success(`SVG-рамка загружена: ${filename}`)
+      toast.success(preserveAspectRatio ? `Фото добавлено в SVG-рамку: ${filename}` : `SVG-рамка загружена: ${filename}`)
     } catch (err) {
       toast.error(`Ошибка загрузки SVG: ${(err as Error).message}`)
     }
@@ -399,6 +440,6 @@ export function useLabelActions(
     handleBoldToggle, handleItalicToggle, handleUnderlineToggle, handleLinethroughToggle,
     handleTextAlignChange, handleCharSpacingChange, handleLineHeightChange,
     handleSaveTemplate, handleReloadTemplate, loadTemplate,
-    loadSvgFrame, saveToFile,
+    loadSvgFrame, loadPhoto, saveToFile,
   }
 }
