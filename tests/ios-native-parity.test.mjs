@@ -216,6 +216,7 @@ test('iOS build links ML Kit through CocoaPods and compiles the Keychain bridge'
   assert.doesNotMatch(swift, /addScriptMessageHandler|registerScriptMessageHandler/)
   assert.match(read('scripts/build-ios-unsigned.sh'), /npm ci/)
   assert.match(read('scripts/build-ios-unsigned.sh'), /verify-ios-native/)
+  assert.match(read('native/next.config.mjs'), /distDir: "out"/)
 })
 
 test('native login removes logout fence before saving the new offline profile', () => {

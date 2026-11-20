@@ -8,8 +8,8 @@ const projectRoot = path.resolve(nativeDir, "..");
 const nextConfig = {
   output: "export",
   trailingSlash: true,
-  // Next's intermediate build must not overlap its static export directory.
-  distDir: ".next-native",
+  // Keep the explicit export directory used by the existing native build script.
+  distDir: "out",
   poweredByHeader: false,
   images: { unoptimized: true },
   env: { NEXT_PUBLIC_BUILD_TARGET: "native" },

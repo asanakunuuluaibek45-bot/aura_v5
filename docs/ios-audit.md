@@ -24,7 +24,7 @@ on a physical device, or fiscal compliance.
 | Login saved offline profile before clearing durable logout fence | Relogin could appear successful but lack an offline profile after restart | Clear fence only after online profile approval, then save profile |
 | Scanner cleanup could skip camera stop after listener-removal failure | Camera could remain acquired | Independent best-effort listener and camera cleanup, including partially failed startup |
 | Native shell had no online CRM modules | Money, reports and supplier screens unavailable | Added isolated HTTPS WKWebView, online menu and access-only authenticated bootstrap |
-| Intermediate Next output shared the export directory | Export/build output collision risk | Separate `.next-native` and `out` |
+| Existing native export relies on an explicit output directory | Changing it can break the verified copy-to-Capacitor path | Retained `distDir: "out"` and limited build workers |
 | Native printer globals were outside native TypeScript include | Printer integration could fail native typecheck | Included existing Niimbot declarations |
 | iOS workflow ran only manually and checked no plugin linkage | A green build was insufficient evidence | PR trigger, regression tests, native dependency checks, mandatory CocoaPods workspace and lock artifact |
 
