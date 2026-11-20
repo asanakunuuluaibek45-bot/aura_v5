@@ -69,6 +69,7 @@ export async function startNativeScan(
     document.documentElement.classList.remove(NATIVE_SCANNER_BODY_CLASS)
     document.body.classList.remove(NATIVE_SCANNER_BODY_CLASS)
     document.documentElement.style.removeProperty("--barcode-scanner-scroll-y")
+    window.scrollTo?.(0, scrollY)
   }
 
   try {

@@ -37,7 +37,7 @@ test("native app renders the actual PWA, not a separately implemented CRM", () =
 test("native bootstrap restores identity before network work and retains lifecycle integration", () => {
   const page = read("native/app/native-crm.tsx")
   assert.match(page, /getSavedUserSession/)
-  assert.match(page, /Network\.addListener/)
+  assert.match(read("lib/native-connectivity.ts"), /Network\.addListener/)
   assert.match(page, /CapacitorApp\.addListener\("backButton"/)
   assert.match(page, /SplashScreen\.hide/)
   assert.ok(page.indexOf("setIdentity({ profile: saved.profile") < page.indexOf("await supabase.auth.getSession()"))

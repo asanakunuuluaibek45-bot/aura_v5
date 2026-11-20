@@ -174,7 +174,6 @@ html.barcode-scanner-active {
 }
 
 body.barcode-scanner-active {
-  --background: transparent;
   position: fixed !important;
   inset-inline: 0;
   top: var(--barcode-scanner-scroll-y, 0px);
@@ -182,6 +181,21 @@ body.barcode-scanner-active {
   height: 100dvh;
   min-height: 100%;
   touch-action: none;
+}
+
+/* The native preview is BELOW the WebView. Making only body transparent
+   leaves the cash cards, sticky header and other portals over the camera.
+   Hide (do not unmount) everything except the scanner's direct body portal,
+   preserving the cashier/cart and preventing accidental background taps. */
+body.barcode-scanner-active > :not([data-native-scanner-overlay]),
+body.barcode-scanner-active > :not([data-native-scanner-overlay]) * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.barcode-scanner-active > [data-native-scanner-overlay] {
+  visibility: visible;
+  pointer-events: auto;
 }
 
 /* Keep labels and helper text readable without changing the whole layout. */

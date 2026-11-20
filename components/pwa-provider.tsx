@@ -1,6 +1,7 @@
 "use client"
 
 import { registerCapacitorBluetoothPolyfill } from "@/lib/capacitor-bluetooth"
+import { startNativeConnectivity } from "@/lib/native-connectivity"
 import { useEffect } from "react"
 import { warmUpLabelEditorOffline } from "@/lib/offline-label-warmup"
 import type { Profile } from "@/lib/types"
@@ -20,7 +21,7 @@ export function PwaProvider({ profile }: { profile?: Profile | null }) {
     if (typeof window === "undefined") return
     // Capacitor serves every PWA asset from the IPA. Its custom scheme cannot
     // register a web service worker, and never needs one for offline startup.
-    if (process.env.NEXT_PUBLIC_BUILD_TARGET === "native") return
+    if (process.env.NEXT_PUBLIC_BUILD_TARGET === "native") return startNativeConnectivity()
 
     const isDev = process.env.NODE_ENV !== "production"
 

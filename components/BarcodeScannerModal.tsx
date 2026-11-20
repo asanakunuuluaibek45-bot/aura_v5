@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { DecodeHintType, BarcodeFormat } from "@zxing/library"
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser"
 import { Button } from "@/components/ui/button"
@@ -669,8 +670,10 @@ export function BarcodeScannerModal({
     }
   }
 
-  return (
+  if (typeof document === "undefined") return null
+  return createPortal(
     <div
+      data-native-scanner-overlay
       className={`fixed inset-0 z-[100] flex h-[100dvh] min-h-[100svh] w-screen flex-col text-white ${
         nativeScannerActive ? "bg-transparent" : "bg-black"
       }`}
@@ -864,7 +867,8 @@ export function BarcodeScannerModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { App as CapacitorApp } from "@capacitor/app"
-import { Network } from "@capacitor/network"
 import { SplashScreen } from "@capacitor/splash-screen"
 import { Dashboard } from "@/components/dashboard"
 import { PendingScreen } from "@/components/pending-screen"
@@ -138,9 +137,6 @@ export function NativeCrm() {
 
     window.addEventListener("online", refresh)
     window.addEventListener("aura:native_action_complete", refresh)
-    void retain(Network.addListener("networkStatusChange", ({ connected }) => {
-      window.dispatchEvent(new Event(connected ? "online" : "offline"))
-    }))
     void retain(CapacitorApp.addListener("appStateChange", ({ isActive }) => {
       if (isActive) { createClient().auth.startAutoRefresh(); refresh() }
       else createClient().auth.stopAutoRefresh()

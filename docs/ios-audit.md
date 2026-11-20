@@ -111,6 +111,15 @@ or archive is not claimed.
 
 ## Device acceptance before release
 
+Scanner/connectivity follow-up: the scanner UI now lives in a direct body
+portal. While ML Kit draws below the WebView, every other screen/portal is
+hidden and non-interactive; closing/stopping restores the layout and scroll.
+Do not make shared theme colors transparent: dialogs must retain their own
+backgrounds. The native target adapts `navigator.onLine` to Capacitor Network,
+fails closed until the initial status arrives, rechecks on resume and rejects
+stale status responses. Existing PWA navigation/stock guards therefore use
+native reachability too. Label printing remains independent of internet access.
+
 - Compare PWA and iOS at the same viewport/account/shop: navigation, screens,
   fonts/theme, cart, discounts, payment modes, stock form and label editor.
 - Approved online login → full initial sync → airplane mode → force quit →
