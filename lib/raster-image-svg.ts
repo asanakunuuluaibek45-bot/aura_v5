@@ -1,5 +1,3 @@
-import { compressToWebp } from "./image"
-
 async function getDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   if (typeof createImageBitmap === "function") {
     try {
@@ -48,9 +46,9 @@ export function createRasterSvgContainer(dataUrl: string, width: number, height:
   ].join("")
 }
 
-/** Compress photos through the shared 50 KiB WebP pipeline, then wrap the bitmap in SVG. */
-export async function convertRasterFileToSvg(file: File): Promise<string> {
-  const webp = await compressToWebp(file)
+/** Wraps a WebP blob in SVG after the shared image pipeline has compressed it. */
+export async function convertWebpBlobToSvg(webp: Blob): Promise<string> {
+  if (webp.type !== "image/webp") throw new Error("Фото должно быть преобразовано в WebP")
   const dimensions = await getDimensions(webp)
   return createRasterSvgContainer(await blobToDataUrl(webp), dimensions.width, dimensions.height)
 }

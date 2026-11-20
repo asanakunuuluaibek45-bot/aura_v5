@@ -15,7 +15,8 @@ import {
   AlignLeft, AlignCenter, AlignRight, SlidersHorizontal,
 } from "lucide-react"
 import { Button }    from "@/components/ui/button"
-import { convertRasterFileToSvg } from "@/lib/raster-image-svg"
+import { compressToWebp } from "@/lib/image"
+import { convertWebpBlobToSvg } from "@/lib/raster-image-svg"
 import { toast } from "sonner"
 import { Switch }    from "@/components/ui/switch"
 import { Slider }    from "@/components/ui/slider"
@@ -439,7 +440,8 @@ function BottomZone({
       toast.error("Выберите SVG или файл изображения")
       return
     }
-    void convertRasterFileToSvg(file)
+    void compressToWebp(file)
+      .then(convertWebpBlobToSvg)
       .then((svgText) => onLoadSvgFrame?.(svgText, file.name, true))
       .catch((error) => toast.error(error instanceof Error ? error.message : "Не удалось преобразовать изображение"))
   }, [onLoadSvgFrame])
