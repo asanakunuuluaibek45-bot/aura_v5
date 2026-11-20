@@ -234,7 +234,7 @@ export function useLabelActions(
       categoryCount: source === "shop" ? Object.keys(templates).length : affectedCategories.length,
       hasTemplate: Boolean(saved),
     }
-  }, [fabricRef, category, sizeKey, product, sizeDef, offsetX, offsetY])
+  }, [fabricRef, category, sizeKey, product, sizeDef, offsetX, offsetY, shopCategories])
 
   const loadTemplate = useCallback(async (canvas: FabricCanvas) => {
     // Локальный шаблон применяется до асинхронной генерации QR, поэтому

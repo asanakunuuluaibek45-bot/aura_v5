@@ -811,7 +811,11 @@ export function LabelEditor({
           if (!open && !templateDialogBusy) setTemplateDialog(null)
         }}
       >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md" showCloseButton={!templateDialogBusy}>
+        <DialogContent
+          className="z-[10101] max-h-[90dvh] overflow-y-auto sm:max-w-md"
+          overlayClassName="z-[10100]"
+          showCloseButton={!templateDialogBusy}
+        >
           {templateDialog === "save" ? (
             <>
               <DialogHeader>

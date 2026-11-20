@@ -330,7 +330,7 @@ function HeaderZone({
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={onSaveTemplate}
+              onClick={() => { setOpen(false); onSaveTemplate() }}
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium hover:bg-muted transition-colors"
               title="Сохранить расположение"
             >
@@ -339,7 +339,7 @@ function HeaderZone({
             </button>
             <button
               type="button"
-              onClick={onReloadTemplate}
+              onClick={() => { setOpen(false); onReloadTemplate() }}
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted transition-colors"
               title="Восстановить глобальный или сохранённый шаблон магазина"
             >
