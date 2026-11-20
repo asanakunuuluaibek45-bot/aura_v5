@@ -12,10 +12,19 @@ const nextConfig = {
   distDir: "out",
   poweredByHeader: false,
   images: { unoptimized: true },
-  env: { NEXT_PUBLIC_BUILD_TARGET: "native" },
+  env: {
+    NEXT_PUBLIC_BUILD_TARGET: "native",
+    NEXT_PUBLIC_NATIVE_API_ORIGIN: process.env.NATIVE_API_ORIGIN || "https://www.golduchet.com",
+    NEXT_PUBLIC_SITE_URL: process.env.NATIVE_API_ORIGIN || "https://www.golduchet.com",
+  },
   experimental: { cpus: 1 },
   webpack(config) {
-    config.resolve.alias = { ...(config.resolve.alias ?? {}), "@": projectRoot };
+    config.resolve.alias = {
+      "@/app/actions": path.join(nativeDir, "generated-actions"),
+      [path.join(projectRoot, "app/actions")]: path.join(nativeDir, "generated-actions"),
+      ...(config.resolve.alias ?? {}),
+      "@": projectRoot,
+    };
     return config;
   },
 };

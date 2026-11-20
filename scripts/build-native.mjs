@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+await import("./generate-native-actions.mjs");
 const requiredPublicConfig = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"];
 const targetPlatform = process.argv[2];
 if (targetPlatform && !["ios", "android"].includes(targetPlatform)) {

@@ -34,6 +34,10 @@ if [[ -f "$PLIST" ]]; then
   set_plist_string NSPhotoLibraryAddUsageDescription "Требуется для сохранения фотографий товаров в галерею"
   set_plist_string NSBluetoothAlwaysUsageDescription "Требуется для подключения к Bluetooth-термопринтеру Niimbot"
   set_plist_string NSBluetoothPeripheralUsageDescription "Требуется для подключения к Bluetooth-термопринтеру Niimbot"
+  if [[ -n "${NATIVE_API_ORIGIN:-}" ]]; then
+    node -e 'const u = new URL(process.env.NATIVE_API_ORIGIN); if (u.protocol !== "https:" || u.username || u.password || u.pathname !== "/" || u.search || u.hash) process.exit(1)'
+    set_plist_string AuraWebOrigin "$NATIVE_API_ORIGIN"
+  fi
 fi
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aura-ios-unsigned.XXXXXX")"

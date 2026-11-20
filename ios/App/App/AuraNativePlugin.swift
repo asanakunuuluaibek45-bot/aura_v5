@@ -1,8 +1,6 @@
 import Capacitor
 import UIKit
 import Security
-import WebKit
-import Network
 
 final class AuraBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
@@ -10,7 +8,7 @@ final class AuraBridgeViewController: CAPBridgeViewController {
     }
 }
 
-/// Registered only on the packaged local bridge. Remote CRM gets no native bridge.
+/// Packaged PWA UI only. Remote HTML is never loaded into the native bridge.
 @objc(AuraNativePlugin)
 public class AuraNativePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "AuraNativePlugin"
@@ -19,13 +17,7 @@ public class AuraNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "get", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "set", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "openOnline", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "closeOnline", returnType: CAPPluginReturnPromise)
-    ]
-    private weak var onlineNavigation: UINavigationController?
-    private let paths: Set<String> = [
-        "/crm/money", "/crm/showcase", "/crm/customers", "/crm/reports",
-        "/crm/suppliers", "/crm/stores", "/crm/notifications", "/crm/cabinet"
+        CAPPluginMethod(name: "action", returnType: CAPPluginReturnPromise)
     ]
     private func query(_ call: CAPPluginCall) -> [String: Any]? {
         guard let key = call.getString("key"), key.hasPrefix("sb-"), key.count < 256 else {
@@ -76,107 +68,56 @@ public class AuraNativePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         call.resolve()
     }
-    @objc func openOnline(_ call: CAPPluginCall) {
-        guard let path = call.getString("path"), paths.contains(path),
-              let token = call.getString("accessToken"), !token.isEmpty,
+    @objc func action(_ call: CAPPluginCall) {
+        guard let module = call.getString("module"), !module.isEmpty, module.count < 64,
+              let action = call.getString("action"), !action.isEmpty, action.count < 96,
+              let args = call.getArray("args"), args.count <= 10,
+              let token = call.getString("accessToken"), !token.isEmpty, token.count <= 16384,
+              !token.contains("\r"), !token.contains("\n"),
               let origin = Bundle.main.object(forInfoDictionaryKey: "AuraWebOrigin") as? String,
               let base = URL(string: origin), base.scheme == "https", base.host != nil,
-              let endpoint = URL(string: "/auth/native", relativeTo: base)?.absoluteURL else {
-            call.reject("Invalid online destination"); return
+              base.user == nil, base.password == nil,
+              let endpoint = URL(string: "/api/native-actions", relativeTo: base)?.absoluteURL else {
+            call.reject("Некорректный онлайн-запрос"); return
         }
-        DispatchQueue.main.async {
-            guard self.onlineNavigation == nil, let presenter = self.bridge?.viewController,
-                  presenter.presentedViewController == nil else {
-                call.reject("Another screen is already open"); return
-            }
-            let controller = AuraOnlineController(origin: base)
-            controller.onLocalNavigate = { [weak self] path in
-                self?.notifyListeners("localNavigate", data: ["path": path])
-            }
-            let nav = UINavigationController(rootViewController: controller)
-            nav.modalPresentationStyle = .fullScreen
-            self.onlineNavigation = nav
-            var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("1", forHTTPHeaderField: "X-Aura-Native")
-            request.httpBody = try? JSONSerialization.data(withJSONObject: ["accessToken": token, "path": path])
-            presenter.present(nav, animated: true) {
-                controller.load(request)
-                call.resolve()
-            }
+        guard let body = try? JSONSerialization.data(withJSONObject: [
+            "module": module, "action": action, "args": args
+        ]), body.count <= 1024 * 1024 else {
+            call.reject("Слишком большой запрос"); return
         }
-    }
-    @objc func closeOnline(_ call: CAPPluginCall) {
-        DispatchQueue.main.async {
-            self.onlineNavigation?.dismiss(animated: false)
-            self.onlineNavigation = nil
-            call.resolve()
-        }
+        var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45)
+        request.httpMethod = "POST"
+        request.httpShouldHandleCookies = false
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.httpBody = body
+        // No shared cookie jar: signing out cannot leave another account's
+        // server cookies in a second browser/session.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
+        let session = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+        session.dataTask(with: request) { data, response, error in
+            defer { session.finishTasksAndInvalidate() }
+            if error != nil { call.reject("Не удалось связаться с сервером. Проверьте интернет."); return }
+            guard let response = response as? HTTPURLResponse, let data = data,
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                call.reject("Сервер ещё не поддерживает эту версию приложения."); return
+            }
+            guard (200..<300).contains(response.statusCode) else {
+                call.reject(json["error"] as? String ?? "Ошибка онлайн-раздела"); return
+            }
+            call.resolve(["value": json["value"] ?? NSNull()])
+        }.resume()
     }
 }
 
-/// No script handlers, no Capacitor bridge, no shared offline database or cookies.
-private final class AuraOnlineController: UIViewController, WKNavigationDelegate {
-    var onLocalNavigate: ((String) -> Void)?
-    private let origin: URL
-    private let web: WKWebView
-    private let monitor = NWPathMonitor()
-    init(origin: URL) {
-        self.origin = origin
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .nonPersistent()
-        web = WKWebView(frame: .zero, configuration: config)
-        super.init(nibName: nil, bundle: nil)
+/// Never forward an authenticated action request to a redirected destination.
+private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        title = "GOLDUCHET · Онлайн"
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            title: "Закрыть", style: .done, target: self, action: #selector(close))
-        view = web
-        web.navigationDelegate = self
-        web.isOpaque = true
-        monitor.pathUpdateHandler = { [weak self] path in
-            if path.status == .unsatisfied {
-                DispatchQueue.main.async { self?.block("Нет сети. Закройте раздел и откройте его после подключения.") }
-            }
-        }
-        monitor.start(queue: DispatchQueue(label: "com.auracrm.online-network"))
-    }
-    func load(_ request: URLRequest) { loadViewIfNeeded(); web.load(request) }
-    @objc private func close() { dismiss(animated: true) }
-    private func block(_ message: String) {
-        web.stopLoading()
-        web.isHidden = true
-        let label = UILabel()
-        label.text = message
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        label.backgroundColor = .systemBackground
-        view = label
-    }
-    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
-                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = action.request.url else { decisionHandler(.cancel); return }
-        let allowed = url.scheme == "https" && url.host == origin.host && url.port == origin.port
-        let localPaths = [
-            "/crm/pos": "/crm/pos", "/pos": "/crm/pos",
-            "/crm/inventory": "/crm/inventory", "/inventory": "/crm/inventory",
-            "/crm/revisions": "/crm/revisions", "/revisions": "/crm/revisions"
-        ]
-        if allowed, let local = localPaths[url.path], action.targetFrame?.isMainFrame == true {
-            decisionHandler(.cancel)
-            dismiss(animated: true) { [weak self] in self?.onLocalNavigate?(local) }
-            return
-        }
-        decisionHandler(allowed && action.targetFrame != nil ? .allow : .cancel)
-    }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        if (error as NSError).code != NSURLErrorCancelled {
-            block("Не удалось загрузить онлайн-раздел. Проверьте сеть и откройте его снова.")
-        }
-    }
-    deinit { monitor.cancel() }
 }

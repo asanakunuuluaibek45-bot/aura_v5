@@ -18,6 +18,9 @@ export function PwaProvider({ profile }: { profile?: Profile | null }) {
   useEffect(() => {
     registerCapacitorBluetoothPolyfill()
     if (typeof window === "undefined") return
+    // Capacitor serves every PWA asset from the IPA. Its custom scheme cannot
+    // register a web service worker, and never needs one for offline startup.
+    if (process.env.NEXT_PUBLIC_BUILD_TARGET === "native") return
 
     const isDev = process.env.NODE_ENV !== "production"
 

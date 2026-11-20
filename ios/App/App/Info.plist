@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 <key>AuraWebOrigin</key>
-<string>https://golduchet.com</string>
+<string>https://www.golduchet.com</string>
 <key>NSCameraUsageDescription</key>
 <string>Камера нужна для фото товаров и сканирования QR-кодов и штрихкодов.</string>
 <key>NSPhotoLibraryUsageDescription</key>

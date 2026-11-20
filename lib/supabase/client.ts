@@ -41,7 +41,6 @@ export async function clearDeviceAuth(): Promise<void> {
       if (usesKeychain()) await AuraNative.remove({ key: item })
       await Preferences.remove({ key: item })
     }
-    if (usesKeychain()) await AuraNative.closeOnline()
   } else {
     localStorage.setItem(DEVICE_SIGNED_OUT_KEY, 'true')
     for (const item of [key, `${key}-code-verifier`, `${key}-user`]) localStorage.removeItem(item)

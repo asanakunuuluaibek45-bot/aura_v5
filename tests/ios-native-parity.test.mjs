@@ -53,12 +53,11 @@ test('iOS migrates Preferences to Keychain and removes plaintext only after succ
   assert.equal(locked.preferences.get('sb-test-auth-token'), 'legacy-session')
 })
 
-test('iOS logout clears both stores, closes remote window and fences late writes', async () => {
+test('iOS logout clears both stores and fences late writes', async () => {
   const h = authHarness()
   await h.nativeAuthStorage.getItem('sb-test-auth-token')
   await h.clearDeviceAuth()
   assert.equal(h.secure.size, 0)
-  assert.equal(h.closes(), 1)
   await h.nativeAuthStorage.setItem('sb-test-auth-token', 'late')
   assert.equal(h.secure.size, 0)
   h.prepareDeviceSignIn()
@@ -212,7 +211,8 @@ test('iOS build links ML Kit through CocoaPods and compiles the Keychain bridge'
   assert.match(project, /AuraNativePlugin.swift in Sources/)
   const swift = read('ios/App/App/AuraNativePlugin.swift')
   assert.match(swift, /kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly/)
-  assert.match(swift, /websiteDataStore = .nonPersistent\(\)/)
+  assert.match(swift, /URLSessionConfiguration.ephemeral/)
+  assert.doesNotMatch(swift, /AuraOnlineController|WKWebView/)
   assert.doesNotMatch(swift, /addScriptMessageHandler|registerScriptMessageHandler/)
   assert.match(read('scripts/build-ios-unsigned.sh'), /npm ci/)
   assert.match(read('scripts/build-ios-unsigned.sh'), /verify-ios-native/)
@@ -220,6 +220,7 @@ test('iOS build links ML Kit through CocoaPods and compiles the Keychain bridge'
 })
 
 test('native login removes logout fence before saving the new offline profile', () => {
-  const login = read('native/app/native-crm.tsx').split('function formatSaleDate')[0]
+  const login = read('app/auth/login/page.tsx')
+  assert.ok(login.indexOf('prepareDeviceSignIn()') < login.indexOf('supabase.auth.signInWithPassword'))
   assert.ok(login.indexOf('await markDeviceSignedIn()') < login.indexOf('await saveUserSession('))
 })
