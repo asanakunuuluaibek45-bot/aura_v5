@@ -19,6 +19,7 @@ import {
   type LabelTemplateSaveScope,
 } from "@/lib/label-template-policy"
 import type { BorderStyleKey } from "../constants"
+import { getRole } from "../types"
 import { createTextbox, refitTextbox, setAutoFit, setFitRatio, clampRatio } from "../canvas/text-fit"
 import { addBorderToCanvas } from "../canvas/borders"
 import { buildDefaultLayout } from "../canvas/layout"
