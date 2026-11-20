@@ -9,6 +9,9 @@ const config = JSON.parse(read('ios/App/App/capacitor.config.json'))
 assert.equal(config.webDir, 'out', 'iOS must use the packaged native export')
 assert.ok(!config.server?.url, 'Release build must not load a remote Capacitor bridge')
 assert.ok(existsSync(path.join(root, 'ios/App/App/public/index.html')), 'Missing packaged shell')
+for (const asset of ['golduchet-icon-transparent.svg', 'golduchet-logo.svg', 'golduchet-logo-dark.svg']) {
+  assert.ok(existsSync(path.join(root, 'ios/App/App/public', asset)), `Missing shared PWA asset: ${asset}`)
+}
 const pods = read('ios/App/Podfile')
 const lock = read('ios/App/Pods/Manifest.lock')
 for (const plugin of ['CapacitorMlkitBarcodeScanning', 'CapacitorCommunityBluetoothLe',

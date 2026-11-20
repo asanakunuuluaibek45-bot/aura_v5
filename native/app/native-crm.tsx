@@ -99,13 +99,14 @@ export function NativeCrm() {
           return
         }
         currentProfile = saved.profile
-        const cached = await getMeta<WebMetadata>(`native_web_metadata:${saved.userId}:${saved.profile.shop_id ?? "global"}`, defaults)
+        const cached = await getMeta<WebMetadata>(`native_web_metadata:${saved.userId}:${saved.profile.shop_id ?? "global"}`, defaults).catch(() => defaults)
         if (!active) return
         setMetadata(cached)
         if (saved.profile.role === "super_admin" && navigator.onLine) {
           await refreshMetadata(saved.profile)
         }
         setIdentity({ profile: saved.profile, email: saved.email ?? "" })
+        await SplashScreen.hide().catch(() => {})
         // Display the persisted UI immediately, before any session/network call.
         refresh()
         if (navigator.onLine) {
@@ -129,7 +130,11 @@ export function NativeCrm() {
       } finally {
         await SplashScreen.hide().catch(() => {})
       }
-    })().catch(() => { if (active) router.replace("/auth/login") })
+    })().catch(() => {
+      // A failed token refresh/network request is NOT device logout. A loaded
+      // offline identity must keep its cashier and unsent operations available.
+      if (active && !currentProfile) router.replace("/auth/login")
+    })
 
     window.addEventListener("online", refresh)
     window.addEventListener("aura:native_action_complete", refresh)

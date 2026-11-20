@@ -14,6 +14,9 @@ test("native Capacitor builds use packaged local assets and no production server
   assert.match(script, /NEXT_PUBLIC_SUPABASE_URL/)
   assert.match(script, /native", "--webpack"/)
   assert.match(script, /cap", "sync"/)
+  assert.match(script, /cp\(publicDir/)
+  assert.match(read("scripts/verify-ios-native.mjs"), /Missing shared PWA asset/)
+  assert.match(capacitor, /contentInset: "never"/)
 })
 
 test("native app renders the actual PWA, not a separately implemented CRM", () => {

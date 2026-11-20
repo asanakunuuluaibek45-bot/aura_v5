@@ -56,6 +56,14 @@ try {
   await run(npx, ["next", "build", "native", "--webpack"]);
   await rm(path.join(projectRoot, "out"), { recursive: true, force: true });
   await cp(path.join(projectRoot, "native", "out"), path.join(projectRoot, "out"), { recursive: true });
+  // The native Next project has no separate public/ directory. Ship the SAME
+  // brand assets/icons as the PWA without overwriting its exported entry page.
+  const publicDir = path.join(projectRoot, "public");
+  await cp(publicDir, path.join(projectRoot, "out"), {
+    recursive: true,
+    filter: (source) => source !== path.join(publicDir, "sw.js") &&
+      source !== path.join(publicDir, "index.html"),
+  });
   const androidDir = path.join(projectRoot, "android");
   const iosDir = path.join(projectRoot, "ios");
   if (targetPlatform === "ios" && !existsSync(iosDir)) {
