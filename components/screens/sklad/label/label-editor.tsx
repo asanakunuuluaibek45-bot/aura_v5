@@ -2,8 +2,10 @@
 import React, {
   useRef, useState, useMemo, useCallback, useEffect, useLayoutEffect,
 } from "react"
-import { X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { createPortal } from "react-dom"
+import { toast } from "sonner"
+import { getLabelTemplate } from "@/app/actions/labels"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -17,6 +19,7 @@ import { canvasToLabelDataUrl, getLabelSizeDef, DEFAULT_SIZE_KEY, LABEL_SIZES, N
 import type { JewelryLabelSizeKey } from "@/lib/niimbot"
 import {
   getLabelTemplateCategories,
+  type LabelTemplateResetScope,
   type LabelTemplateResetSource,
   type LabelTemplateSaveScope,
 } from "@/lib/label-template-policy"
@@ -100,6 +103,14 @@ export function LabelEditor({
   )
   const [templateDialog, setTemplateDialog] = useState<"save" | "reset" | null>(null)
   const [templateDialogBusy, setTemplateDialogBusy] = useState(false)
+  const [templateBusyAction, setTemplateBusyAction] = useState<"save-category" | "save-shop" | "reset" | null>(null)
+  const templateActionLock = useRef(false)
+  const [templateActionMessage, setTemplateActionMessage] = useState<{ kind: "error" | "info"; text: string } | null>(null)
+  const [resetScope, setResetScope] = useState<LabelTemplateResetScope>("category")
+  const [resetSource, setResetSource] = useState<LabelTemplateResetSource>("global")
+  const [shopTemplateAvailable, setShopTemplateAvailable] = useState<boolean | null>(null)
+  const [shopTemplateCheckError, setShopTemplateCheckError] = useState("")
+  const [shopTemplateCheckAttempt, setShopTemplateCheckAttempt] = useState(0)
   const backgroundCalibrationStorageKey = `${BACKGROUND_CALIBRATION_STORAGE}:${sizeKey}`
   const [backgroundCalibration, setBackgroundCalibration] = useState<BackgroundCalibration>(DEFAULT_BACKGROUND_CALIBRATION)
   const [backgroundCalibrationLoadedFor, setBackgroundCalibrationLoadedFor] = useState("")
@@ -409,23 +420,95 @@ export function LabelEditor({
   )
   actionsRef.current = actions
 
+  useEffect(() => {
+    if (templateDialog !== "reset") return
+    let active = true
+    setShopTemplateAvailable(null)
+    setShopTemplateCheckError("")
+    if (!product.shop_id) {
+      setShopTemplateAvailable(false)
+      return
+    }
+    void getLabelTemplate(category, sizeKey, "shop")
+      .then((template) => {
+        if (active) setShopTemplateAvailable(Boolean(template))
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setShopTemplateAvailable(null)
+        setShopTemplateCheckError(
+          error instanceof Error ? error.message : "Не удалось проверить сохранённый шаблон магазина",
+        )
+      })
+    return () => { active = false }
+  }, [templateDialog, category, sizeKey, product.shop_id, shopTemplateCheckAttempt])
+
   const saveTemplate = async (scope: LabelTemplateSaveScope) => {
+    if (templateActionLock.current) return
+    templateActionLock.current = true
     setTemplateDialogBusy(true)
+    setTemplateBusyAction(scope === "shop" ? "save-shop" : "save-category")
+    setTemplateActionMessage(null)
     try {
-      await actions.handleSaveTemplate(scope)
-    } finally {
-      setTemplateDialogBusy(false)
+      const result = await actions.handleSaveTemplate(scope)
+      if (result.status === "local-only") {
+        setTemplateActionMessage({
+          kind: "info",
+          text: "Копия сохранена только на этом устройстве. Сервер не подтвердил сохранение — подключитесь к интернету и повторите.",
+        })
+        return
+      }
+      toast.success(
+        scope === "shop"
+          ? `Шаблон сохранён на сервере для ${result.categoryCount} категорий магазина`
+          : `Шаблон сохранён на сервере для категории «${category}»`,
+      )
       setTemplateDialog(null)
+    } catch (error) {
+      setTemplateActionMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Не удалось сохранить шаблон. Проверьте связь и повторите.",
+      })
+    } finally {
+      templateActionLock.current = false
+      setTemplateDialogBusy(false)
+      setTemplateBusyAction(null)
     }
   }
 
-  const reloadTemplate = async (source: LabelTemplateResetSource) => {
+  const reloadTemplate = async () => {
+    if (templateActionLock.current) return
+    templateActionLock.current = true
     setTemplateDialogBusy(true)
+    setTemplateBusyAction("reset")
+    setTemplateActionMessage(null)
     try {
-      await actions.handleReloadTemplate(source)
-    } finally {
-      setTemplateDialogBusy(false)
+      const result = await actions.handleReloadTemplate(resetScope, resetSource)
+      if (result.source === "global") {
+        toast.success(
+          result.hasTemplate
+            ? result.scope === "shop"
+              ? "Глобальные шаблоны восстановлены для всех категорий этого магазина"
+              : `Глобальный шаблон восстановлен для «${category}»`
+            : "Глобальный шаблон не найден — восстановлен стандартный макет",
+        )
+      } else {
+        toast.success(
+          result.scope === "shop"
+            ? `Загружены сохранённые шаблоны магазина (${result.categoryCount} категорий)`
+            : `Загружен сохранённый шаблон магазина для «${category}»`,
+        )
+      }
       setTemplateDialog(null)
+    } catch (error) {
+      setTemplateActionMessage({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Не удалось сбросить шаблон. Проверьте связь и повторите.",
+      })
+    } finally {
+      templateActionLock.current = false
+      setTemplateDialogBusy(false)
+      setTemplateBusyAction(null)
     }
   }
 
@@ -542,8 +625,16 @@ export function LabelEditor({
     onAddText:        () => { deactivatePanMode(); actions.addText() },
     onAddBorder:      (k: BorderStyleKey) => { deactivatePanMode(); actions.addBorder(k) },
     onRemoveSelected: () => { deactivatePanMode(); actions.removeSelected() },
-    onSaveTemplate:   () => setTemplateDialog("save"),
-    onReloadTemplate: () => setTemplateDialog("reset"),
+    onSaveTemplate:   () => {
+      setTemplateActionMessage(null)
+      setTemplateDialog("save")
+    },
+    onReloadTemplate: () => {
+      setTemplateActionMessage(null)
+      setResetScope("category")
+      setResetSource("global")
+      setTemplateDialog("reset")
+    },
     onFontChange:     (f: string) => { setFont(f); actions.handleFontChange(f) },
     onFontSizeChange: (s: number) => { setFontSize(s); actions.handleFontSizeChange(s) },
     onAutoFitChange:  (v: boolean) => { setAutoFit(v); actions.handleAutoFitChange(v) },
@@ -738,7 +829,10 @@ export function LabelEditor({
                   onClick={() => void saveTemplate("category")}
                 >
                   <span className="flex flex-col items-start gap-1">
-                    <span>Только категория «{category}»</span>
+                    <span className="flex items-center gap-2">
+                      {templateBusyAction === "save-category" && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {templateBusyAction === "save-category" ? "Сохраняем…" : `Только для текущей категории «${category}»`}
+                    </span>
                     <span className="text-xs font-normal text-muted-foreground">Другие категории не изменятся</span>
                   </span>
                 </Button>
@@ -749,13 +843,26 @@ export function LabelEditor({
                   onClick={() => void saveTemplate("shop")}
                 >
                   <span className="flex flex-col items-start gap-1">
-                    <span>Все категории этого магазина</span>
+                    <span className="flex items-center gap-2">
+                      {templateBusyAction === "save-shop" && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {templateBusyAction === "save-shop" ? "Сохраняем…" : "Для всех категорий этого магазина"}
+                    </span>
                     <span className="text-xs font-normal text-primary-foreground/80">
                       {shopCategories.length} категорий · другие магазины не затрагиваются
                     </span>
                   </span>
                 </Button>
               </div>
+              {templateActionMessage && (
+                <p
+                  role={templateActionMessage.kind === "error" ? "alert" : "status"}
+                  className={templateActionMessage.kind === "error"
+                    ? "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                    : "rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"}
+                >
+                  {templateActionMessage.text}
+                </p>
+              )}
               <DialogFooter>
                 <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>
                   Отмена
@@ -765,41 +872,123 @@ export function LabelEditor({
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>Восстановить шаблон?</DialogTitle>
+                <DialogTitle>Подтвердите сброс шаблонов</DialogTitle>
                 <DialogDescription>
-                  Выберите, какой шаблон применить только к категории «{category}».
+                  Выберите область и источник. Сброс начнётся только после нажатия кнопки внизу.
                 </DialogDescription>
               </DialogHeader>
-              <div className="grid gap-2">
+              <section className="grid gap-2" aria-label="Область сброса">
+                <p className="text-sm font-medium">Что сбросить?</p>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={resetScope === "category" ? "default" : "outline"}
                   className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy || !product.shop_id}
-                  onClick={() => void reloadTemplate("global")}
+                  disabled={templateDialogBusy}
+                  aria-pressed={resetScope === "category"}
+                  onClick={() => setResetScope("category")}
                 >
                   <span className="flex flex-col items-start gap-1">
-                    <span>Восстановить глобальный шаблон</span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      Удалит настройку этой категории в магазине; другие категории останутся без изменений
+                    <span>Только этот шаблон</span>
+                    <span className="text-xs font-normal opacity-80">Категория «{category}» · формат {LABEL_SIZES[sizeKey]?.label ?? sizeKey}</span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={resetScope === "shop" ? "default" : "outline"}
+                  className="h-auto justify-start px-3 py-3 text-left"
+                  disabled={templateDialogBusy || !product.shop_id}
+                  aria-pressed={resetScope === "shop"}
+                  onClick={() => setResetScope("shop")}
+                >
+                  <span className="flex flex-col items-start gap-1">
+                    <span>Все категории этого магазина</span>
+                    <span className="text-xs font-normal opacity-80">Только активный магазин · другие магазины не затрагиваются</span>
+                  </span>
+                </Button>
+              </section>
+              <section className="grid gap-2" aria-label="Источник восстановления">
+                <p className="text-sm font-medium">Что восстановить?</p>
+                <Button
+                  type="button"
+                  variant={resetSource === "global" ? "default" : "outline"}
+                  className="h-auto justify-start px-3 py-3 text-left"
+                  disabled={templateDialogBusy || !product.shop_id}
+                  aria-pressed={resetSource === "global"}
+                  onClick={() => setResetSource("global")}
+                >
+                  <span className="flex flex-col items-start gap-1">
+                    <span>Глобальный шаблон</span>
+                    <span className="text-xs font-normal opacity-80">
+                      {resetScope === "category"
+                        ? `Удалит сохранённую настройку категории «${category}» в активном магазине`
+                        : "Удалит переопределения активного магазина для этого формата во всех категориях"}
                     </span>
                   </span>
                 </Button>
                 <Button
                   type="button"
+                  variant={resetSource === "shop" ? "default" : "outline"}
                   className="h-auto justify-start px-3 py-3 text-left"
-                  disabled={templateDialogBusy || !product.shop_id}
-                  onClick={() => void reloadTemplate("shop")}
+                  disabled={templateDialogBusy || !product.shop_id || shopTemplateAvailable !== true}
+                  aria-pressed={resetSource === "shop"}
+                  onClick={() => setResetSource("shop")}
                 >
                   <span className="flex flex-col items-start gap-1">
-                    <span>Восстановить шаблон магазина</span>
-                    <span className="text-xs font-normal text-primary-foreground/80">
-                      Загрузит последнюю сохранённую версию этой категории
+                    <span className="flex items-center gap-2">
+                      {shopTemplateAvailable === null && !shopTemplateCheckError && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Восстановить сохранённый шаблон магазина
+                    </span>
+                    <span className="text-xs font-normal opacity-80">
+                      {shopTemplateCheckError
+                        ? "Не удалось проверить наличие сохранённого шаблона"
+                        : shopTemplateAvailable === null
+                          ? "Проверяем, есть ли сохранённая версия…"
+                          : shopTemplateAvailable
+                            ? resetScope === "category"
+                              ? `Загрузит последнюю сохранённую версию категории «${category}»`
+                              : "Загрузит сохранённые версии категорий активного магазина; несохранённые останутся без шаблона магазина"
+                            : "В активном магазине нет сохранённого шаблона для текущей категории"}
                     </span>
                   </span>
                 </Button>
-              </div>
+                {shopTemplateCheckError && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    <span>{shopTemplateCheckError}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={templateDialogBusy}
+                      onClick={() => setShopTemplateCheckAttempt((attempt) => attempt + 1)}
+                    >
+                      Повторить проверку
+                    </Button>
+                  </div>
+                )}
+              </section>
+              {templateActionMessage && (
+                <p
+                  role={templateActionMessage.kind === "error" ? "alert" : "status"}
+                  className={templateActionMessage.kind === "error"
+                    ? "rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                    : "rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"}
+                >
+                  {templateActionMessage.text}
+                </p>
+              )}
               <DialogFooter>
+                <Button
+                  type="button"
+                  disabled={
+                    templateDialogBusy ||
+                    !product.shop_id ||
+                    (resetSource === "shop" && shopTemplateAvailable !== true)
+                  }
+                  onClick={() => void reloadTemplate()}
+                >
+                  {templateBusyAction === "reset" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {templateBusyAction === "reset" ? "Сбрасываем…" : "Сбросить шаблон"}
+                </Button>
                 <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>
                   Отмена
                 </Button>

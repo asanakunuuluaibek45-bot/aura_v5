@@ -1,4 +1,5 @@
 export type LabelTemplateSaveScope = "category" | "shop"
+export type LabelTemplateResetScope = "category" | "shop"
 export type LabelTemplateResetSource = "global" | "shop"
 
 const DEFAULT_CATEGORY = "Прочее"
@@ -12,6 +13,14 @@ export function getLabelTemplateCategories(
   const current = normalize(currentCategory)
   const candidates = scope === "shop" ? [...shopCategories, current] : [current]
   return [...new Set(candidates.map(normalize))]
+}
+
+export function getLabelTemplateResetCategories(
+  currentCategory: string,
+  shopCategories: readonly string[],
+  scope: LabelTemplateResetScope,
+): string[] {
+  return getLabelTemplateCategories(currentCategory, shopCategories, scope)
 }
 
 export function getLabelTemplateStorageKey(

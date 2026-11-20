@@ -9,10 +9,12 @@ import type { Canvas as FabricCanvas } from "fabric"
 import { toast } from "sonner"
 import type { LabelSizeDef, JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { Product } from "@/lib/types"
-import { saveLabelTemplate, getLabelTemplate, deleteShopLabelTemplate } from "@/app/actions/labels"
+import { saveLabelTemplate, getLabelTemplate, restoreShopLabelTemplates } from "@/app/actions/labels"
 import {
   getLabelTemplateCategories,
+  getLabelTemplateResetCategories,
   type LabelTemplateResetSource,
+  type LabelTemplateResetScope,
   type LabelTemplateSaveScope,
 } from "@/lib/label-template-policy"
 import type { BorderStyleKey } from "../constants"
@@ -157,87 +159,80 @@ export function useLabelActions(
 
   const handleSaveTemplate = useCallback(async (scope: LabelTemplateSaveScope) => {
     const canvas = fabricRef.current
-    if (!canvas) return
-    try {
-      canvas.discardActiveObject()
-      canvas.renderAll()
-      const tpl = serializeLayout(canvas, sizeKey, null)
-      const serialized = JSON.stringify(tpl)
-      const categories = getLabelTemplateCategories(category, shopCategories, scope)
-      if (scope === "shop" && !product.shop_id) {
-        throw new Error("Не выбран магазин для применения шаблона")
-      }
+    if (!canvas) throw new Error("Холст этикетки ещё не готов")
+    canvas.discardActiveObject()
+    canvas.renderAll()
+    const tpl = serializeLayout(canvas, sizeKey, null)
+    const serialized = JSON.stringify(tpl)
+    const categories = getLabelTemplateCategories(category, shopCategories, scope)
+    if (!product.shop_id) {
+      throw new Error("Не выбран активный магазин")
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
       categories.forEach((targetCategory) => {
         saveLocalTemplate(product.shop_id, targetCategory, serialized, sizeKey)
       })
-      if (typeof navigator !== "undefined" && !navigator.onLine) {
-        toast.success(
-          scope === "shop"
-            ? `Шаблон сохранён офлайн на этом устройстве для ${categories.length} категорий магазина`
-            : `Шаблон сохранён офлайн на этом устройстве для «${category}»`,
-        )
-        return
-      }
-      try {
-        await saveLabelTemplate(categories, serialized, sizeKey, scope)
-      } catch (err) {
-        if (/failed to fetch|network|fetch failed/i.test((err as Error)?.message ?? "")) {
-          toast.success("Нет связи с сервером — шаблон сохранён на устройстве")
-          return
-        }
-        throw err
-      }
-      toast.success(
-        scope === "shop"
-          ? `Шаблон сохранён для ${categories.length} категорий магазина`
-          : `Расположение сохранено для «${category}» / ${sizeKey}`,
-      )
-    } catch (err) {
-      toast.error((err as Error).message)
+      return { status: "local-only" as const, categoryCount: categories.length }
     }
+
+    // Update the local cache only after the server confirms the upsert. Otherwise
+    // a failed request could make an unsaved design look like the saved template.
+    await saveLabelTemplate(categories, serialized, sizeKey, scope)
+    categories.forEach((targetCategory) => {
+      saveLocalTemplate(product.shop_id, targetCategory, serialized, sizeKey)
+    })
+    return { status: "server" as const, categoryCount: categories.length }
   }, [fabricRef, sizeKey, category, shopCategories, product.shop_id])
 
-  const handleReloadTemplate = useCallback(async (source: LabelTemplateResetSource) => {
+  const handleReloadTemplate = useCallback(async (
+    scope: LabelTemplateResetScope,
+    source: LabelTemplateResetSource,
+  ) => {
     const canvas = fabricRef.current
-    if (!canvas) return
+    if (!canvas) throw new Error("Холст этикетки ещё не готов")
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      toast.error("Для восстановления шаблона подключитесь к интернету")
-      return
+      throw new Error("Для восстановления сохранённого шаблона подключитесь к интернету")
     }
-    try {
-      const raw = await getLabelTemplate(category, sizeKey, source)
-      if (source === "shop" && !raw) {
-        toast.info(`Для «${category}» ещё не сохранён отдельный шаблон магазина`)
-        return
-      }
-      const saved = parseTemplate(raw)
-      if (raw && !saved) {
-        throw new Error("Сохранённый шаблон имеет неподдерживаемый формат")
-      }
+    if (!product.shop_id) throw new Error("Не выбран активный магазин")
 
-      if (source === "global") {
-        await deleteShopLabelTemplate(category, sizeKey)
-      }
-      clearLocalTemplateCache(product.shop_id, category, sizeKey)
-      if (raw && saved) saveLocalTemplate(product.shop_id, category, raw, sizeKey)
-      if (!canvas.lowerCanvasEl) return
+    const targetCategories = getLabelTemplateResetCategories(category, shopCategories, scope)
+    const templates = await restoreShopLabelTemplates(
+      category,
+      sizeKey,
+      scope,
+      source,
+    )
+    const affectedCategories = scope === "shop"
+      ? [...new Set([...targetCategories, ...Object.keys(templates)])]
+      : [category]
 
-      await buildDefaultLayout(canvas, product, sizeDef)
-      if (saved) {
-        applyTemplate(canvas, saved)
-        await refreshLiveData(canvas, product)
-        applyBgRect(canvas, sizeDef, saved.bg ?? null)
-      }
-      canvas.setViewportTransform([1, 0, 0, 1, offsetX, offsetY])
-      canvas.renderAll()
-      toast.success(
-        source === "global"
-          ? saved ? "Глобальный шаблон восстановлен для этой категории" : "Восстановлен стандартный глобальный макет"
-          : "Шаблон магазина восстановлен",
-      )
-    } catch (error) {
-      console.error("[label] Не удалось восстановить шаблон:", error)
-      toast.error(error instanceof Error ? error.message : "Не удалось восстановить шаблон")
+    affectedCategories.forEach((targetCategory) => {
+      clearLocalTemplateCache(product.shop_id, targetCategory, sizeKey)
+      const raw = templates[targetCategory]
+      if (raw) saveLocalTemplate(product.shop_id, targetCategory, raw, sizeKey)
+    })
+
+    if (!canvas.lowerCanvasEl) throw new Error("Холст этикетки закрыт до завершения сброса")
+    const raw = templates[category] ?? null
+    const saved = parseTemplate(raw)
+    if (raw && !saved) {
+      throw new Error("Сохранённый шаблон имеет неподдерживаемый формат")
+    }
+
+    await buildDefaultLayout(canvas, product, sizeDef)
+    if (saved) {
+      applyTemplate(canvas, saved)
+      await refreshLiveData(canvas, product)
+      applyBgRect(canvas, sizeDef, saved.bg ?? null)
+    }
+    canvas.setViewportTransform([1, 0, 0, 1, offsetX, offsetY])
+    canvas.renderAll()
+    return {
+      scope,
+      source,
+      categoryCount: source === "shop" ? Object.keys(templates).length : affectedCategories.length,
+      hasTemplate: Boolean(saved),
     }
   }, [fabricRef, category, sizeKey, product, sizeDef, offsetX, offsetY])
 
