@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,7 +25,7 @@ export default function NativeRootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru" className="dark">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">{children}<Toaster theme="dark" richColors /></body>
     </html>
   );
 }

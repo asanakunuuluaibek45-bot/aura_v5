@@ -5,17 +5,22 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-  echo "Node.js and npm are required. Use Node.js 22 in the Bitrise workflow." >&2
+  echo "Node.js and npm are required. Use Node.js 22 or newer." >&2
   exit 1
 fi
 if ! command -v xcodebuild >/dev/null 2>&1; then
-  echo "xcodebuild is required; run this script on a macOS Bitrise stack." >&2
+  echo "xcodebuild is required; run this script on macOS (GitHub Actions or Bitrise)." >&2
   exit 1
 fi
 
-npm install --legacy-peer-deps
+if ! command -v pod >/dev/null 2>&1; then
+  echo "CocoaPods is required for Google ML Kit." >&2
+  exit 1
+fi
+npm ci
 npm run build:native -- ios
 node scripts/sync-ios-icon.mjs
+node scripts/verify-ios-native.mjs
 
 PLIST="$ROOT_DIR/ios/App/App/Info.plist"
 if [[ -f "$PLIST" ]]; then
@@ -35,11 +40,11 @@ TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aura-ios-unsigned.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 APP_DIR="$ROOT_DIR/ios/App"
 cd "$APP_DIR"
-if [[ -d "App.xcworkspace" ]]; then
-  TARGET_ARGS=(-workspace App.xcworkspace)
-else
-  TARGET_ARGS=(-project App.xcodeproj)
+if [[ ! -d "App.xcworkspace" || ! -f "Pods/Manifest.lock" ]]; then
+  echo "Missing CocoaPods workspace or installed pods. Refusing an archive without ML Kit." >&2
+  exit 1
 fi
+TARGET_ARGS=(-workspace App.xcworkspace)
 
 xcodebuild "${TARGET_ARGS[@]}" \
   -scheme App \

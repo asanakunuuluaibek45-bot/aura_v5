@@ -141,6 +141,7 @@ test('native Preferences logout removes exact auth keys and rejects late token w
   const subject = load('lib/supabase/client.ts', '{ clearDeviceAuth, isDeviceSignedOut, nativeAuthStorage, prepareDeviceSignIn, markDeviceSignedIn }', {
     process: { env: { NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co' } },
     Capacitor: { isNativePlatform: () => true },
+    usesKeychain: () => false,
     Preferences: { get: async ({ key }) => ({ value: preferences.get(key) ?? null }),
       set: async ({ key, value }) => preferences.set(key, value), remove: async ({ key }) => preferences.delete(key) },
     createSupabaseClient: () => ({ auth: { startAutoRefresh() {} } }),

@@ -107,6 +107,8 @@ export async function startNativeScan(
   } catch (error) {
     stopped = true
     await listener?.remove().catch(() => undefined)
+    // startScan can acquire the camera before rejecting.
+    await BarcodeScanner.stopScan().catch(() => undefined)
     cleanupDom()
     throw error
   }
@@ -118,8 +120,8 @@ export async function startNativeScan(
       stopped = true
       try {
         if (torchOn) await BarcodeScanner.disableTorch().catch(() => undefined)
-        await listener?.remove()
-        await BarcodeScanner.stopScan()
+        await listener?.remove().catch(() => undefined)
+        await BarcodeScanner.stopScan().catch(() => undefined)
       } catch {
         /* ignore */
       } finally {

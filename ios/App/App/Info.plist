@@ -2,6 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+<key>AuraWebOrigin</key>
+<string>https://golduchet.com</string>
+<key>NSCameraUsageDescription</key>
+<string>Камера нужна для фото товаров и сканирования QR-кодов и штрихкодов.</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Выбор фотографий товаров.</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Сохранение фотографий товаров.</string>
+<key>NSBluetoothAlwaysUsageDescription</key>
+<string>Подключение BLE-принтера для печати этикеток.</string>
+<key>NSBluetoothPeripheralUsageDescription</key>
+<string>Подключение BLE-принтера для печати этикеток.</string>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>

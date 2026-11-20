@@ -43,6 +43,10 @@ import { logoutDeviceAccount, restoreDeviceProfile } from '@/lib/local-db/device
 import { createClient, prepareDeviceSignIn, markDeviceSignedIn, clearDeviceAuth } from "@/lib/supabase/client";
 import { getSyncState, subscribeSyncState, type SyncProgressState } from "@/lib/local-db/sync-store";
 import { syncEngine } from "@/lib/sync/sync-engine";
+import { registerCapacitorBluetoothPolyfill } from "@/lib/capacitor-bluetooth";
+import { AuraNative, openOnlineSection } from "@/lib/native-session";
+import { PrinterSettings } from "@/components/screens/sklad/printer-settings";
+import { usePrinterConnection } from "@/components/screens/sklad/use-printer-connection";
 
 type NativeScreen = "pos" | "sales" | "stock" | "customers" | "sync" | "cabinet" | "revisions";
 
@@ -116,6 +120,9 @@ function NativeLogin({
       }
 
       const profile = { ...account, email: data.user.email ?? email.trim() } as Profile;
+      // Remove the durable logout fence before writing the newly approved profile.
+      // Otherwise a successful login after logout silently skips the offline cache.
+      await markDeviceSignedIn();
       await saveUserSession({
         userId: profile.id,
         email: profile.email ?? undefined,
@@ -123,7 +130,6 @@ function NativeLogin({
         shopId: profile.shop_id ?? undefined,
         session: data.session,
       });
-      await markDeviceSignedIn();
       onAuthenticated(profile);
       setPassword("");
     } catch (loginError) {
@@ -274,6 +280,8 @@ export function NativeCrm() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [discardCount, setDiscardCount] = useState<number | null>(null);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
+  const [openingOnline, setOpeningOnline] = useState(false);
   const logoutPromptRef = useRef(false);
   const accountGeneration = useRef(0);
   const [exitPrompt, setExitPrompt] = useState(false);
@@ -281,6 +289,7 @@ export function NativeCrm() {
   const scannerOpenRef = useRef(false);
   const exitPromptRef = useRef(false);
   const backCountRef = useRef(0);
+  const printerConnection = usePrinterConnection();
 
   const localCrm = useLocalCrm({
     profile: profile ?? EMPTY_PROFILE,
@@ -381,9 +390,64 @@ export function NativeCrm() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
+    registerCapacitorBluetoothPolyfill();
     void StatusBar.setStyle({ style: Style.Light }).catch(() => {});
     void StatusBar.setBackgroundColor({ color: "#29233d" }).catch(() => {});
     void Keyboard.setResizeMode({ mode: KeyboardResize.Native }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let disposed = false;
+    let remove: (() => void) | undefined;
+    void CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      if (!isActive) {
+        setScannerOpen(false);
+        createClient().auth.stopAutoRefresh();
+      } else {
+        createClient().auth.startAutoRefresh();
+        void Network.getStatus().then(({ connected }) => {
+          if (!disposed) {
+            setOnline(connected);
+            syncEngine.handleOnlineState(connected);
+          }
+        }).catch(() => {});
+      }
+    }).then((handle) => {
+      remove = () => { void handle.remove(); };
+      if (disposed) remove();
+    }).catch(() => {});
+    return () => { disposed = true; remove?.(); };
+  }, []);
+
+  const openRemote = async (path: string) => {
+    if (!online || openingOnline) return;
+    setOpeningOnline(true);
+    setOnlineError(null);
+    try {
+      if (Capacitor.getPlatform() !== "ios") {
+        throw new Error("Онлайн-окно доступно в iOS-сборке. На Android используйте текущую PWA.");
+      }
+      await openOnlineSection(path);
+    } catch (error) {
+      setOnlineError(error instanceof Error ? error.message : "Не удалось открыть онлайн-раздел.");
+    } finally { setOpeningOnline(false); }
+  };
+
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== "ios") return;
+    let disposed = false;
+    let remove: (() => void) | undefined;
+    void AuraNative.addListener("localNavigate", ({ path }) => {
+      const destinations: Record<string, NativeScreen> = {
+        "/crm/pos": "pos", "/crm/inventory": "stock", "/crm/revisions": "revisions",
+      };
+      if (destinations[path]) setScreen(destinations[path]);
+    }).then((handle) => {
+      remove = () => { void handle.remove(); };
+      if (disposed) remove();
+    }).catch(() => {});
+    return () => { disposed = true; remove?.(); };
   }, []);
 
   useEffect(() => {
@@ -773,6 +837,7 @@ export function NativeCrm() {
   const renderCabinet = () => profile && (
     <div className="space-y-4">
       <CabinetProfileCard profile={profile} email={profile.email ?? ''} />
+      <PrinterSettings connection={printerConnection} />
       <div className="space-y-2 border-t border-border py-4 text-sm">
         <p>{profile.shop_name ?? 'Магазин'}</p>
         {profile.phone && <p>{profile.phone}</p>}
@@ -787,11 +852,29 @@ export function NativeCrm() {
 
   const renderCustomers = () => (
     <div className="space-y-2">
-      {localCrm.clients.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-          Клиенты появятся после синхронизации.
-        </p>
-      ) : localCrm.clients.slice(0, 200).map((customer) => <CustomerRow key={customer.id} customer={customer} />)}
+      <p className="text-sm text-muted-foreground">
+        Эти разделы открываются с сервера только с интернетом. Локальная касса остаётся на устройстве.
+      </p>
+      {[
+        { path: "/crm/money", label: "Деньги" },
+        { path: "/crm/showcase", label: "Витрина" },
+        { path: "/crm/customers", label: "Клиенты" },
+        { path: "/crm/cabinet", label: "Команда и настройки" },
+        ...(profile?.role === "admin" || profile?.role === "super_admin" ? [
+          { path: "/crm/suppliers", label: "Поставщики" },
+          { path: "/crm/reports", label: "Отчёты" },
+        ] : []),
+        ...(profile?.role === "super_admin" ? [
+          { path: "/crm/stores", label: "Магазины" },
+          { path: "/crm/notifications", label: "Уведомления" },
+        ] : []),
+      ].map(({ path, label }) => (
+        <Button key={path} variant="outline" className="w-full justify-start"
+          disabled={!online || openingOnline} onClick={() => void openRemote(path)}>
+          {online ? <Cloud /> : <CloudOff />}{label} · онлайн
+        </Button>
+      ))}
+      {onlineError && <p role="alert" className="text-sm text-destructive">{onlineError}</p>}
     </div>
   );
 
@@ -799,7 +882,7 @@ export function NativeCrm() {
     pos: "Касса",
     sales: "Продажи",
     stock: "Склад",
-    customers: "Клиенты",
+    customers: "Онлайн-разделы",
     sync: "Синхронизация",
     cabinet: "Кабинет",
     revisions: "Ревизии",
@@ -809,7 +892,7 @@ export function NativeCrm() {
     { id: "sales", label: "Продажи", icon: ReceiptText },
     { id: "stock", label: "Склад", icon: Package },
     { id: "revisions", label: "Ревизии", icon: ClipboardCheck },
-    { id: "customers", label: "Клиенты", icon: UsersRound },
+    { id: "customers", label: "Онлайн", icon: UsersRound },
     { id: "sync", label: "Синхр.", icon: Cloud },
     { id: "cabinet", label: "Кабинет", icon: UserRound },
   ];

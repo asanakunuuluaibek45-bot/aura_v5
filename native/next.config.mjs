@@ -8,10 +8,12 @@ const projectRoot = path.resolve(nativeDir, "..");
 const nextConfig = {
   output: "export",
   trailingSlash: true,
-  distDir: "out",
+  // Next's intermediate build must not overlap its static export directory.
+  distDir: ".next-native",
   poweredByHeader: false,
   images: { unoptimized: true },
   env: { NEXT_PUBLIC_BUILD_TARGET: "native" },
+  experimental: { cpus: 1 },
   webpack(config) {
     config.resolve.alias = { ...(config.resolve.alias ?? {}), "@": projectRoot };
     return config;

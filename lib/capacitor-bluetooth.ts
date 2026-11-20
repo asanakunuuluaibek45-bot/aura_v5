@@ -1,4 +1,5 @@
 import { BleClient } from "@capacitor-community/bluetooth-le"
+import { Capacitor } from "@capacitor/core"
 
 class MockGattCharacteristic extends EventTarget {
   readonly uuid: string
@@ -11,15 +12,15 @@ class MockGattCharacteristic extends EventTarget {
   }
   value?: DataView
 
-  constructor(uuid: string, service: MockGattService) {
+  constructor(uuid: string, service: MockGattService, properties: Partial<MockGattCharacteristic["properties"]>) {
     super()
     this.uuid = uuid
     this.service = service
     this.properties = {
-      write: true,
-      writeWithoutResponse: true,
-      notify: true,
-      indicate: true,
+      write: Boolean(properties.write),
+      writeWithoutResponse: Boolean(properties.writeWithoutResponse),
+      notify: Boolean(properties.notify),
+      indicate: Boolean(properties.indicate),
     }
   }
 
@@ -85,16 +86,13 @@ class MockGattService {
 
   async getCharacteristic(uuid: string): Promise<MockGattCharacteristic> {
     const norm = uuid.toLowerCase()
-    let char = this.characteristics.get(norm)
-    if (!char) {
-      char = new MockGattCharacteristic(uuid, this)
-      this.characteristics.set(norm, char)
-    }
+    await this.getCharacteristics()
+    const char = this.characteristics.get(norm)
+    if (!char) throw new Error(`BLE characteristic not found: ${uuid}`)
     return char
   }
 
   async getCharacteristics(): Promise<MockGattCharacteristic[]> {
-    try {
       const services = await BleClient.getServices(this.device.id)
       const thisService = services.find(
         (s) => s.uuid.toLowerCase() === this.uuid.toLowerCase()
@@ -104,16 +102,13 @@ class MockGattService {
           const norm = c.uuid.toLowerCase()
           let char = this.characteristics.get(norm)
           if (!char) {
-            char = new MockGattCharacteristic(c.uuid, this)
+            char = new MockGattCharacteristic(c.uuid, this, c.properties)
             this.characteristics.set(norm, char)
           }
           return char
         })
       }
-    } catch {
-      /* Fallback to returning known characteristics */
-    }
-    return Array.from(this.characteristics.values())
+    throw new Error(`BLE service not found: ${this.uuid}`)
   }
 }
 
@@ -127,8 +122,11 @@ class MockGattServer {
   }
 
   async connect(): Promise<this> {
+    if (this.connected) return this
+    this.services.clear()
     await BleClient.connect(this.device.id, () => {
       this.connected = false
+      this.services.clear()
       this.device.dispatchEvent(new Event("gattserverdisconnected"))
     })
     this.connected = true
@@ -147,16 +145,13 @@ class MockGattServer {
 
   async getPrimaryService(uuid: string): Promise<MockGattService> {
     const norm = uuid.toLowerCase()
-    let service = this.services.get(norm)
-    if (!service) {
-      service = new MockGattService(uuid, this.device)
-      this.services.set(norm, service)
-    }
+    await this.getPrimaryServices()
+    const service = this.services.get(norm)
+    if (!service) throw new Error(`BLE service not found: ${uuid}`)
     return service
   }
 
   async getPrimaryServices(): Promise<MockGattService[]> {
-    try {
       const services = await BleClient.getServices(this.device.id)
       return services.map((s) => {
         const norm = s.uuid.toLowerCase()
@@ -167,9 +162,6 @@ class MockGattServer {
         }
         return service
       })
-    } catch {
-      return Array.from(this.services.values())
-    }
   }
 }
 
@@ -198,21 +190,20 @@ function toDataView(bufferSource: BufferSource): DataView {
   return new DataView(bufferSource)
 }
 
-let initialized = false
-
 export function registerCapacitorBluetoothPolyfill() {
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined" || !Capacitor.isNativePlatform()) return
   // Already supported natively (e.g. Chrome on Windows/Android/Mac)
   if (window.navigator && "bluetooth" in window.navigator && window.navigator.bluetooth) {
     return
   }
 
-  let bleInitialized = false
+  let initialization: Promise<void> | null = null
   const ensureBle = async () => {
-    if (!bleInitialized) {
-      await BleClient.initialize()
-      bleInitialized = true
-    }
+    initialization ??= BleClient.initialize().catch((error) => {
+      initialization = null
+      throw error
+    })
+    await initialization
   }
 
   const mockBluetooth = {
@@ -232,6 +223,7 @@ export function registerCapacitorBluetoothPolyfill() {
       await ensureBle()
       
       const services: string[] = []
+      const filterServices: string[] = []
       let name: string | undefined
       let namePrefix: string | undefined
 
@@ -239,7 +231,7 @@ export function registerCapacitorBluetoothPolyfill() {
         for (const f of options.filters) {
           if (f.name) name = f.name
           if (f.namePrefix) namePrefix = f.namePrefix
-          if (f.services) services.push(...f.services)
+          if (f.services) filterServices.push(...f.services)
         }
       }
       if (options?.optionalServices) {
@@ -249,7 +241,8 @@ export function registerCapacitorBluetoothPolyfill() {
       const device = await BleClient.requestDevice({
         name,
         namePrefix,
-        optionalServices: services.length ? services : undefined,
+        services: filterServices.length ? [...new Set(filterServices)] : undefined,
+        optionalServices: services.length ? [...new Set(services)] : undefined,
       })
 
       return new MockBluetoothDevice(device.deviceId, device.name || name || "Bluetooth Device")
