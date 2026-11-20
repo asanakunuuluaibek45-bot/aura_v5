@@ -148,7 +148,7 @@ export function VirtualizedSkladTable({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground disabled:grayscale"
                     disabled={mutationsDisabled}
                     onClick={() => onEdit(product)}
                     title="Редактировать"
@@ -159,7 +159,7 @@ export function VirtualizedSkladTable({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive disabled:grayscale"
                       disabled={mutationsDisabled}
                       onClick={() => onDelete(product.id)}
                       title="Удалить"

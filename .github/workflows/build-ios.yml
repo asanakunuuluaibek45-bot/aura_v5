@@ -2,11 +2,30 @@ name: Build iOS App
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "ios/**"
+      - "native/**"
+      - "lib/**"
+      - "components/**"
+      - "scripts/**"
+      - "app/**"
+      - "capacitor.config.ts"
+      - "package*.json"
+      - ".github/workflows/build-ios.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     name: Build iOS (IPA)
-    runs-on: macos-latest
+    runs-on: macos-15
+    timeout-minutes: 40
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -17,15 +36,35 @@ jobs:
           node-version: 22
           cache: "npm"
 
+      - name: Check CocoaPods and Xcode
+        run: |
+          xcodebuild -version
+          pod --version
+
+      - name: Run regression tests
+        run: node --experimental-strip-types --test tests/*.test.mjs
+
       - name: Build unsigned iOS IPA
         run: bash scripts/build-ios-unsigned.sh
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NATIVE_API_ORIGIN: ${{ vars.NATIVE_API_ORIGIN }}
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: aura-crm-ios-ipa
           path: aura-crm-ios.ipa
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload resolved native dependency versions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-ios-dependency-locks
+          path: |
+            package-lock.json
+            ios/App/Podfile.lock
           retention-days: 7

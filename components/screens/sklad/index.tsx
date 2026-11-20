@@ -106,6 +106,10 @@ export function SkladScreen({
   const router = useRouter()
   const [, startTransition] = useTransition()
   const printerConnection = usePrinterConnection()
+  const shopCategories = useMemo(
+    () => [...new Set(products.map((product) => product.category?.trim() || "Прочее"))].sort((a, b) => a.localeCompare(b, "ru")),
+    [products],
+  )
 
   const [labelProduct, setLabelProduct] = useState<Product | null>(null)
   const [labelProductReady, setLabelProductReady] = useState(false)
@@ -451,7 +455,7 @@ export function SkladScreen({
           <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
         {showAdd && (
-          <Button disabled={!online} onClick={onAdd} className="gap-1.5 w-full sm:w-auto">
+          <Button disabled={!online} onClick={onAdd} className="gap-1.5 w-full sm:w-auto disabled:grayscale">
             <Plus className="h-4 w-4" />
             Добавить товар
           </Button>
@@ -669,7 +673,7 @@ export function SkladScreen({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-primary"
+                  className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-primary disabled:grayscale"
                   disabled={!online}
                   onClick={() => onEdit(p)}
                 >
@@ -680,7 +684,7 @@ export function SkladScreen({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-destructive ml-auto"
+                    className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-destructive ml-auto disabled:grayscale"
                     disabled={!online}
                     onClick={() => onDelete(p)}
                   >
@@ -929,6 +933,7 @@ export function SkladScreen({
               <LabelEditor
                 key={`${labelProduct.id}:${printerProfile.key}`}
                 product={labelProduct}
+                shopCategories={shopCategories}
                 canSeePurchasePrice={canSeePurchasePrice}
                 autoPrint={labelAutoPrint}
                 initialSizeKey={labelSizeKey}
@@ -953,6 +958,7 @@ export function SkladScreen({
           <LabelEditor
             key={`background:${backgroundPrintProduct.id}`}
             product={backgroundPrintProduct}
+            shopCategories={shopCategories}
             canSeePurchasePrice={canSeePurchasePrice}
             autoPrint
             initialSizeKey={printerProfile.defaultLabelKey}
@@ -1005,7 +1011,7 @@ function ActionButtons({
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8 text-muted-foreground hover:text-primary"
+        className="h-8 w-8 text-muted-foreground hover:text-primary disabled:grayscale"
         aria-label="Редактировать товар"
         title="Редактировать"
         disabled={mutationsDisabled}
@@ -1017,7 +1023,7 @@ function ActionButtons({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive disabled:grayscale"
           aria-label="Удалить товар"
           disabled={mutationsDisabled}
           onClick={() => onDelete(p)}

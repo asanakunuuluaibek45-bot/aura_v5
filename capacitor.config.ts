@@ -21,7 +21,9 @@ const config: CapacitorConfig = {
       }
     : {}),
   ios: {
-    contentInset: "always",
+    // The shared PWA header/menu already account for CSS safe-area insets.
+    // Automatic UIKit insets would add a second gap above the same interface.
+    contentInset: "never",
     limitsNavigationsToAppBoundDomains: false,
   },
   plugins: {

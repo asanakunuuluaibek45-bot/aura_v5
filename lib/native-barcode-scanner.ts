@@ -69,6 +69,7 @@ export async function startNativeScan(
     document.documentElement.classList.remove(NATIVE_SCANNER_BODY_CLASS)
     document.body.classList.remove(NATIVE_SCANNER_BODY_CLASS)
     document.documentElement.style.removeProperty("--barcode-scanner-scroll-y")
+    window.scrollTo?.(0, scrollY)
   }
 
   try {
@@ -107,6 +108,8 @@ export async function startNativeScan(
   } catch (error) {
     stopped = true
     await listener?.remove().catch(() => undefined)
+    // startScan can acquire the camera before rejecting.
+    await BarcodeScanner.stopScan().catch(() => undefined)
     cleanupDom()
     throw error
   }
@@ -118,8 +121,8 @@ export async function startNativeScan(
       stopped = true
       try {
         if (torchOn) await BarcodeScanner.disableTorch().catch(() => undefined)
-        await listener?.remove()
-        await BarcodeScanner.stopScan()
+        await listener?.remove().catch(() => undefined)
+        await BarcodeScanner.stopScan().catch(() => undefined)
       } catch {
         /* ignore */
       } finally {

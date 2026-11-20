@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { compressToWebp, humanSize, MAX_BYTES } from "@/lib/image"
+import { hasUnsupportedDeclaredImageType } from "@/lib/image-policy"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
@@ -12,7 +13,11 @@ const BUCKET = "product-images"
 
 async function uploadOne(file: Blob) {
   const supabase = createClient()
-  const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`
+  const { data: shopId, error: shopError } = await supabase.rpc("current_shop_id")
+  if (shopError || typeof shopId !== "string" || !shopId) {
+    throw new Error("Не удалось определить магазин для загрузки фотографии")
+  }
+  const name = `${shopId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`
   const { error } = await supabase.storage.from(BUCKET).upload(name, file, {
     contentType: "image/webp",
     cacheControl: "31536000",
@@ -40,7 +45,7 @@ export function ProductImages({
     const urls: string[] = []
     try {
       for (const file of Array.from(files)) {
-        if (!file.type.startsWith("image/")) continue
+        if (hasUnsupportedDeclaredImageType(file)) throw new Error("Выберите файл изображения")
         const compressed = await compressToWebp(file)
         urls.push(await uploadOne(compressed))
       }

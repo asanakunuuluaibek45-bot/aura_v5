@@ -607,7 +607,7 @@ export function Dashboard({
         )}
         </main>
       </div>
-      <SiteHelp screen={activeScreen} onNavigate={handleScreenChange} isAdmin={isAdmin} isSuperAdmin={isSuperAdmin} onRegisterOpenHelp={registerSiteHelpOpener} />
+      <SiteHelp screen={activeScreen} isAdmin={isAdmin} onRegisterOpenHelp={registerSiteHelpOpener} />
     </div>
   )
 }

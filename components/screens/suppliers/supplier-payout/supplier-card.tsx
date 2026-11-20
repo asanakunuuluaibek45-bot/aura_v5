@@ -21,6 +21,7 @@ import {
 } from "@/app/actions/suppliers"
 import type { Product } from "@/lib/types"
 import { compressToWebp } from "@/lib/image"
+import { hasUnsupportedDeclaredImageType } from "@/lib/image-policy"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatWeight } from "@/lib/format"
@@ -99,7 +100,7 @@ export function SupplierCard({
 
   const handlePhoto = async (file: File | undefined) => {
     if (!file) return
-    if (!file.type.startsWith("image/")) {
+    if (hasUnsupportedDeclaredImageType(file)) {
       toast.error("Выберите файл изображения")
       return
     }

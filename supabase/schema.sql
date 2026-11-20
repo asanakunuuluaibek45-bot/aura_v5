@@ -4265,9 +4265,11 @@ CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
 FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Product image bucket and shop-folder upload access.
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('product-images', 'product-images', true)
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('product-images', 'product-images', true, 51200, ARRAY['image/webp']::text[])
+ON CONFLICT (id) DO UPDATE
+SET file_size_limit = EXCLUDED.file_size_limit,
+    allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 DROP POLICY IF EXISTS "Allow authenticated selects to product-images 16wiy3a_0" ON storage.objects;
 CREATE POLICY "Allow authenticated selects to product-images 16wiy3a_0"

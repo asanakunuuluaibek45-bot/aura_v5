@@ -1,41 +1,30 @@
-const DEFAULT_CATEGORY = "Прочее"
+import {
+  getLabelTemplateRefreshKey,
+  getLabelTemplateStorageKey,
+} from "@/lib/label-template-policy"
 
-function key(category: string, sizeKey?: string) {
-  const cat = category || DEFAULT_CATEGORY
-  return sizeKey ? `label_tpl_${sizeKey}_${cat}` : `label_tpl_${cat}`
-}
-
-function databaseRefreshKey(category: string, sizeKey?: string) {
-  const cat = category || DEFAULT_CATEGORY
-  return `label_tpl_db_refreshed_${sizeKey || "default"}_${cat}`
-}
-
-/** Legacy/local fallback: нужен для уже сохранённых шаблонов и offline-работы. */
-export function saveLocalTemplate(category: string, templateJson: string, sizeKey?: string) {
+/** Local templates are isolated by shop, category and label size. */
+export function saveLocalTemplate(shopId: string, category: string, templateJson: string, sizeKey?: string) {
+  if (!shopId) return
   try {
-    localStorage.setItem(key(category, sizeKey), templateJson)
+    localStorage.setItem(getLabelTemplateStorageKey(shopId, category, sizeKey), templateJson)
   } catch (error) {
     console.error("[label] Ошибка сохранения шаблона в localStorage:", error)
   }
 }
 
-export function getLocalTemplate(category: string, sizeKey?: string): string | null {
+export function getLocalTemplate(shopId: string, category: string, sizeKey?: string): string | null {
+  if (!shopId) return null
   try {
-    const exact = localStorage.getItem(key(category, sizeKey))
+    const exact = localStorage.getItem(getLabelTemplateStorageKey(shopId, category, sizeKey))
     if (exact) return exact
 
     if (sizeKey) {
-      const noSize = localStorage.getItem(key(category))
+      const noSize = localStorage.getItem(getLabelTemplateStorageKey(shopId, category))
       if (noSize) return noSize
 
       // An explicit DB refresh must not fall back to an older category-only cache.
-      if (localStorage.getItem(databaseRefreshKey(category, sizeKey)) === "1") return null
-    }
-
-    const legacy = localStorage.getItem("label_templates_cache")
-    if (legacy) {
-      const store = JSON.parse(legacy) as Record<string, string>
-      return store[category || DEFAULT_CATEGORY] ?? store[DEFAULT_CATEGORY] ?? null
+      if (localStorage.getItem(getLabelTemplateRefreshKey(shopId, category, sizeKey)) === "1") return null
     }
   } catch (error) {
     console.error("[label] Ошибка чтения шаблона из localStorage:", error)
@@ -43,20 +32,24 @@ export function getLocalTemplate(category: string, sizeKey?: string): string | n
   return null
 }
 
-export function deleteLocalTemplate(category: string, sizeKey?: string) {
+export function deleteLocalTemplate(shopId: string, category: string, sizeKey?: string) {
+  if (!shopId) return
   try {
-    localStorage.removeItem(key(category, sizeKey))
+    localStorage.removeItem(getLabelTemplateStorageKey(shopId, category, sizeKey))
   } catch (error) {
     console.error("[label] Ошибка удаления шаблона из localStorage:", error)
   }
 }
 
 /** Invalidate older cache fallbacks after explicitly requesting the current DB template. */
-export function clearLocalTemplateCache(category: string, sizeKey?: string) {
+export function clearLocalTemplateCache(shopId: string, category: string, sizeKey?: string) {
+  if (!shopId) return
   try {
-    localStorage.removeItem(key(category, sizeKey))
-    localStorage.removeItem(key(category))
-    if (sizeKey) localStorage.setItem(databaseRefreshKey(category, sizeKey), "1")
+    localStorage.removeItem(getLabelTemplateStorageKey(shopId, category, sizeKey))
+    localStorage.removeItem(getLabelTemplateStorageKey(shopId, category))
+    if (sizeKey) {
+      localStorage.setItem(getLabelTemplateRefreshKey(shopId, category, sizeKey), "1")
+    }
   } catch (error) {
     console.error("[label] Ошибка очистки кэша шаблона:", error)
   }
