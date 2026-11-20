@@ -1,4 +1,5 @@
 import { getShopSeqIdForLabel } from "@/app/actions/products"
+import { resolveShopSeqId } from "@/lib/shop-seq-cache-core"
 
 /**
  * Short shop number used in label QR codes. It never changes for a shop, so it
@@ -22,18 +23,11 @@ export function rememberShopSeqId(shopId: string, seq: number | null | undefined
 }
 
 export async function getShopSeqIdCached(shopId: string): Promise<number> {
-  const cached = readCached(shopId)
-  if (cached) {
-    // Refresh in the background when online; the cached value is used right away.
-    if (typeof navigator === "undefined" || navigator.onLine) {
-      void getShopSeqIdForLabel(shopId).then((s) => rememberShopSeqId(shopId, s)).catch(() => {})
-    }
-    return cached
-  }
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
-    throw new Error("Нет интернета: откройте этикетку один раз онлайн, чтобы номер магазина сохранился на устройстве")
-  }
-  const seq = await getShopSeqIdForLabel(shopId)
-  rememberShopSeqId(shopId, seq)
-  return seq
+  const online = typeof navigator === "undefined" || navigator.onLine
+  return resolveShopSeqId(
+    shopId,
+    online,
+    { read: readCached, write: rememberShopSeqId },
+    getShopSeqIdForLabel,
+  )
 }

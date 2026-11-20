@@ -9,7 +9,12 @@ import type { Canvas as FabricCanvas } from "fabric"
 import { toast } from "sonner"
 import type { LabelSizeDef, JewelryLabelSizeKey } from "@/lib/niimbot"
 import type { Product } from "@/lib/types"
-import { saveLabelTemplate, getLabelTemplate } from "@/app/actions/labels"
+import { saveLabelTemplate, getLabelTemplate, deleteShopLabelTemplate } from "@/app/actions/labels"
+import {
+  getLabelTemplateCategories,
+  type LabelTemplateResetSource,
+  type LabelTemplateSaveScope,
+} from "@/lib/label-template-policy"
 import type { BorderStyleKey } from "../constants"
 import { createTextbox, refitTextbox, setAutoFit, setFitRatio, clampRatio } from "../canvas/text-fit"
 import { addBorderToCanvas } from "../canvas/borders"
@@ -37,6 +42,7 @@ export function useLabelActions(
   textAlign: "left" | "center" | "right" = "left",
   charSpacing = 0,
   lineHeight = 1.16,
+  shopCategories: string[] = [],
 ) {
   const applyToSelection = useCallback((patch: Record<string, unknown>) => {
     const canvas  = fabricRef.current
@@ -149,7 +155,7 @@ export function useLabelActions(
     applyToSelection({ lineHeight: lh })
   }, [applyToSelection])
 
-  const handleSaveTemplate = useCallback(async () => {
+  const handleSaveTemplate = useCallback(async (scope: LabelTemplateSaveScope) => {
     const canvas = fabricRef.current
     if (!canvas) return
     try {
@@ -157,13 +163,23 @@ export function useLabelActions(
       canvas.renderAll()
       const tpl = serializeLayout(canvas, sizeKey, null)
       const serialized = JSON.stringify(tpl)
-      saveLocalTemplate(category, serialized, sizeKey)
+      const categories = getLabelTemplateCategories(category, shopCategories, scope)
+      if (scope === "shop" && !product.shop_id) {
+        throw new Error("Не выбран магазин для применения шаблона")
+      }
+      categories.forEach((targetCategory) => {
+        saveLocalTemplate(product.shop_id, targetCategory, serialized, sizeKey)
+      })
       if (typeof navigator !== "undefined" && !navigator.onLine) {
-        toast.success(`Сохранено на устройстве для «${category}» / ${sizeKey}. В базу отправится при сохранении онлайн.`)
+        toast.success(
+          scope === "shop"
+            ? `Шаблон сохранён офлайн на этом устройстве для ${categories.length} категорий магазина`
+            : `Шаблон сохранён офлайн на этом устройстве для «${category}»`,
+        )
         return
       }
       try {
-        await saveLabelTemplate(category, serialized, sizeKey)
+        await saveLabelTemplate(categories, serialized, sizeKey, scope)
       } catch (err) {
         if (/failed to fetch|network|fetch failed/i.test((err as Error)?.message ?? "")) {
           toast.success("Нет связи с сервером — шаблон сохранён на устройстве")
@@ -171,28 +187,39 @@ export function useLabelActions(
         }
         throw err
       }
-      toast.success(`Расположение сохранено для «${category}» / ${sizeKey}`)
+      toast.success(
+        scope === "shop"
+          ? `Шаблон сохранён для ${categories.length} категорий магазина`
+          : `Расположение сохранено для «${category}» / ${sizeKey}`,
+      )
     } catch (err) {
       toast.error((err as Error).message)
     }
-  }, [fabricRef, sizeKey, category])
+  }, [fabricRef, sizeKey, category, shopCategories, product.shop_id])
 
-  const handleReloadTemplate = useCallback(async () => {
+  const handleReloadTemplate = useCallback(async (source: LabelTemplateResetSource) => {
     const canvas = fabricRef.current
     if (!canvas) return
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      toast.error("Нет интернета — используется шаблон, сохранённый на устройстве")
+      toast.error("Для восстановления шаблона подключитесь к интернету")
       return
     }
     try {
-      const raw = await getLabelTemplate(category, sizeKey)
+      const raw = await getLabelTemplate(category, sizeKey, source)
+      if (source === "shop" && !raw) {
+        toast.info(`Для «${category}» ещё не сохранён отдельный шаблон магазина`)
+        return
+      }
       const saved = parseTemplate(raw)
       if (raw && !saved) {
-        throw new Error("Шаблон в базе данных имеет неподдерживаемый формат")
+        throw new Error("Сохранённый шаблон имеет неподдерживаемый формат")
       }
 
-      clearLocalTemplateCache(category, sizeKey)
-      if (raw && saved) saveLocalTemplate(category, raw, sizeKey)
+      if (source === "global") {
+        await deleteShopLabelTemplate(category, sizeKey)
+      }
+      clearLocalTemplateCache(product.shop_id, category, sizeKey)
+      if (raw && saved) saveLocalTemplate(product.shop_id, category, raw, sizeKey)
       if (!canvas.lowerCanvasEl) return
 
       await buildDefaultLayout(canvas, product, sizeDef)
@@ -204,20 +231,20 @@ export function useLabelActions(
       canvas.setViewportTransform([1, 0, 0, 1, offsetX, offsetY])
       canvas.renderAll()
       toast.success(
-        saved
-          ? "Шаблон обновлён из базы данных"
-          : "Шаблон в базе не найден — восстановлен стандартный эскиз",
+        source === "global"
+          ? saved ? "Глобальный шаблон восстановлен для этой категории" : "Восстановлен стандартный глобальный макет"
+          : "Шаблон магазина восстановлен",
       )
     } catch (error) {
-      console.error("[label] Не удалось обновить шаблон из БД:", error)
-      toast.error(error instanceof Error ? error.message : "Не удалось загрузить шаблон из базы данных")
+      console.error("[label] Не удалось восстановить шаблон:", error)
+      toast.error(error instanceof Error ? error.message : "Не удалось восстановить шаблон")
     }
   }, [fabricRef, category, sizeKey, product, sizeDef, offsetX, offsetY])
 
   const loadTemplate = useCallback(async (canvas: FabricCanvas) => {
     // Локальный шаблон применяется до асинхронной генерации QR, поэтому
     // сохранённая компоновка видна сразу, не ожидая БД или декодирования QR.
-    const raw = getLocalTemplate(category, sizeKey)
+    const raw = getLocalTemplate(product.shop_id, category, sizeKey)
     const saved = parseTemplate(raw)
     if (!canvas.lowerCanvasEl) return
     let userEdited = false
@@ -290,7 +317,7 @@ export function useLabelActions(
           applyTemplate(canvas, remote)
           applyBgRect(canvas, sizeDef, remote.bg ?? null)
           canvas.requestRenderAll()
-          saveLocalTemplate(category, remoteRaw, sizeKey)
+          saveLocalTemplate(product.shop_id, category, remoteRaw, sizeKey)
         })
         .catch((error) => {
           console.warn("[label] Не удалось загрузить шаблон из БД:", error)

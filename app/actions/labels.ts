@@ -43,21 +43,36 @@ function normalizeKey(category: string, sizeKey?: string) {
   }
 }
 
+function normalizeCategories(categories: string | string[]) {
+  const values = Array.isArray(categories) ? categories : [categories]
+  return [...new Set(values
+    .filter((category): category is string => typeof category === "string")
+    .map((category) => category.trim() || DEFAULT_CATEGORY))]
+}
+
 export async function saveLabelTemplate(
-  category: string,
+  categories: string | string[],
   templateJson: string,
   sizeKey?: string,
+  scope: "category" | "shop" = "category",
 ): Promise<void> {
   const { supabase, user, profile, shopId } = await getContext()
-  const { category: normalizedCategory, sizeKey: normalizedSize } = normalizeKey(category, sizeKey)
+  const normalizedCategories = normalizeCategories(categories)
+  const normalizedSize = sizeKey?.trim() || "default"
   const isGlobal = profile.role === "super_admin" && !shopId
 
+  if (normalizedCategories.length === 0) throw new Error("Не выбрана категория")
   if (!shopId && !isGlobal) throw new Error("Магазин не выбран")
+  if (scope === "shop" && !shopId) throw new Error("Для сохранения по магазину выберите магазин")
+  if (normalizedCategories.length > 200) throw new Error("Слишком много категорий для одного шаблона")
+  if (isGlobal && normalizedCategories.length > 1) {
+    throw new Error("Для применения ко всем категориям сначала выберите магазин")
+  }
 
   const { error } = await supabase
     .from("label_templates")
     .upsert(
-      {
+      normalizedCategories.map((normalizedCategory) => ({
         shop_id: isGlobal ? null : shopId,
         scope_key: isGlobal ? GLOBAL_SCOPE : shopId,
         category: normalizedCategory,
@@ -66,7 +81,7 @@ export async function saveLabelTemplate(
         created_by: user.id,
         updated_by: user.id,
         updated_at: new Date().toISOString(),
-      },
+      })),
       { onConflict: "scope_key,category,size_key" },
     )
 
@@ -79,9 +94,35 @@ export async function saveLabelTemplate(
 export async function getLabelTemplate(
   category: string,
   sizeKey?: string,
+  source: "effective" | "shop" | "global" = "effective",
 ): Promise<string | null> {
   const { supabase, shopId } = await getContext()
   const { category: normalizedCategory, sizeKey: normalizedSize } = normalizeKey(category, sizeKey)
+
+  if (source === "global") {
+    const { data, error } = await supabase
+      .from("label_templates")
+      .select("template_json")
+      .eq("scope_key", GLOBAL_SCOPE)
+      .eq("category", normalizedCategory)
+      .eq("size_key", normalizedSize)
+      .maybeSingle()
+    if (error) throw new Error(`Не удалось загрузить глобальный шаблон: ${error.message}`)
+    return data?.template_json ?? null
+  }
+
+  if (source === "shop") {
+    if (!shopId) return null
+    const { data, error } = await supabase
+      .from("label_templates")
+      .select("template_json")
+      .eq("scope_key", shopId)
+      .eq("category", normalizedCategory)
+      .eq("size_key", normalizedSize)
+      .maybeSingle()
+    if (error) throw new Error(`Не удалось загрузить шаблон магазина: ${error.message}`)
+    return data?.template_json ?? null
+  }
 
   // Оптимизация: Запрашиваем локальный и глобальный шаблон параллельно в один round-trip
   if (shopId) {
@@ -120,6 +161,23 @@ export async function getLabelTemplate(
 
   if (globalError) throw new Error(`Не удалось загрузить шаблон по умолчанию: ${globalError.message}`)
   return globalTemplate?.template_json ?? null
+}
+
+/** Deletes only the selected category's override in the active shop. */
+export async function deleteShopLabelTemplate(category: string, sizeKey?: string): Promise<void> {
+  const { supabase, shopId } = await getContext()
+  if (!shopId) throw new Error("Сначала выберите магазин")
+
+  const { category: normalizedCategory, sizeKey: normalizedSize } = normalizeKey(category, sizeKey)
+  const { error } = await supabase
+    .from("label_templates")
+    .delete()
+    .eq("scope_key", shopId)
+    .eq("category", normalizedCategory)
+    .eq("size_key", normalizedSize)
+  if (error) throw new Error(`Не удалось восстановить глобальный шаблон: ${error.message}`)
+
+  revalidatePath("/crm/inventory", "page")
 }
 
 export async function deleteLabelTemplate(category: string, sizeKey?: string): Promise<void> {

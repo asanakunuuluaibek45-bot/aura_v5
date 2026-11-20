@@ -106,6 +106,10 @@ export function SkladScreen({
   const router = useRouter()
   const [, startTransition] = useTransition()
   const printerConnection = usePrinterConnection()
+  const shopCategories = useMemo(
+    () => [...new Set(products.map((product) => product.category?.trim() || "Прочее"))].sort((a, b) => a.localeCompare(b, "ru")),
+    [products],
+  )
 
   const [labelProduct, setLabelProduct] = useState<Product | null>(null)
   const [labelProductReady, setLabelProductReady] = useState(false)
@@ -929,6 +933,7 @@ export function SkladScreen({
               <LabelEditor
                 key={`${labelProduct.id}:${printerProfile.key}`}
                 product={labelProduct}
+                shopCategories={shopCategories}
                 canSeePurchasePrice={canSeePurchasePrice}
                 autoPrint={labelAutoPrint}
                 initialSizeKey={labelSizeKey}
@@ -953,6 +958,7 @@ export function SkladScreen({
           <LabelEditor
             key={`background:${backgroundPrintProduct.id}`}
             product={backgroundPrintProduct}
+            shopCategories={shopCategories}
             canSeePurchasePrice={canSeePurchasePrice}
             autoPrint
             initialSizeKey={printerProfile.defaultLabelKey}

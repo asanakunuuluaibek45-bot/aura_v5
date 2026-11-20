@@ -341,7 +341,7 @@ function HeaderZone({
               type="button"
               onClick={onReloadTemplate}
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-2 text-[11px] text-muted-foreground hover:bg-muted transition-colors"
-              title="Загрузить шаблон из базы данных"
+              title="Восстановить глобальный или сохранённый шаблон магазина"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>Сброс</span>

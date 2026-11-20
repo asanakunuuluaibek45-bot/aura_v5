@@ -14,6 +14,7 @@ export interface LabelEditorProps {
   printerProfile?: import("@/lib/niimbot").PrinterProfile
   copies?:         number
   density?:        number
+  shopCategories?: string[]
   onSizeChange?:   (key: JewelryLabelSizeKey) => void
   onClose?:       () => void
   backgroundControlsHost?: HTMLElement | null

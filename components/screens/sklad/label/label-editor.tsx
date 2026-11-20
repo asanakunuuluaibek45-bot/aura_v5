@@ -4,8 +4,22 @@ import React, {
 } from "react"
 import { X } from "lucide-react"
 import { createPortal } from "react-dom"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { canvasToLabelDataUrl, getLabelSizeDef, DEFAULT_SIZE_KEY, LABEL_SIZES, NIIMBOT_MODEL } from "@/lib/niimbot"
 import type { JewelryLabelSizeKey } from "@/lib/niimbot"
+import {
+  getLabelTemplateCategories,
+  type LabelTemplateResetSource,
+  type LabelTemplateSaveScope,
+} from "@/lib/label-template-policy"
 import type { LabelEditorProps } from "./types"
 import { RULER_SIZE, ZOOM_DEFAULT, ZOOM_MAX, ZOOM_MIN } from "./constants"
 import type { BorderStyleKey } from "./constants"
@@ -63,7 +77,7 @@ function getStoredSizeKey(fallback: JewelryLabelSizeKey, storageKey: string): Je
 
 export function LabelEditor({
   product: originalProduct, canSeePurchasePrice = false, autoPrint, initialSizeKey, printerProfile = NIIMBOT_MODEL,
-  copies = 1, density, onSizeChange, onClose, backgroundControlsHost,
+  copies = 1, density, shopCategories: availableShopCategories = [], onSizeChange, onClose, backgroundControlsHost,
 }: LabelEditorProps) {
   const product = useMemo(() => canSeePurchasePrice ? originalProduct : {
     ...originalProduct,
@@ -80,6 +94,12 @@ export function LabelEditor({
   // rotation хранит накопленный поворот в градусах (0 | 90 | 180 | 270)
   const [rotation, setRotation] = useState(0)
   const category = product.category ?? "Прочее"
+  const shopCategories = useMemo(
+    () => getLabelTemplateCategories(category, availableShopCategories, "shop"),
+    [category, availableShopCategories],
+  )
+  const [templateDialog, setTemplateDialog] = useState<"save" | "reset" | null>(null)
+  const [templateDialogBusy, setTemplateDialogBusy] = useState(false)
   const backgroundCalibrationStorageKey = `${BACKGROUND_CALIBRATION_STORAGE}:${sizeKey}`
   const [backgroundCalibration, setBackgroundCalibration] = useState<BackgroundCalibration>(DEFAULT_BACKGROUND_CALIBRATION)
   const [backgroundCalibrationLoadedFor, setBackgroundCalibrationLoadedFor] = useState("")
@@ -385,8 +405,29 @@ export function LabelEditor({
     offsetX, offsetY, product, category,
     font, fontSize, autoFit, fitRatio,
     isBold, isItalic, isUnderline, isLinethrough, textAlign, charSpacing, lineHeight,
+    shopCategories,
   )
   actionsRef.current = actions
+
+  const saveTemplate = async (scope: LabelTemplateSaveScope) => {
+    setTemplateDialogBusy(true)
+    try {
+      await actions.handleSaveTemplate(scope)
+    } finally {
+      setTemplateDialogBusy(false)
+      setTemplateDialog(null)
+    }
+  }
+
+  const reloadTemplate = async (source: LabelTemplateResetSource) => {
+    setTemplateDialogBusy(true)
+    try {
+      await actions.handleReloadTemplate(source)
+    } finally {
+      setTemplateDialogBusy(false)
+      setTemplateDialog(null)
+    }
+  }
 
   // ── Синхронизация выделения ───────────────────────────────────────────────
   useSelectionSync(fabricRef, loaded, sizeKey, {
@@ -501,8 +542,8 @@ export function LabelEditor({
     onAddText:        () => { deactivatePanMode(); actions.addText() },
     onAddBorder:      (k: BorderStyleKey) => { deactivatePanMode(); actions.addBorder(k) },
     onRemoveSelected: () => { deactivatePanMode(); actions.removeSelected() },
-    onSaveTemplate:   actions.handleSaveTemplate,
-    onReloadTemplate: actions.handleReloadTemplate,
+    onSaveTemplate:   () => setTemplateDialog("save"),
+    onReloadTemplate: () => setTemplateDialog("reset"),
     onFontChange:     (f: string) => { setFont(f); actions.handleFontChange(f) },
     onFontSizeChange: (s: number) => { setFontSize(s); actions.handleFontSizeChange(s) },
     onAutoFitChange:  (v: boolean) => { setAutoFit(v); actions.handleAutoFitChange(v) },
@@ -672,6 +713,101 @@ export function LabelEditor({
           {...toolbarCommon}
         />
       </div>
+
+      <Dialog
+        open={templateDialog !== null}
+        onOpenChange={(open) => {
+          if (!open && !templateDialogBusy) setTemplateDialog(null)
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md" showCloseButton={!templateDialogBusy}>
+          {templateDialog === "save" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Сохранить шаблон этикетки</DialogTitle>
+                <DialogDescription>
+                  Выберите область применения для размера {LABEL_SIZES[sizeKey]?.label ?? sizeKey}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto justify-start px-3 py-3 text-left"
+                  disabled={templateDialogBusy}
+                  onClick={() => void saveTemplate("category")}
+                >
+                  <span className="flex flex-col items-start gap-1">
+                    <span>Только категория «{category}»</span>
+                    <span className="text-xs font-normal text-muted-foreground">Другие категории не изменятся</span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  className="h-auto justify-start px-3 py-3 text-left"
+                  disabled={templateDialogBusy || !product.shop_id}
+                  onClick={() => void saveTemplate("shop")}
+                >
+                  <span className="flex flex-col items-start gap-1">
+                    <span>Все категории этого магазина</span>
+                    <span className="text-xs font-normal text-primary-foreground/80">
+                      {shopCategories.length} категорий · другие магазины не затрагиваются
+                    </span>
+                  </span>
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>
+                  Отмена
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Восстановить шаблон?</DialogTitle>
+                <DialogDescription>
+                  Выберите, какой шаблон применить только к категории «{category}».
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto justify-start px-3 py-3 text-left"
+                  disabled={templateDialogBusy || !product.shop_id}
+                  onClick={() => void reloadTemplate("global")}
+                >
+                  <span className="flex flex-col items-start gap-1">
+                    <span>Восстановить глобальный шаблон</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      Удалит настройку этой категории в магазине; другие категории останутся без изменений
+                    </span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  className="h-auto justify-start px-3 py-3 text-left"
+                  disabled={templateDialogBusy || !product.shop_id}
+                  onClick={() => void reloadTemplate("shop")}
+                >
+                  <span className="flex flex-col items-start gap-1">
+                    <span>Восстановить шаблон магазина</span>
+                    <span className="text-xs font-normal text-primary-foreground/80">
+                      Загрузит последнюю сохранённую версию этой категории
+                    </span>
+                  </span>
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" disabled={templateDialogBusy} onClick={() => setTemplateDialog(null)}>
+                  Отмена
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

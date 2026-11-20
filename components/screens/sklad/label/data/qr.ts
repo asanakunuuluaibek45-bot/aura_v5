@@ -4,15 +4,10 @@
 import QRCode from "qrcode"
 import { toast } from "sonner"
 import type { Product } from "@/lib/types"
+import { buildShopLabelQrPayload } from "@/lib/label-qr-payload"
 
 export function buildQrUrl(data: Product): string {
-  const skuValue = (data.sku || "").trim().toUpperCase()
-  const shopSeqId = data.shop_seq_id
-
-  if (typeof shopSeqId !== "number" || !Number.isSafeInteger(shopSeqId) || shopSeqId <= 0 || !skuValue) {
-    throw new Error("Для QR-кода нужны артикул и короткий номер магазина. Синхронизируйте товар и попробуйте снова.")
-  }
-  return `${shopSeqId}/${encodeURIComponent(skuValue)}`
+  return buildShopLabelQrPayload(data.shop_seq_id, data.sku || "")
 }
 
 export async function safeQrDataUrl(data: Product): Promise<string | null> {
