@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import type { SubscriptionStatus } from "@/lib/types"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"
+import { toAdminShopDirectory, type AdminShopSummary } from "@/lib/admin/shop-directory"
 
 // ---------------------------------------------------------------------------
 // Типы (реэкспорт для обратной совместимости импортов)
@@ -68,6 +69,14 @@ export async function getSuperAdminShops(): Promise<ShopBillingRow[]> {
     ...shop,
     product_units_used: unitError ? null : unitsByShop.get(shop.shop_id) ?? 0,
   }))
+}
+
+/** Read-only platform directory. Only approved super_admin data reaches the UI. */
+export async function getPlatformShopDirectory(): Promise<AdminShopSummary[]> {
+  const { supabase } = await requireSuperAdmin()
+  const { data, error } = await supabase.rpc("superadmin_list_shops")
+  if (error) throw new Error(`Не удалось загрузить список магазинов: ${error.message}`)
+  return toAdminShopDirectory((data ?? []) as ShopBillingRow[])
 }
 
 // ---------------------------------------------------------------------------

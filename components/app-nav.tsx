@@ -32,6 +32,7 @@ import {
   CircleHelp,
   Eye,
   LayoutGrid,
+  Megaphone,
   PackageCheck,
   Wallet,
   LogOut,
@@ -56,6 +57,7 @@ export type ScreenId =
   | "clients"
   | "shops"
   | "notifications"
+  | "announcements"
   | "suppliers"
 
 export const SCREEN_PATHS: Record<ScreenId, string> = {
@@ -68,6 +70,7 @@ export const SCREEN_PATHS: Record<ScreenId, string> = {
   otchety: "/crm/reports",
   shops: "/crm/stores",
   notifications: "/crm/notifications",
+  announcements: "/crm/announcements",
   suppliers: "/crm/suppliers",
   kabinet: "/crm/cabinet",
 }
@@ -95,6 +98,7 @@ const ITEMS: NavItem[] = [
   { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
   { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
   { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления GOLDUCHET" },
+  { id: "announcements", label: "Объявления", icon: Megaphone, group: "system", description: "Сообщения для вашего магазина" },
   { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
 ]
 

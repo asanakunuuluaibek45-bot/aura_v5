@@ -47,6 +47,7 @@ const KabinetScreen = memo(OfflineKabinetScreen)
 const ClientsScreen = memo(dynamic(() => import("@/components/screens/clients").then((mod) => mod.ClientsScreen), { loading: SectionLoading }))
 const SuppliersScreen = memo(dynamic(() => import("@/components/screens/suppliers").then((mod) => mod.SuppliersScreen), { loading: SectionLoading }))
 const NotificationsPage = memo(dynamic(() => import("@/components/notifications").then((mod) => mod.NotificationsPage), { loading: SectionLoading }))
+const UserAnnouncementsPanel = memo(dynamic(() => import("@/components/announcements/user-announcements-panel").then((mod) => mod.UserAnnouncementsPanel), { loading: SectionLoading }))
 const SuperAdminShopsScreen = memo(dynamic(() => import("@/components/screens/superadmin/shops-panel").then((mod) => mod.SuperAdminShopsScreen), { loading: SectionLoading }))
 const ImpersonationBanner = dynamic(() => import("@/components/screens/superadmin/shops-panel").then((mod) => mod.ImpersonationBanner), { loading: () => null })
 const MemoizedKassaScreen = memo(KassaScreen)
@@ -603,6 +604,7 @@ export function Dashboard({
           <SuperAdminShopsScreen initialShops={superAdminShops} />
         )}
         {activeScreen === "notifications" && isSuperAdmin && <NotificationsPage />}
+        {activeScreen === "announcements" && <UserAnnouncementsPanel />}
           </>
         )}
         </main>
