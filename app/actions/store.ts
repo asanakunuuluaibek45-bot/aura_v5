@@ -25,6 +25,15 @@ export type PublicProduct = {
   created_at: string
 }
 
+export type PublicProductCursor = Pick<PublicProduct, "id" | "created_at">
+
+export type PublicProductPage = {
+  items: PublicProduct[]
+  hasMore: boolean
+  migrationPending?: boolean
+  error?: string
+}
+
 /**
  * Читает изделие по числовому seq_id магазина и SKU (новый маршрут /q/…).
  * Если shopKey — не число, автоматически fallback на UUID.
@@ -82,4 +91,62 @@ export async function getPublicShopProducts(storeId: string, limit = 8): Promise
     return []
   }
   return (data as PublicProduct[]) ?? []
+}
+
+/**
+ * Публичный каталог маркетплейса и отдельного магазина.
+ * Новая RPC-функция добавлена отдельно, чтобы сохранить существующий endpoint
+ * public_shop_products для старых ссылок и клиентов на время выкладки миграции.
+ */
+export async function getPublicMarketplaceProducts(
+  storeId: string | null = null,
+  limit = 24,
+  cursor?: PublicProductCursor,
+  search = "",
+): Promise<PublicProductPage> {
+  const safeLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.min(48, Math.trunc(limit)))
+    : 24
+  const normalizedSearch = typeof search === "string" ? search.trim().slice(0, 100) : ""
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return { items: [], hasMore: false, error: "Каталог временно недоступен." }
+  }
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("public_marketplace_products", {
+    _shop_id: storeId || null,
+    _search: normalizedSearch || null,
+    _before_created_at: cursor?.created_at ?? null,
+    _before_id: cursor?.id ?? null,
+    // Fetch one extra row to tell the client whether another page exists.
+    _limit: safeLimit + 1,
+  })
+
+  if (error) {
+    if (["PGRST202", "42883"].includes(error.code ?? "")) {
+      // Keep existing store pages useful while the additive SQL migration rolls out.
+      if (storeId && !cursor && !normalizedSearch) {
+        const legacy = await supabase.rpc("public_shop_products", {
+          _shop_id: storeId,
+          _limit: safeLimit,
+        })
+        if (!legacy.error) {
+          return {
+            items: (legacy.data as PublicProduct[]) ?? [],
+            hasMore: false,
+            migrationPending: true,
+          }
+        }
+      }
+      return { items: [], hasMore: false, migrationPending: true }
+    }
+
+    console.error("[store] public_marketplace_products error:", error.message)
+    return { items: [], hasMore: false, error: "Не удалось загрузить каталог товаров." }
+  }
+
+  const rows = (data as PublicProduct[]) ?? []
+  return {
+    items: rows.slice(0, safeLimit),
+    hasMore: rows.length > safeLimit,
+  }
 }
