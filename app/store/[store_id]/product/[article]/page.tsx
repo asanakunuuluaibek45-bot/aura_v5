@@ -5,6 +5,7 @@ import { getPublicProduct } from "@/app/actions/store"
 import { formatSom, formatWeight } from "@/lib/format"
 import { purityFromMetal } from "@/lib/purity"
 import { AuraMark } from "@/components/brand/aura-mark"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 type Params = { store_id: string; article: string }
 
@@ -31,9 +32,12 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
           <AuraMark className="h-7 w-7" />
           <span className="font-serif text-lg">GOLDUCHET</span>
         </Link>
-        <Link href={`/store/${store_id}`} className="text-sm text-muted-foreground hover:text-foreground">
-          Назад к витрине
-        </Link>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Link href={`/store/${store_id}`} className="text-sm text-muted-foreground hover:text-foreground">
+            Назад к витрине
+          </Link>
+        </div>
       </header>
       <section className="mx-auto grid max-w-5xl gap-8 px-5 py-10 md:grid-cols-2">
         <div className="aspect-square overflow-hidden rounded-2xl bg-muted">

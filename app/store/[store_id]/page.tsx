@@ -5,6 +5,7 @@ import { getPublicMarketplaceProducts, getPublicShopProducts } from "@/app/actio
 import { isPublicShopEnabled } from "@/app/actions/shops"
 import { PublicProductGrid } from "@/components/public-marketplace/product-grid"
 import { AuraMark } from "@/components/brand/aura-mark"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 type Params = { store_id: string }
 
@@ -40,7 +41,10 @@ export default async function StorePage({ params }: { params: Promise<Params> })
           <AuraMark className="h-7 w-7" />
           <span className="font-serif text-lg">GOLDUCHET</span>
         </Link>
-        <span className="text-sm text-muted-foreground">{shop}</span>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <span className="max-w-[45vw] truncate text-sm text-muted-foreground">{shop}</span>
+        </div>
       </header>
 
       <section className="mx-auto max-w-5xl px-5 py-10">

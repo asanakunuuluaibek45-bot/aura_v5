@@ -1,29 +1,64 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Moon, Sun } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 type Theme = "light" | "dark"
 const STORAGE_KEY = "aura-theme"
 
+function getSavedTheme(): Theme | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    return stored === "light" || stored === "dark" ? stored : null
+  } catch {
+    return null
+  }
+}
+
+function applyTheme(theme: Theme, persist = false) {
+  if (persist) {
+    try {
+      localStorage.setItem(STORAGE_KEY, theme)
+    } catch {
+      // The theme still applies for this session if storage is unavailable.
+    }
+  }
+  document.documentElement.classList.toggle("dark", theme === "dark")
+  document.documentElement.style.colorScheme = theme
+  document.querySelector('meta[name="theme-color"]')?.setAttribute(
+    "content",
+    theme === "dark" ? "#29233d" : "#fbfaff",
+  )
+}
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark")
+  const [theme, setTheme] = useState<Theme>("light")
+  const manuallyChosen = useRef(false)
 
   useEffect(() => {
-    const stored = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? "dark"
-    setTheme(stored)
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    const savedTheme = getSavedTheme()
+    const initialTheme = savedTheme ?? (media.matches ? "dark" : "light")
+    setTheme(initialTheme)
+    applyTheme(initialTheme)
+
+    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+      if (getSavedTheme() || manuallyChosen.current) return
+      const nextTheme = event.matches ? "dark" : "light"
+      setTheme(nextTheme)
+      applyTheme(nextTheme)
+    }
+
+    media.addEventListener("change", handleSystemThemeChange)
+    return () => media.removeEventListener("change", handleSystemThemeChange)
   }, [])
 
-  const apply = (next: Theme) => {
-    setTheme(next)
-    localStorage.setItem(STORAGE_KEY, next)
-    document.documentElement.classList.toggle("dark", next === "dark")
-    document.documentElement.style.colorScheme = next
-    document.querySelector('meta[name="theme-color"]')?.setAttribute(
-      "content",
-      next === "dark" ? "#29233d" : "#fbfaff",
-    )
+  const toggle = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark"
+    manuallyChosen.current = true
+    setTheme(nextTheme)
+    applyTheme(nextTheme, true)
   }
 
   return (
@@ -33,7 +68,7 @@ export function ThemeToggle() {
       aria-label={theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}
       title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
       className="h-9 w-9 bg-transparent"
-      onClick={() => apply(theme === "dark" ? "light" : "dark")}
+      onClick={toggle}
     >
       {theme === "dark" ? (
         <Sun className="h-4 w-4 text-primary" />
