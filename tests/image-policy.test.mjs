@@ -53,8 +53,8 @@ test("storage bucket enforces the same byte and MIME limits", () => {
 test("all active product and supplier upload flows use the common WebP compressor", () => {
   for (const path of [
     "../components/product-images.tsx",
-    "../components/screens/sklad/add-edit-Product/product-images.tsx",
-    "../components/screens/suppliers/supplier-payout/supplier-card.tsx",
+    "../components/crm/screens/sklad/add-edit-Product/product-images.tsx",
+    "../components/crm/screens/suppliers/supplier-payout/supplier-card.tsx",
   ]) {
     assert.match(read(path), /compressToWebp/)
   }

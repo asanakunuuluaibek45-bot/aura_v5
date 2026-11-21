@@ -4,8 +4,8 @@ import { notFound } from "next/navigation"
 import { getPublicProduct } from "@/app/actions/store"
 import { formatSom, formatWeight } from "@/lib/format"
 import { purityFromMetal } from "@/lib/purity"
-import { AuraMark } from "@/components/brand/aura-mark"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { AuraMark } from "@/components/shared/brand/aura-mark"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 type Params = { store_id: string; article: string }
 

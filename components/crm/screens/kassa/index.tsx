@@ -1,0 +1,626 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
+import dynamic from "next/dynamic"
+import type { MetalRate, Product, Profile, Role, Sale, SaleItem, Customer, SaleReturn } from "@/lib/types"
+import { formatSom } from "@/lib/format"
+import { buildRateMap, scrapRateOf } from "@/lib/rates"
+import { round, toNumber } from "@/hooks/useCalculator"
+import { checkout } from "@/app/actions/sales"
+import type { SalesHistoryProps } from "@/components/crm/sales-history/index"
+import { CashPanel } from "@/components/crm/screens/kassa/cash-panel"
+import type { CashData } from "@/app/actions/cash"
+import { Button } from "@/components/shared/ui/button"
+import { ArrowUp } from "lucide-react"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+import { PageLoader } from "@/components/shared/ui/page-loader"
+import { filterProducts, isSearchReady } from "@/lib/product-search"
+import { getClientOperationAttempt, type ClientOperationAttempt } from "@/lib/client-operation"
+import { initialReceiptType, type ReceiptType, type ReceiptTypeSetting } from "@/lib/receipt-type"
+
+import { KassaSearch } from "./kassa-search"
+import { KassaCart } from "./kassa-cart"
+import { KassaLossModal } from "./kassa-loss-modal"
+
+export interface ExtendedSaleItem extends SaleItem {
+  lineId: string
+  discountPercent?: number
+  discountSom?: number
+}
+
+const DEBOUNCE_MS = 350
+const MIN_QUERY = 3
+const LOCAL_STORAGE_KEY = "kassa_cart_state_v2"
+
+const LazySalesHistory = dynamic(
+  () => import("@/components/crm/sales-history/index").then((mod) => mod.SalesHistory),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="min-h-48 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground" role="status">
+        Подготавливаем историю продаж…
+      </div>
+    ),
+  },
+)
+
+function DeferredSalesHistory(props: SalesHistoryProps) {
+  const container = useRef<HTMLDivElement | null>(null)
+  const [shouldLoad, setShouldLoad] = useState(false)
+
+  useEffect(() => {
+    const element = container.current
+    if (!element) return
+    if (!("IntersectionObserver" in window)) {
+      setShouldLoad(true)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoad(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: "600px" },
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div ref={container} className="min-w-0">
+      {shouldLoad ? (
+        <LazySalesHistory {...props} />
+      ) : (
+        <div className="min-h-48 rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+          История загрузится при прокрутке к этому разделу
+        </div>
+      )}
+    </div>
+  )
+}
+
+function dateAfterDays(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return year + "-" + month + "-" + day
+}
+
+export function KassaScreen({
+  products,
+  profile,
+  viewRole,
+  sales,
+  cash,
+  ledgerBalance,
+  rates = [],
+  clients = [],
+  returns = [],
+  onLocalCheckout,
+  onlineOnly = false,
+  shopId,
+  defaultReceiptType = "ask",
+}: {
+  products: Product[]
+  profile: Profile
+  viewRole: Role
+  sales: Sale[]
+  cash: CashData
+  ledgerBalance?: CashData["ledgerBalance"]
+  rates?: MetalRate[]
+  clients?: Customer[]
+  returns?: SaleReturn[]
+  onLocalCheckout?: (input: any) => Promise<any>
+  onlineOnly?: boolean
+  shopId?: string | null
+  /** Настройка администратора: спрашивать тип чека или подставлять по умолчанию. */
+  defaultReceiptType?: ReceiptTypeSetting
+}) {
+  const router = useRouter()
+  const [, startTransition] = useTransition()
+  const refreshAfterReturn = useCallback(() => startTransition(() => router.refresh()), [router, startTransition])
+  const [query, setQuery] = useState("")
+  const [debounced, setDebounced] = useState("")
+  
+  const [cart, setCart] = useState<ExtendedSaleItem[]>([])
+  const [bonusUsed, setBonusUsed] = useState("")
+  const [payment, setPayment] = useState("cash")
+  const [creditDueDate, setCreditDueDate] = useState(() => dateAfterDays(30))
+  const [payCash, setPayCash] = useState("")
+  const [payElectronic, setPayElectronic] = useState("")
+  const [customerName, setCustomerName] = useState("")
+  const [customerPhone, setCustomerPhone] = useState("")
+  const [customerId, setCustomerId] = useState<string | null>(null)
+  // Тип чека выбирается для каждой продажи; null — кассир ещё не выбрал.
+  const [receiptType, setReceiptType] = useState<ReceiptType | null>(() => initialReceiptType(defaultReceiptType))
+  
+  const [submitting, setSubmitting] = useState(false)
+  const checkoutAttempt = useRef<ClientOperationAttempt | null>(null)
+  const checkoutBusy = useRef(false)
+  const [confirmLoss, setConfirmLoss] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const cartStorageKey = `${LOCAL_STORAGE_KEY}:${shopId || profile.shop_id || "default"}`
+
+  const [showScrollTop, setShowScrollTop] = useState(false)
+  const [isCartOpenMobile, setIsCartOpenMobile] = useState(false)
+
+  const showBonus = viewRole === "seller"
+  const canSeeProfit = viewRole !== "seller"
+  const isAdmin = viewRole !== "seller"
+
+  const rateMap = useMemo(() => buildRateMap(rates), [rates])
+
+  // Администратор поменял настройку по умолчанию — применяем её к текущему чеку.
+  useEffect(() => {
+    setReceiptType(initialReceiptType(defaultReceiptType))
+  }, [defaultReceiptType])
+
+  const sellers = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const s of sales) map.set(s.seller_id, s.seller_name || "Без имени")
+    return [...map.entries()].map(([id, name]) => ({ id, name }))
+  }, [sales])
+
+  useEffect(() => {
+    if (onlineOnly) {
+      setCart([])
+      setBonusUsed("")
+      setCustomerName("")
+      setCustomerPhone("")
+      setCustomerId(null)
+      setPayment("cash")
+      setCreditDueDate(dateAfterDays(30))
+      setIsLoaded(true)
+      return
+    }
+    try {
+      const saved = localStorage.getItem(cartStorageKey)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+            if (Array.isArray(parsed.cart)) {
+              // Старые черновики могли содержать количество больше единицы.
+              // В ювелирном CRM каждая строка — отдельное уникальное изделие.
+              setCart(parsed.cart.map((item: ExtendedSaleItem) => ({ ...item, quantity: 1 })))
+            }
+        if (parsed.bonusUsed !== undefined) setBonusUsed(parsed.bonusUsed)
+        if (parsed.payment !== undefined) setPayment(parsed.payment)
+        if (parsed.customerName !== undefined) setCustomerName(parsed.customerName)
+        if (parsed.customerPhone !== undefined) setCustomerPhone(parsed.customerPhone)
+        if (parsed.customerId !== undefined) setCustomerId(parsed.customerId)
+      }
+    } catch (e) {
+      console.error("[kassa] Error reading localStorage:", e)
+    } finally {
+      setIsLoaded(true)
+    }
+  }, [cartStorageKey, onlineOnly])
+
+  useEffect(() => {
+    if (!isLoaded || onlineOnly) return
+    try {
+      localStorage.setItem(
+        cartStorageKey,
+        JSON.stringify({ cart, bonusUsed, payment, customerName, customerPhone, customerId })
+      )
+    } catch (e) {
+      console.error("[kassa] Error saving to localStorage:", e)
+    }
+  }, [cart, bonusUsed, payment, customerName, customerPhone, customerId, isLoaded, onlineOnly, cartStorageKey])
+
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)")
+    const sync = () => setIsMobile(mql.matches)
+    sync()
+    mql.addEventListener("change", sync)
+
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement | Document
+      let scrollTop = 0
+      if (target instanceof Document) {
+        scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0
+      } else if (target instanceof HTMLElement) {
+        scrollTop = target.scrollTop
+      }
+      setShowScrollTop(scrollTop > 200)
+    }
+
+    window.addEventListener("scroll", handleScroll, true)
+    return () => {
+      mql.removeEventListener("change", sync)
+      window.removeEventListener("scroll", handleScroll, true)
+    }
+  }, [])
+
+  const pageSize = isMobile ? 8 : 12
+  const [visible, setVisible] = useState(pageSize)
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query.trim()), DEBOUNCE_MS)
+    return () => clearTimeout(id)
+  }, [query])
+
+  const qtyInCart = (id: string) => cart.filter((i) => i.product_id === id).length
+
+  const results = useMemo(() => {
+    if (!isSearchReady(debounced, MIN_QUERY)) return []
+    return filterProducts(products, debounced).filter(
+      (p) => p.status === "in_stock" && !p.is_hidden,
+    )
+  }, [products, debounced])
+
+  useEffect(() => setVisible(pageSize), [debounced, pageSize])
+
+  const trackRef = useRef<HTMLDivElement | null>(null)
+  const onTrackScroll = () => {
+    const el = trackRef.current
+    if (!el) return
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
+      setVisible((v) => Math.min(v + pageSize, results.length))
+    }
+  }
+
+  const addToCart = (p: Product) => {
+    setCart((prev) => {
+      const already = prev.filter((i) => i.product_id === p.id).length
+      if (already >= 1) {
+        toast.error("Этот товар уже добавлен в чек")
+        return prev
+      }
+      if (p.sale_price < p.purchase_price) {
+        toast.warning(`«${p.name}» продаётся ниже закупочной цены`)
+      }
+      const line: ExtendedSaleItem = {
+        lineId: `${p.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        product_id: p.id,
+        name: p.name,
+        weight: p.weight,
+        metal: p.metal,
+        kind: "product",
+        price_per_gram:
+          p.price_per_gram_sale ?? (p.weight > 0 ? round(p.sale_price / p.weight, 2) : null),
+        quantity: 1,
+        price: p.sale_price,
+        cost: p.purchase_price,
+        discountPercent: 0,
+        discountSom: 0,
+      }
+      const lastIdx = prev.map((i) => i.product_id).lastIndexOf(p.id)
+      if (lastIdx === -1) return [...prev, line]
+      return [...prev.slice(0, lastIdx + 1), line, ...prev.slice(lastIdx + 1)]
+    })
+  }
+
+  const removeProductFromCart = (productId: string) => {
+    setCart((prev) => prev.filter((i) => i.product_id !== productId))
+  }
+
+  const toggleCartProduct = (p: Product) => {
+    const inCart = cart.some((i) => i.product_id === p.id)
+    if (inCart) {
+      removeProductFromCart(p.id)
+      toast.info(`«${p.name}» убран из чека`)
+    } else {
+      addToCart(p)
+    }
+  }
+
+  /** Пересчёт строки чека по цене за грамм. */
+  const changeItemPricePerGram = (lineId: string, value: number) => {
+    const perGram = Math.max(0, toNumber(value))
+    setCart((prev) =>
+      prev.map((i) => {
+        if (i.lineId !== lineId) return i
+        const price = round(i.weight * perGram)
+        const isScrap = i.kind === "scrap"
+        return {
+          ...i,
+          price_per_gram: perGram,
+          price,
+          cost: isScrap ? price : i.cost,
+          // цена пересчитана заново — прежняя скидка к ней уже не относится
+          discountSom: 0,
+          discountPercent: 0,
+        }
+      }),
+    )
+  }
+
+  /** Изменение веса строки: имеет смысл для лома. */
+  const changeItemWeight = (lineId: string, value: number) => {
+    const weight = Math.max(0, toNumber(value))
+    setCart((prev) =>
+      prev.map((i) => {
+        if (i.lineId !== lineId) return i
+        const perGram = toNumber(i.price_per_gram)
+        const price = perGram > 0 ? round(weight * perGram) : i.price
+        const isScrap = i.kind === "scrap"
+        return { ...i, weight, price, cost: isScrap ? price : i.cost }
+      }),
+    )
+  }
+
+  const changeItemDiscountPercent = (lineId: string, percentVal: number) => {
+    const validPct = Math.min(100, Math.max(0, percentVal || 0))
+    setCart((prev) =>
+      prev.map((i) => {
+        if (i.lineId !== lineId) return i
+        const discountInSom = (i.price * validPct) / 100
+        return { ...i, discountPercent: validPct, discountSom: Math.round(discountInSom) }
+      }),
+    )
+  }
+
+  const changeItemDiscountSom = (lineId: string, somVal: number) => {
+    setCart((prev) =>
+      prev.map((i) => {
+        if (i.lineId !== lineId) return i
+        const validSom = Math.min(i.price, Math.max(0, somVal || 0))
+        const pct = i.price > 0 ? (validSom / i.price) * 100 : 0
+        return { ...i, discountSom: validSom, discountPercent: Number(pct.toFixed(1)) }
+      }),
+    )
+  }
+
+  const removeItem = (lineId: string) => setCart((prev) => prev.filter((i) => i.lineId !== lineId))
+
+  const handleReset = () => {
+    checkoutAttempt.current = null
+    setCart([])
+    setBonusUsed("")
+    setCustomerName("")
+    setCustomerPhone("")
+    setCustomerId(null)
+    setPayment("cash")
+    setCreditDueDate(dateAfterDays(30))
+    setReceiptType(initialReceiptType(defaultReceiptType))
+    setQuery("")
+    if (!onlineOnly) localStorage.removeItem(cartStorageKey)
+    toast.info("Чек полностью сброшен")
+  }
+
+  const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0)
+  
+  const itemsSubtotalAfterItemDiscounts = cart.reduce((s, i) => {
+    const discountPerItem = i.discountSom ?? ((i.price * (i.discountPercent || 0)) / 100)
+    const effectiveUnitPrice = Math.max(0, i.price - discountPerItem)
+    return s + effectiveUnitPrice * i.quantity
+  }, 0)
+
+  const totalDiscountAmount = subtotal - itemsSubtotalAfterItemDiscounts
+  const overallDiscountPercent = subtotal > 0 ? (totalDiscountAmount / subtotal) * 100 : 0
+
+  const bonusNum = showBonus ? Math.min(Number(bonusUsed) || 0, itemsSubtotalAfterItemDiscounts) : 0
+  const total = Math.max(0, itemsSubtotalAfterItemDiscounts - bonusNum)
+  const cartCost = cart.reduce((s, i) => s + i.cost * i.quantity, 0)
+  const bonusEarned = Math.round(Math.max(0, total - cartCost) * (Number(profile.bonus_rate ?? 2) / 100))
+
+  const lossItems = cart.filter((i) => {
+    if (i.kind === "scrap") return false
+    const disc = i.discountSom ?? ((i.price * (i.discountPercent || 0)) / 100)
+    const eff = i.price - disc
+    return eff < i.cost
+  })
+  
+  const lossAmount = cart.reduce((s, i) => {
+    if (i.kind === "scrap") return s
+    const disc = i.discountSom ?? ((i.price * (i.discountPercent || 0)) / 100)
+    const eff = i.price - disc
+    return eff < i.cost ? s + (i.cost - eff) * i.quantity : s
+  }, 0) + (total < cartCost ? cartCost - total : 0)
+  
+  const hasLoss = lossAmount > 0
+
+  const doCheckout = async () => {
+    if (checkoutBusy.current) return
+    checkoutBusy.current = true
+    setConfirmLoss(false)
+    setSubmitting(true)
+    try {
+      const checkoutPayload = {
+        items: cart.map((item) => {
+          const disc = item.discountSom ?? ((item.price * (item.discountPercent || 0)) / 100)
+          const { lineId: _lineId, discountPercent: _dp, discountSom: _ds, ...rest } = item
+          return { ...rest, price: Math.max(0, item.price - disc) }
+        }),
+        discount: totalDiscountAmount,
+        bonus_used: bonusNum,
+        payment_method: payment,
+        credit_due_date: payment === "credit" ? creditDueDate : undefined,
+        amount_cash: payment === "mixed" ? Number(payCash) || 0 : undefined,
+        amount_electronic: payment === "mixed" ? Number(payElectronic) || 0 : undefined,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        customer_id: customerId,
+        receipt_type: receiptType,
+      }
+
+      const usesLocalCheckout = Boolean(onLocalCheckout && payment !== "credit")
+      if (onLocalCheckout && payment !== "credit") {
+        const res = await onLocalCheckout(checkoutPayload)
+        toast.success(`Продажа записана локально: ${formatSom(res.sale?.final_price || total)}`, {
+          description: "Ожидает подтверждения сервера. При конфликте с другой продажей приложение сообщит об этом.",
+        })
+      } else {
+        checkoutAttempt.current = getClientOperationAttempt(checkoutAttempt.current, checkoutPayload)
+        const res = await checkout({
+          ...checkoutPayload,
+          client_op_id: checkoutAttempt.current.clientOpId,
+        })
+        toast.success(`Продажа оформлена: ${formatSom(res.total)}`, {
+          description: showBonus ? `Начислено ${res.bonusEarned} бонусов` : undefined,
+        })
+      }
+      handleReset()
+      // Local-first checkout already updates IndexedDB and React state. Avoid a server refresh,
+      // which can replace the POS shell with a network error when connectivity drops.
+      if (!usesLocalCheckout) startTransition(() => router.refresh())
+    } catch (e) {
+      console.error("[kassa] checkout error:", e)
+      toast.error(e instanceof Error ? e.message : "Ошибка оформления продажи")
+    } finally {
+      checkoutBusy.current = false
+      setSubmitting(false)
+    }
+  }
+
+  const submit = () => {
+    if (cart.length === 0) return
+    if (!receiptType) {
+      toast.error("Выберите тип чека: фискальный или нефискальный")
+      return
+    }
+    if (payment === "credit" && !customerId) {
+      toast.error("Для продажи в долг выберите клиента из списка")
+      return
+    }
+    if (payment === "credit" && creditDueDate < dateAfterDays(0)) {
+      toast.error("Срок оплаты не может быть в прошлом")
+      return
+    }
+    if (payment === "credit" && !navigator.onLine) {
+      toast.error("Продажа в долг требует подключения к интернету")
+      return
+    }
+    // Смешанная оплата: две суммы должны закрывать чек.
+    if (payment === "mixed") {
+      const paid = (Number(payCash) || 0) + (Number(payElectronic) || 0)
+      if (Math.abs(paid - total) > 1) {
+        toast.error(`Суммы оплаты должны давать ${formatSom(total)}`)
+        return
+      }
+    }
+    if (hasLoss) {
+      setConfirmLoss(true)
+      return
+    }
+    void doCheckout()
+  }
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" })
+    document.documentElement.scrollTo({ top: 0, behavior: "smooth" })
+    document.body.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  return (
+    <div className="relative w-full max-w-full overflow-x-hidden pb-12">
+      {/* Лоадер при оформлении продажи */}
+      {submitting && <PageLoader />}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_420px]">
+        <div className="order-1 min-w-0 w-full lg:col-start-1 lg:row-start-1">
+          <CashPanel
+            sales={sales}
+            operations={cash.operations}
+            presets={cash.presets}
+            ledgerBalance={ledgerBalance}
+            isAdmin={isAdmin}
+            balanceOnly
+          />
+        </div>
+        <div className="order-2 min-w-0 w-full lg:col-start-1 lg:row-start-2">
+          <KassaSearch
+            query={query}
+            setQuery={setQuery}
+            debounced={debounced}
+            results={results}
+            visible={visible}
+            setVisible={setVisible}
+            pageSize={pageSize}
+            trackRef={trackRef}
+            onTrackScroll={onTrackScroll}
+            qtyInCart={qtyInCart}
+            addToCart={addToCart}
+            onToggleCart={toggleCartProduct}
+            minQuery={MIN_QUERY}
+            isAdmin={isAdmin}
+          />
+        </div>
+        <div className="order-3 z-10 w-full min-w-0 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1 lg:row-span-3">
+          <KassaCart
+            cart={cart}
+            isMobile={isMobile}
+            isCartOpenMobile={isCartOpenMobile}
+            setIsCartOpenMobile={setIsCartOpenMobile}
+            hasLoss={hasLoss}
+            lossAmount={lossAmount}
+            lossItems={lossItems}
+            removeItem={removeItem}
+            products={products}
+            changeItemPricePerGram={changeItemPricePerGram}
+            changeItemWeight={changeItemWeight}
+            scrapRateOf={(metal: string) => scrapRateOf(rateMap, metal)}
+            changeItemDiscountSom={changeItemDiscountSom}
+            changeItemDiscountPercent={changeItemDiscountPercent}
+            customers={clients}
+            customerName={customerName}
+            setCustomerName={setCustomerName}
+            customerPhone={customerPhone}
+            setCustomerPhone={setCustomerPhone}
+            customerId={customerId}
+            setCustomerId={setCustomerId}
+            showBonus={showBonus}
+            bonusUsed={bonusUsed}
+            setBonusUsed={setBonusUsed}
+            payment={payment}
+            receiptType={receiptType}
+            setReceiptType={setReceiptType}
+            creditDueDate={creditDueDate}
+            setCreditDueDate={setCreditDueDate}
+            payCash={payCash}
+            setPayCash={setPayCash}
+            payElectronic={payElectronic}
+            setPayElectronic={setPayElectronic}
+            isAdmin={isAdmin}
+            setPayment={(v) => setPayment(v ?? "")}
+            subtotal={subtotal}
+            totalDiscountAmount={totalDiscountAmount}
+            overallDiscountPercent={overallDiscountPercent}
+            bonusNum={bonusNum}
+            total={total}
+            bonusEarned={bonusEarned}
+            submitting={submitting}
+            submit={submit}
+            handleReset={handleReset}
+          />
+        </div>
+        <div className="order-4 min-w-0 w-full lg:col-start-1 lg:row-start-3">
+          <DeferredSalesHistory
+            sales={sales}
+            returns={returns}
+            products={products}
+            canSeeProfit={canSeeProfit}
+            canReturn
+            allowOffline={!onlineOnly}
+            sellers={sellers}
+            onReturned={refreshAfterReturn}
+          />
+        </div>
+      </div>
+
+      <KassaLossModal
+        isOpen={confirmLoss}
+        lossAmount={lossAmount}
+        onClose={() => setConfirmLoss(false)}
+        onConfirm={() => void doCheckout()}
+      />
+
+      {showScrollTop && (
+        <Button
+          onClick={scrollToTop}
+          size="icon"
+          className="fixed bottom-6 right-6 z-[50] h-10 w-10 rounded-full shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-75 active:scale-90"
+          aria-label="Наверх"
+        >
+          <ArrowUp className="h-5 w-5" />
+        </Button>
+      )}
+    </div>
+  )
+}

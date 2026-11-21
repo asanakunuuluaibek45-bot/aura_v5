@@ -103,7 +103,7 @@ test("browser PWA connectivity is untouched and native status failures stay offl
 })
 
 test("scanner has its own body portal and hides every other screen/portal while preserving state", () => {
-  const modal = read("components/BarcodeScannerModal.tsx")
+  const modal = read("components/crm/BarcodeScannerModal.tsx")
   assert.match(modal, /return createPortal\(/)
   assert.match(modal, /data-native-scanner-overlay/)
   assert.match(modal, /<\/div>,\s*document.body,/)
@@ -114,17 +114,17 @@ test("scanner has its own body portal and hides every other screen/portal while 
 })
 
 test("offline navigation and inventory mutations stay disabled, while label printing remains available", () => {
-  const nav = read("components/app-nav.tsx")
+  const nav = read("components/crm/app-nav.tsx")
   assert.match(nav, /disabled=\{!online && \(onlineOnly \|\| !isOfflineSection\(item.id\)\)\}/)
   assert.match(nav, /disabled:grayscale/)
-  const stock = read("components/screens/sklad/index.tsx")
+  const stock = read("components/crm/screens/sklad/index.tsx")
   assert.match(stock, /disabled=\{!online\} onClick=\{onAdd\}/)
   assert.match(stock, /mutationsDisabled=\{!online\}/)
   assert.match(stock, /disabled=\{!online\}\s+onClick=\{\(\) => onEdit\(p\)\}/)
   assert.match(stock, /disabled=\{!online\}\s+onClick=\{\(\) => onDelete\(p\)\}/)
-  const table = read("components/screens/sklad/virtualized-sklad-table.tsx")
+  const table = read("components/crm/screens/sklad/virtualized-sklad-table.tsx")
   assert.equal((table.match(/disabled=\{mutationsDisabled\}/g) || []).length, 2)
   assert.match(table, /onClick=\{\(\) => onPrint\(product\)\}/)
-  assert.match(read("components/pwa-provider.tsx"), /return startNativeConnectivity\(\)/)
+  assert.match(read("components/shared/pwa-provider.tsx"), /return startNativeConnectivity\(\)/)
   assert.doesNotMatch(read("native/app/native-crm.tsx"), /Network\.addListener/)
 })

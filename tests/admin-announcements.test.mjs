@@ -56,7 +56,7 @@ test("publish and archive RPCs write audit records in the same transaction", () 
 
 test("announcement APIs enforce server-side roles and the client uses one feed-view update", () => {
   const actions = readFileSync(new URL("../app/actions/admin-announcements.ts", import.meta.url), "utf8");
-  const panel = readFileSync(new URL("../components/announcements/user-announcements-panel.tsx", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("../components/crm/announcements/user-announcements-panel.tsx", import.meta.url), "utf8");
   assert.match(actions, /publishPlatformAnnouncement[\s\S]*?requireSuperAdminContext\(\)/);
   assert.match(actions, /archivePlatformAnnouncement[\s\S]*?requireSuperAdminContext\(\)/);
   assert.match(actions, /getUserAnnouncementFeed[\s\S]*?requireShopContext\(\)/);

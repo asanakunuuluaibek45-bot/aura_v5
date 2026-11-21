@@ -1,4 +1,4 @@
-import { StoreNotificationsPage } from "@/components/notifications/StoreNotificationsPage"
+import { StoreNotificationsPage } from "@/components/crm/notifications/StoreNotificationsPage"
 import { requireSuperAdminPageAccess } from "@/lib/admin/require-page-access"
 import { getPlatformShopDirectory } from "@/app/actions/superadmin"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"

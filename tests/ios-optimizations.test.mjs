@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL("..", import.meta.url))
 const read = (path) => readFileSync(join(root, path), "utf8")
 
 test("iOS scanner prefers native ML Kit before asking the WebView for a camera stream", () => {
-  const modal = read("components/BarcodeScannerModal.tsx")
+  const modal = read("components/crm/BarcodeScannerModal.tsx")
   const nativeBranch = modal.indexOf("if (canUseNativeScanner())")
   const webCameraFallback = modal.indexOf("navigator.mediaDevices?.getUserMedia")
 
@@ -21,8 +21,8 @@ test("iOS scanner prefers native ML Kit before asking the WebView for a camera s
 })
 
 test("the original drawer keeps its profile menu fixed within the iPhone viewport", () => {
-  const nav = read("components/app-nav.tsx")
-  const header = read("components/app-header.tsx")
+  const nav = read("components/crm/app-nav.tsx")
+  const header = read("components/crm/app-header.tsx")
 
   assert.doesNotMatch(nav, /MobileBottomNav/)
   assert.match(nav, /h-\[100dvh\] max-h-\[100dvh\] min-h-0 flex-col/)

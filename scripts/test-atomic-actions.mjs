@@ -178,9 +178,9 @@ test("changed TS/TSX files have no syntax diagnostics", () => {
     "app/actions/sales.ts",
     "app/actions/products.ts",
     "app/actions/clients.ts",
-    "components/screens/kassa/index.tsx",
-    "components/screens/kassa/cash-operation-dialog.tsx",
-    "components/screens/kassa/kassa-scrap.tsx",
+    "components/crm/screens/kassa/index.tsx",
+    "components/crm/screens/kassa/cash-operation-dialog.tsx",
+    "components/crm/screens/kassa/kassa-scrap.tsx",
     "lib/sync/sync-engine.ts",
   ]) {
     const result = ts.transpileModule(readFileSync(new URL(path, root), "utf8"), {

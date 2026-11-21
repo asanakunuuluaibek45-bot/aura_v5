@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
-import { PwaProvider } from "@/components/pwa-provider"
-import { Toaster } from "@/components/ui/sonner"
+import { PwaProvider } from "@/components/shared/pwa-provider"
+import { Toaster } from "@/components/shared/ui/sonner"
 import "./globals.css"
 
 const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })

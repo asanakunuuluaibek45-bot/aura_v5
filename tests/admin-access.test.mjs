@@ -26,7 +26,7 @@ test("admin dashboard does not import store cash or inventory operations", () =>
 });
 
 test("only super_admin gets the admin link; other roles keep the shop control", () => {
-  const header = readFileSync(new URL("../components/app-header.tsx", import.meta.url), "utf8");
+  const header = readFileSync(new URL("../components/crm/app-header.tsx", import.meta.url), "utf8");
   assert.match(header, /profile\.role === "super_admin" \?/);
   assert.match(header, /href="\/admin"/);
   assert.match(header, /fullShopName/);
@@ -41,7 +41,7 @@ test("approved web super_admin lands in Admin while native and ordinary CRM entr
 
 test("system notifications are available inside the separately guarded Admin area", () => {
   const page = readFileSync(new URL("../app/admin/notifications/page.tsx", import.meta.url), "utf8");
-  const nav = readFileSync(new URL("../components/admin/admin-nav.tsx", import.meta.url), "utf8");
+  const nav = readFileSync(new URL("../components/crm/admin/admin-nav.tsx", import.meta.url), "utf8");
   assert.match(page, /await requireSuperAdminPageAccess\(\)/);
   assert.match(page, /<StoreNotificationsPage profile=/);
   assert.match(nav, /href="\/admin\/notifications"/);

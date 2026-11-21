@@ -21,17 +21,17 @@ test("native Capacitor builds use packaged local assets and no production server
 
 test("native app renders the actual PWA, not a separately implemented CRM", () => {
   const page = read("native/app/native-crm.tsx")
-  assert.match(page, /import \{ Dashboard \} from "@\/components\/dashboard"/)
+  assert.match(page, /import \{ Dashboard \} from "@\/components\/crm\/dashboard"/)
   assert.match(page, /<Dashboard/)
   assert.doesNotMatch(page, /NativeInventory|native-inventory|BarcodeScannerModal|localCheckout|openOnlineSection/)
-  const dashboard = read("components/dashboard.tsx")
+  const dashboard = read("components/crm/dashboard.tsx")
   for (const component of ["KassaScreen", "OfflineSkladScreen", "OfflineKabinetScreen", "OfflineRevisionsScreen", "AppHeader", "AppNav"]) {
     assert.ok(dashboard.includes(component))
   }
   assert.match(dashboard, /onLocalCheckout=/)
   assert.match(read("native/app/layout.tsx"), /from "..\/..\/app\/layout"/)
   assert.match(read("native/app/auth/login/page.tsx"), /app\/auth\/login\/page/)
-  assert.match(read("components/pwa-provider.tsx"), /NEXT_PUBLIC_BUILD_TARGET === "native"\) return/)
+  assert.match(read("components/shared/pwa-provider.tsx"), /NEXT_PUBLIC_BUILD_TARGET === "native"\) return/)
 })
 
 test("native bootstrap restores identity before network work and retains lifecycle integration", () => {
@@ -58,6 +58,6 @@ test("native scanner still supports Android and iOS hardware with haptic feedbac
   const scanner = read("lib/native-barcode-scanner.ts")
   assert.match(scanner, /Capacitor\.getPlatform\(\) === "ios" \|\| Capacitor\.getPlatform\(\) === "android"/)
   assert.match(scanner, /Haptics\.impact\(\{ style: ImpactStyle\.Light \}\)/)
-  assert.match(read("components/screens/kassa/kassa-search.tsx"), /ProductSearch/)
-  assert.match(read("components/product-search.tsx"), /BarcodeScannerModal/)
+  assert.match(read("components/crm/screens/kassa/kassa-search.tsx"), /ProductSearch/)
+  assert.match(read("components/crm/product-search.tsx"), /BarcodeScannerModal/)
 })

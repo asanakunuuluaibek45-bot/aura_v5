@@ -40,7 +40,7 @@ test("local template keys are isolated by shop, category, and label size", () =>
   assert.notEqual(a, getLabelTemplateStorageKey("shop-a", "Кольца", "large"))
   assert.throws(() => getLabelTemplateStorageKey("", "Кольца", "small"), /магазин/)
 
-  const localStorageSource = read("components/screens/sklad/label/data/local-template-storage.ts")
+  const localStorageSource = read("components/crm/screens/sklad/label/data/local-template-storage.ts")
   assert.match(localStorageSource, /getLabelTemplateStorageKey\(shopId, category, sizeKey\)/)
   assert.doesNotMatch(localStorageSource, /label_templates_cache/)
 })
@@ -57,7 +57,7 @@ test("saving all shop categories cannot write to the global or another shop scop
 })
 
 test("reset source is explicit, shop restore is read-only, and global reset is active-shop scoped", () => {
-  const editor = read("components/screens/sklad/label/label-editor.tsx")
+  const editor = read("components/crm/screens/sklad/label/label-editor.tsx")
   const action = read("app/actions/labels.ts")
   assert.match(editor, /Только этот шаблон/)
   assert.match(editor, /Все категории этого магазина/)
@@ -73,8 +73,8 @@ test("reset source is explicit, shop restore is read-only, and global reset is a
 })
 
 test("save and reset show operation-specific pending states and preserve retry on failure", () => {
-  const editor = read("components/screens/sklad/label/label-editor.tsx")
-  const hook = read("components/screens/sklad/label/hooks/use-label-actions.ts")
+  const editor = read("components/crm/screens/sklad/label/label-editor.tsx")
+  const hook = read("components/crm/screens/sklad/label/hooks/use-label-actions.ts")
   assert.match(editor, /Сохраняем…/)
   assert.match(editor, /Сбрасываем…/)
   assert.match(editor, /templateActionLock\.current/)
@@ -106,7 +106,7 @@ test("offline QR sequence cache is saved online, reused offline, and isolated pe
   assert.equal(values.has("shop-b"), false)
 
   const cacheSource = read("lib/shop-seq-cache.ts")
-  const inventory = read("components/screens/sklad/index.tsx")
+  const inventory = read("components/crm/screens/sklad/index.tsx")
   assert.match(cacheSource, /aura_shop_seq_\$\{shopId\}/)
   assert.match(cacheSource, /resolveShopSeqId/)
   assert.match(inventory, /rememberShopSeqId\(p\.shop_id, p\.shop_seq_id\)/)
@@ -121,7 +121,7 @@ test("QR payload refuses a missing or invalid shop number instead of printing a 
 })
 
 test("inventory passes only its own product categories into label-template save", () => {
-  const inventory = read("components/screens/sklad/index.tsx")
+  const inventory = read("components/crm/screens/sklad/index.tsx")
   assert.match(inventory, /products\.map\(\(product\) => product\.category\?\.trim\(\) \|\| "Прочее"\)/)
   assert.match(inventory, /shopCategories=\{shopCategories\}/)
 })

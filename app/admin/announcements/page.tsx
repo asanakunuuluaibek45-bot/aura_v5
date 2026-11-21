@@ -1,4 +1,4 @@
-import { AdminAnnouncementsManager } from "@/components/admin/admin-announcements-manager"
+import { AdminAnnouncementsManager } from "@/components/crm/admin/admin-announcements-manager"
 import { getAdminAnnouncementFeed } from "@/app/actions/admin-announcements"
 import { getPlatformShopDirectory } from "@/app/actions/superadmin"
 import { requireSuperAdminPageAccess } from "@/lib/admin/require-page-access"

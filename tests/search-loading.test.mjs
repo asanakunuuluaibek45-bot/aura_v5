@@ -126,7 +126,7 @@ test("receipt SKU remains authoritative if the catalog's article later changes",
 // Run the actual supplier-loading effect through a small dependency/cleanup
 // harness. This reproduces the old self-cancellation on setLoading(true).
 function supplierHarness() {
-  const dashboard = readFileSync(new URL("../components/dashboard.tsx", import.meta.url), "utf8")
+  const dashboard = readFileSync(new URL("../components/crm/dashboard.tsx", import.meta.url), "utf8")
   const start = dashboard.indexOf('  // This ledger can contain')
   const end = dashboard.indexOf('  // Local-first data', start)
   const effect = dashboard.slice(start, end)
@@ -207,15 +207,15 @@ test("Suppliers stops spinning on error and supports retry", async () => {
 })
 
 test("POS history has one shared searchable input with QR instead of a second modal", () => {
-  const source = readFileSync(new URL("../components/sales-history/index.tsx", import.meta.url), "utf8")
+  const source = readFileSync(new URL("../components/crm/sales-history/index.tsx", import.meta.url), "utf8")
   assert.equal((source.match(/<ProductSearch\b/g) ?? []).length, 1)
   assert.equal(source.includes("ReturnSearchModal"), false)
   assert.match(source, /query: debouncedQuery/)
 })
 
 test("supplier inventory links target/highlight a specific item instead of printing/editing/deleting it inline", () => {
-  const products = readFileSync(new URL("../components/screens/suppliers/supplier-payout/supplier-products.tsx", import.meta.url), "utf8")
-  const warehouse = readFileSync(new URL("../components/screens/sklad/index.tsx", import.meta.url), "utf8")
+  const products = readFileSync(new URL("../components/crm/screens/suppliers/supplier-payout/supplier-products.tsx", import.meta.url), "utf8")
+  const warehouse = readFileSync(new URL("../components/crm/screens/sklad/index.tsx", import.meta.url), "utf8")
   assert.match(products, /Link2/)
   assert.match(products, /onOpenProduct\(p\)/)
   assert.doesNotMatch(products, /Printer|Pencil|Trash2|deleteProduct/)
@@ -228,7 +228,7 @@ test("supplier inventory links target/highlight a specific item instead of print
 test("supplier photo and deletion actions are scoped to admin-owned shop paths", () => {
   const actions = readFileSync(new URL("../app/actions/suppliers.ts", import.meta.url), "utf8")
   const migration = readFileSync(new URL("../supabase/migrations/010_supplier_profiles.sql", import.meta.url), "utf8")
-  const card = readFileSync(new URL("../components/screens/suppliers/supplier-payout/supplier-card.tsx", import.meta.url), "utf8")
+  const card = readFileSync(new URL("../components/crm/screens/suppliers/supplier-payout/supplier-card.tsx", import.meta.url), "utf8")
   assert.match(actions, /requireAdmin\(\)/)
   assert.match(actions, /supplier-profiles\//)
   assert.match(migration, /pg_advisory_xact_lock/)

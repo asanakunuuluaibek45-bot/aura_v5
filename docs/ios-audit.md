@@ -10,7 +10,7 @@ Physical-device acceptance and signed distribution remain required.
 ## One interface and one offline implementation
 
 `native/app/native-crm.tsx` now handles only device identity/bootstrap and
-Capacitor lifecycle; it renders the original `components/dashboard.tsx`.
+Capacitor lifecycle; it renders the original `components/crm/dashboard.tsx`.
 The native target reuses:
 
 - The original root layout, fonts, theme, CSS and notifications.

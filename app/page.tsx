@@ -2,11 +2,11 @@ import Link from "next/link"
 import type { Metadata } from "next"
 import { getPublicShops } from "@/app/actions/shops"
 import { getPublicMarketplaceProducts } from "@/app/actions/store"
-import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
-import { PublicProductGrid } from "@/components/public-marketplace/product-grid"
-import { Button } from "@/components/ui/button"
+import { GoldUchetLogo } from "@/components/shared/brand/golduchet-logo"
+import { PublicProductGrid } from "@/components/public/marketplace/product-grid"
+import { Button } from "@/components/shared/ui/button"
 import { ArrowRight, Store } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 export const revalidate = 300
 

@@ -2,8 +2,8 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { AuraMark } from "@/components/brand/aura-mark"
+import { Button } from "@/components/shared/ui/button"
+import { AuraMark } from "@/components/shared/brand/aura-mark"
 import { AlertTriangle, RefreshCw, LogIn } from "lucide-react"
 
 export default function CrmError({

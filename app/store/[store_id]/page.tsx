@@ -3,9 +3,9 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { getPublicMarketplaceProducts, getPublicShopProducts } from "@/app/actions/store"
 import { isPublicShopEnabled } from "@/app/actions/shops"
-import { PublicProductGrid } from "@/components/public-marketplace/product-grid"
-import { AuraMark } from "@/components/brand/aura-mark"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { PublicProductGrid } from "@/components/public/marketplace/product-grid"
+import { AuraMark } from "@/components/shared/brand/aura-mark"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 type Params = { store_id: string }
 

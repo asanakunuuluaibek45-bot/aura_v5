@@ -7,7 +7,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 test("the users page and all account mutations are guarded as platform-admin operations", () => {
   const page = read("../app/admin/users/page.tsx");
   const actions = read("../app/actions/superadmin.ts");
-  const nav = read("../components/admin/admin-nav.tsx");
+  const nav = read("../components/crm/admin/admin-nav.tsx");
 
   assert.match(page, /await requireSuperAdminPageAccess\(\)/);
   assert.match(page, /getPlatformUsers\(\)/);
@@ -18,7 +18,7 @@ test("the users page and all account mutations are guarded as platform-admin ope
 });
 
 test("user management exposes role, name, phone, access status and shop assignment", () => {
-  const component = read("../components/admin/admin-users-directory.tsx");
+  const component = read("../components/crm/admin/admin-users-directory.tsx");
   const migration = read("../supabase/migrations/016_platform_admin_management.sql");
 
   assert.match(component, /Изменить данные/);
@@ -38,7 +38,7 @@ test("user management exposes role, name, phone, access status and shop assignme
 
 test("account deletion preserves business history and protects the last owner", () => {
   const migration = read("../supabase/migrations/016_platform_admin_management.sql");
-  const component = read("../components/admin/admin-users-directory.tsx");
+  const component = read("../components/crm/admin/admin-users-directory.tsx");
 
   assert.match(migration, /public\.sales WHERE seller_id = _user_id/);
   assert.match(migration, /public\.products WHERE created_by = _user_id/);
@@ -54,7 +54,7 @@ test("account deletion preserves business history and protects the last owner", 
 
 test("shop deletion is transactional, retains disabled user identities and protects the global shop", () => {
   const migration = read("../supabase/migrations/016_platform_admin_management.sql");
-  const component = read("../components/admin/admin-shop-management.tsx");
+  const component = read("../components/crm/admin/admin-shop-management.tsx");
   const action = read("../app/actions/superadmin.ts");
 
   assert.match(migration, /public\.superadmin_delete_shop/);
