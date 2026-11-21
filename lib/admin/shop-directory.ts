@@ -9,6 +9,10 @@ export type AdminShopSummary = {
   created_at: string | null
 }
 
+export function isGlobalAdminShop(shopId: string, globalShopId: string | null | undefined): boolean {
+  return Boolean(globalShopId && shopId === globalShopId)
+}
+
 type ShopDirectorySource = {
   shop_id: string
   shop_name: string | null

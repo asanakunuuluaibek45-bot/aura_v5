@@ -95,6 +95,8 @@ export async function updateShopBilling(input: UpdateShopBillingInput): Promise<
   })
   if (error) throw new Error(`Не удалось обновить биллинг: ${error.message}`)
   revalidatePath("/crm")
+  revalidatePath("/admin/shops")
+  revalidatePath(`/admin/shops/${encodeURIComponent(input.shop_id)}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +121,8 @@ export async function setShopFrozen(shopId: string, frozen: boolean): Promise<vo
     )
   }
   revalidatePath("/crm")
+  revalidatePath("/admin/shops")
+  revalidatePath(`/admin/shops/${encodeURIComponent(shopId)}`)
 }
 
 // ---------------------------------------------------------------------------

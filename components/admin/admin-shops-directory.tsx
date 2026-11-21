@@ -5,12 +5,17 @@ import { useMemo, useState } from "react"
 import { Search, Store } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { filterAdminShopDirectory, type AdminShopSummary } from "@/lib/admin/shop-directory"
 import { SUBSCRIPTION_STATUS_LABELS } from "@/lib/types"
 
-export function AdminShopsDirectory({ shops }: { shops: AdminShopSummary[] }) {
+export function AdminShopsDirectory({
+  shops,
+  globalShopId,
+}: {
+  shops: AdminShopSummary[]
+  globalShopId: string | null
+}) {
   const [query, setQuery] = useState("")
   const filteredShops = useMemo(
     () => filterAdminShopDirectory(shops, query),
@@ -23,17 +28,12 @@ export function AdminShopsDirectory({ shops }: { shops: AdminShopSummary[] }) {
         <div>
           <h1 className="font-serif text-3xl tracking-tight">Магазины</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Список и основные сведения. Управляющие действия в этом разделе отключены.
+            Мультитенантное управление и биллинг магазинов.
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:items-end">
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            {filteredShops.length} из {shops.length}
-          </p>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/crm/stores">Выбрать магазин для работы в CRM</Link>
-          </Button>
-        </div>
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          {filteredShops.length} из {shops.length}
+        </p>
       </div>
 
       <label className="relative block max-w-xl">
@@ -96,7 +96,12 @@ export function AdminShopsDirectory({ shops }: { shops: AdminShopSummary[] }) {
                           </p>
                         </div>
                       </div>
-                      <Badge variant={statusVariant}>{statusLabel}</Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        {shop.shop_id === globalShopId && (
+                          <Badge variant="secondary">Глобальный магазин</Badge>
+                        )}
+                        <Badge variant={statusVariant}>{statusLabel}</Badge>
+                      </div>
                     </div>
                     <div className="mt-auto flex items-center justify-between border-t border-border pt-3 text-sm">
                       <span className="text-muted-foreground">Участников</span>

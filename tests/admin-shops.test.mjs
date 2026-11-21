@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   filterAdminShopDirectory,
+  isGlobalAdminShop,
   toAdminShopDirectory,
 } from "../lib/admin/shop-directory.ts";
 
@@ -41,15 +42,29 @@ test("shop search matches names and IDs without changing the source list", () =>
   assert.equal(shops.length, 2);
 });
 
-test("shop pages and data action are guarded and read-only", () => {
+test("global shop identity is exact and does not match an unknown ID", () => {
+  assert.equal(isGlobalAdminShop("global-shop", "global-shop"), true);
+  assert.equal(isGlobalAdminShop("tenant-shop", "global-shop"), false);
+  assert.equal(isGlobalAdminShop("global-shop", null), false);
+});
+
+test("shop cards open guarded Admin details with billing controls, not CRM links", () => {
   const action = readFileSync(new URL("../app/actions/superadmin.ts", import.meta.url), "utf8");
   const detail = readFileSync(new URL("../app/admin/shops/[shopId]/page.tsx", import.meta.url), "utf8");
   const directory = readFileSync(new URL("../components/admin/admin-shops-directory.tsx", import.meta.url), "utf8");
+  const management = readFileSync(new URL("../components/admin/admin-shop-management.tsx", import.meta.url), "utf8");
 
   assert.match(action, /getPlatformShopDirectory[\s\S]*?requireSuperAdmin\(\)/);
+  assert.match(action, /export async function updateShopBilling[\s\S]*?requireSuperAdmin\(\)/);
+  assert.match(action, /export async function setShopFrozen[\s\S]*?requireSuperAdmin\(\)/);
   assert.match(detail, /await requireSuperAdminPageAccess\(\)/);
   assert.match(detail, /if \(!shop\) notFound\(\)/);
   assert.doesNotMatch(directory, /setShopFrozen|updateShopBilling|impersonateShop|deleteShop/i);
-  assert.match(directory, /href="\/crm\/stores"/);
-  assert.match(directory, /Выбрать магазин для работы в CRM/);
+  assert.match(detail, /getSuperAdminShops/);
+  assert.match(detail, /<AdminShopManagement/);
+  assert.match(management, /updateShopBilling/);
+  assert.match(management, /setShopFrozen/);
+  assert.match(management, /if \(isGlobalShop\) return/);
+  assert.match(management, /window\.confirm/);
+  assert.doesNotMatch(directory, /href="\/crm\/stores"/);
 });
