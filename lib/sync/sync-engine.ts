@@ -15,7 +15,7 @@ import {
 } from '../local-db/outbox'
 import { setLocalSaleSyncState } from '../local-db/sale-record'
 import { updateSyncState, resetSyncState, recomputeStaleness } from '../local-db/sync-store'
-import { PERIODIC_SYNC_MS, shouldRunPeriodicSync } from './sync-schedule'
+import { getRealtimeSyncPlan, PERIODIC_SYNC_MS, shouldRunPeriodicSync } from './sync-schedule'
 import type { OutboxItem, TableName } from '../local-db/schema'
 
 interface CursorInfo {
@@ -108,8 +108,9 @@ class SyncEngine {
   private stopped = false
   private listenersBound = false
   private realtimeChannel: any = null
+  private realtimeConnected = false
   private realtimeDebounce: any = null
-  private pendingRealtime = false
+  private pendingRealtimeTables = new Set<string>()
 
   constructor() {
     this.bindListeners()
@@ -263,20 +264,28 @@ class SyncEngine {
         channel = channel.on(
           'postgres_changes' as any,
           { event: '*', schema: 'public', table, filter: `shop_id=eq.${shopId}` },
-          () => this.onRealtimeChange()
+          () => this.onRealtimeChange(table)
         )
       }
       this.realtimeChannel = channel.subscribe((status: string) => {
-        if (status === 'SUBSCRIBED') this.triggerSync()
+        if (status === 'SUBSCRIBED') {
+          this.realtimeConnected = true
+          this.triggerSync()
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          this.realtimeConnected = false
+        }
       })
     } catch (err) {
+      this.realtimeConnected = false
       console.warn('[Sync] Realtime unavailable, falling back to polling:', err)
     }
   }
 
   private stopRealtime() {
+    this.realtimeConnected = false
     if (this.realtimeDebounce) clearTimeout(this.realtimeDebounce)
     this.realtimeDebounce = null
+    this.pendingRealtimeTables.clear()
     if (this.realtimeChannel) {
       try {
         createSupabaseClient().removeChannel(this.realtimeChannel)
@@ -285,15 +294,18 @@ class SyncEngine {
     }
   }
 
-  private onRealtimeChange() {
+  private onRealtimeChange(table: string) {
+    this.pendingRealtimeTables.add(table)
     if (this.realtimeDebounce) clearTimeout(this.realtimeDebounce)
     this.realtimeDebounce = setTimeout(() => {
       if (this.stopped || !this.isOnline) return
+      if (this.pendingRealtimeTables.size === 0) return
       if (this.isRunning) {
-        this.pendingRealtime = true
         return
       }
-      this.runDeltaSync()
+      const changedTables = new Set(this.pendingRealtimeTables)
+      this.pendingRealtimeTables.clear()
+      this.runDeltaSync(changedTables)
     }, 400)
   }
 
@@ -305,6 +317,7 @@ class SyncEngine {
         running: this.isRunning,
         stopped: this.stopped,
         visible: typeof document !== 'undefined' && document.visibilityState === 'visible',
+        realtimeConnected: this.realtimeConnected,
       })) {
         this.runDeltaSync()
         this.flushOutbox()
@@ -707,7 +720,7 @@ class SyncEngine {
   }
 
   /** Delta sync: only rows changed since the stored per-table cursor. */
-  public async runDeltaSync() {
+  public async runDeltaSync(changedTables?: ReadonlySet<string>) {
     if (this.isRunning || !this.isOnline || !this.activeShopId || this.stopped) return
 
     // If local data was never fully loaded, a delta would leave permanent gaps.
@@ -721,40 +734,54 @@ class SyncEngine {
     try {
       updateSyncState({ status: 'syncing', currentTask: 'Проверка обновлений в облаке...', scopeShopId: shopId })
 
-      const tables: TableName[] = [
-        'products',
-        'sales',
-        'sale_returns',
-        'cash_operations',
-        'customers',
-        'cash_reason_presets',
-        'metal_rates',
-        'supplier_debt_operations',
-      ]
+      const plan = changedTables
+        ? getRealtimeSyncPlan(changedTables)
+        : {
+            tables: [
+              'products',
+              'sales',
+              'sale_returns',
+              'cash_operations',
+              'customers',
+              'cash_reason_presets',
+              'metal_rates',
+              'supplier_debt_operations',
+            ] as TableName[],
+            syncShopSettings: true,
+            syncProductTombstones: true,
+          }
 
       // Sequential on purpose: keeps request count predictable on weak connections
       // and lets every table persist its own cursor before the next one starts.
       let changed = 0
-      for (const table of tables) {
+      let productTombstonesSynced = false
+      for (const table of plan.tables) {
         if (this.activeShopId !== shopId || this.stopped) return
         const r = await this.pullTable({ table }, { incremental: true })
         changed += r.fetched + r.deleted
         if (table === 'sales' && r.fetched > 0) {
           changed += await trimLocalSales(shopId, LOCAL_SALES_LIMIT)
         }
-        if (table === 'products') {
+        if (table === 'products' && plan.syncProductTombstones) {
           const tombstones = await this.pullProductDeletionTombstones()
           changed += tombstones.deleted
+          productTombstonesSynced = true
         }
       }
 
-      const settingsRes = await withTimeout(
-        (signal) =>
-          supabaseSettingsQuery(shopId, signal),
-        'shop_settings'
-      )
-      const settings = unwrap(settingsRes as any, 'shop_settings')
-      if (settings) await bulkPut('shop_settings', [settings])
+      if (plan.syncProductTombstones && !productTombstonesSynced) {
+        const tombstones = await this.pullProductDeletionTombstones()
+        changed += tombstones.deleted
+      }
+
+      if (plan.syncShopSettings) {
+        const settingsRes = await withTimeout(
+          (signal) => supabaseSettingsQuery(shopId, signal),
+          'shop_settings'
+        )
+        const settings = unwrap(settingsRes as any, 'shop_settings')
+        if (settings) await bulkPut('shop_settings', [settings])
+      }
 
       // Tell mounted screens to re-read local data — without this, new rows landed
       // in IndexedDB but the UI only showed them after a full page reload.
@@ -779,9 +806,10 @@ class SyncEngine {
       this.handlePullError(err, 'Ошибка обновления')
     } finally {
       this.isRunning = false
-      if (this.pendingRealtime && !this.stopped) {
-        this.pendingRealtime = false
-        setTimeout(() => this.runDeltaSync(), 100)
+      if (this.pendingRealtimeTables.size > 0 && !this.stopped) {
+        const pendingTables = new Set(this.pendingRealtimeTables)
+        this.pendingRealtimeTables.clear()
+        setTimeout(() => this.runDeltaSync(pendingTables), 100)
       }
     }
   }
