@@ -102,7 +102,18 @@ export default async function LandingPage() {
       </section>
 
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
-        © {new Date().getFullYear()} GOLDUCHET · app + crm
+        <p>© {new Date().getFullYear()} GOLDUCHET · app + crm</p>
+        <nav aria-label="Юридическая информация" className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2">
+          <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">
+            Конфиденциальность
+          </Link>
+          <Link href="/terms" className="underline underline-offset-4 hover:text-foreground">
+            Условия использования
+          </Link>
+          <a href="mailto:asanakunuuluaibek45@gmail.com" className="underline underline-offset-4 hover:text-foreground">
+            Связаться
+          </a>
+        </nav>
       </footer>
     </main>
   )
