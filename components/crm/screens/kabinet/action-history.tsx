@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, History, Loader2, RefreshCw, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 import { getActionHistoryPage, undoAction } from "@/app/actions/action-history"
-import { ACTION_HISTORY_LIMIT, ACTION_HISTORY_PAGE_SIZE, isRemovalEntity, requiresAdminUndo, type ActionHistoryItem, type UndoActionResult } from "@/lib/action-history"
+import { ACTION_HISTORY_LIMIT, isRemovalEntity, requiresAdminUndo, type ActionHistoryItem, type UndoActionResult } from "@/lib/action-history"
 import { getOutboxPendingCount } from "@/lib/local-db/outbox"
 import { getLocalDB } from "@/lib/local-db/db"
 import { captureUndoBaseline, type UndoLocalBaseline } from "@/lib/local-db/undo-cache"
@@ -14,6 +14,7 @@ import { Badge } from "@/components/shared/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/shared/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/shared/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/shared/ui/dialog"
+import { HelpDisclosure } from "./help-disclosure"
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("ru-RU", {
@@ -157,7 +158,7 @@ export function ActionHistory({
               </button>
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              Последние {ACTION_HISTORY_LIMIT} действий магазина: товары, цены, продажи и касса · время Бишкека
+              Последние {ACTION_HISTORY_LIMIT} действий · время Бишкека
             </p>
           </div>
           {expanded && (
@@ -175,18 +176,20 @@ export function ActionHistory({
         <CardContent id="action-history-content" hidden={!expanded}>
           {expanded && (
             <>
-              <p className="mb-4 text-xs text-muted-foreground">
-                Офлайн-действия появляются после синхронизации. Можно отменить правку карточки или курса,
-                добавление товара, продажу (товары вернутся на склад, деньги уйдут из кассы) и кассовую операцию.
-              </p>
+              <div className="mb-4">
+                <HelpDisclosure label="Пояснение к истории действий">
+                  Офлайн-действия появляются после синхронизации. Можно отменить правку карточки или курса,
+                  добавление товара, продажу (товары вернутся на склад, деньги уйдут из кассы) и кассовую операцию.
+                </HelpDisclosure>
+              </div>
               {!online && (
                 <p role="status" className="mb-3 rounded-lg border border-border bg-muted/40 p-3 text-sm">
                   Нет подключения. Отмена доступна только онлайн.
                 </p>
               )}
               {error && <p role="alert" className="mb-3 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-              <div className="max-h-[32rem] overflow-y-auto rounded-lg border border-border" aria-busy={loading}>
-                <Table className="min-w-[660px]">
+              <div className="hidden max-h-[32rem] overflow-y-auto rounded-lg border border-border md:block" aria-busy={loading}>
+                <Table className="w-full table-fixed">
                   <TableHeader>
                     <TableRow className="bg-muted/40">
                       <TableHead className="px-3">Время</TableHead>
@@ -207,9 +210,18 @@ export function ActionHistory({
                         <TableCell className="px-3 align-top font-mono text-xs">
                           <time dateTime={row.created_at}>{formatTime(row.created_at)}</time>
                         </TableCell>
-                        <TableCell className="max-w-40 whitespace-normal align-top">{row.employee_name}</TableCell>
-                        <TableCell className="min-w-64 max-w-lg whitespace-normal align-top">
-                          {row.description}
+                        <TableCell className="w-[18%] whitespace-normal break-words align-top">{row.employee_name}</TableCell>
+                        <TableCell className="w-[42%] whitespace-normal break-words align-top">
+                          {row.description.length > 110
+                            ? (
+                              <HelpDisclosure
+                                label="Показать полное описание действия"
+                                preview={`${row.description.slice(0, 110).trimEnd()}…`}
+                              >
+                                {row.description}
+                              </HelpDisclosure>
+                            )
+                            : row.description}
                         </TableCell>
                         <TableCell className="px-3 align-top">
                           <div className="flex flex-wrap items-center gap-2">
@@ -233,12 +245,64 @@ export function ActionHistory({
                   </TableBody>
                 </Table>
               </div>
+              <div className="space-y-3 md:hidden" aria-busy={loading}>
+                {rows.length === 0 ? (
+                  <div className="rounded-lg border border-border px-3 py-8 text-center text-sm text-muted-foreground">
+                    {loading ? "Загрузка истории…" : error ? "История недоступна" : "Изменений пока нет"}
+                  </div>
+                ) : rows.map((row) => (
+                  <article key={row.id} className="min-w-0 rounded-xl border border-border p-3">
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <time className="font-mono text-[11px] text-muted-foreground" dateTime={row.created_at}>
+                          {formatTime(row.created_at)}
+                        </time>
+                        <p className="mt-1 break-words text-xs font-medium">{row.employee_name}</p>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={`shrink-0 ${row.status === "undone" ? "text-muted-foreground" : "bg-primary/10 text-primary"}`}
+                      >
+                        {row.status === "undone" ? "Отменено" : "Выполнено"}
+                      </Badge>
+                    </div>
+                    <div className="mt-3">
+                      {row.description.length > 110
+                        ? (
+                          <HelpDisclosure
+                            label="Показать полное описание действия"
+                            preview={`${row.description.slice(0, 110).trimEnd()}…`}
+                          >
+                            {row.description}
+                          </HelpDisclosure>
+                        )
+                        : <p className="break-words text-sm leading-relaxed">{row.description}</p>}
+                    </div>
+                    {row.undone_at && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">Отменено: {formatTime(row.undone_at)}</p>
+                    )}
+                    {row.status === "active" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 w-full"
+                        disabled={saving || loading || !online || (requiresAdminUndo(row.entity_type) && !canUndoRates)}
+                        title={requiresAdminUndo(row.entity_type) && !canUndoRates ? "Это действие может отменить только администратор" : undefined}
+                        aria-label={`Отменить: ${row.description}`}
+                        onClick={() => setSelected(row)}
+                      >
+                        <RotateCcw /> Отменить действие
+                      </Button>
+                    )}
+                  </article>
+                ))}
+              </div>
               {(rows.length > 0 || page > 0) && (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs text-muted-foreground">
                     Страница {page + 1} · записей на странице: {rows.length} · максимум {ACTION_HISTORY_LIMIT}
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
                     <Button
                       variant="outline"
                       size="sm"
@@ -263,7 +327,7 @@ export function ActionHistory({
         </CardContent>
       </Card>
       <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !savingRef.current) setSelected(null) }}>
-        <DialogContent showCloseButton={!saving}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg" showCloseButton={!saving}>
           <DialogHeader>
             <DialogTitle>Отменить действие?</DialogTitle>
             <DialogDescription>

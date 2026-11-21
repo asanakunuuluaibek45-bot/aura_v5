@@ -46,7 +46,6 @@ const KabinetScreen = memo(OfflineKabinetScreen)
 const ClientsScreen = memo(dynamic(() => import("@/components/crm/screens/clients").then((mod) => mod.ClientsScreen), { loading: SectionLoading }))
 const SuppliersScreen = memo(dynamic(() => import("@/components/crm/screens/suppliers").then((mod) => mod.SuppliersScreen), { loading: SectionLoading }))
 const StoreNotificationsPage = memo(dynamic(() => import("@/components/crm/notifications/StoreNotificationsPage").then((mod) => mod.StoreNotificationsPage), { loading: SectionLoading }))
-const SuperAdminShopsScreen = memo(dynamic(() => import("@/components/crm/screens/superadmin/shops-panel").then((mod) => mod.SuperAdminShopsScreen), { loading: SectionLoading }))
 const MemoizedKassaScreen = memo(KassaScreen)
 const MemoizedCashPanel = memo(CashPanel)
 
@@ -553,9 +552,6 @@ export function Dashboard({
             viewRole={viewRole}
             profile={profile}
           />
-        )}
-        {activeScreen === "shops" && isSuperAdmin && superAdminShops && (
-          <SuperAdminShopsScreen initialShops={superAdminShops} />
         )}
         {activeScreen === "notifications" && <StoreNotificationsPage key={profile.id} profile={profile} shops={superAdminShops ?? []} />}
         {activeScreen === "announcements" && <StoreNotificationsPage key={profile.id} profile={profile} shops={superAdminShops ?? []} />}
