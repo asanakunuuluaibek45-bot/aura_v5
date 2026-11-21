@@ -932,10 +932,7 @@ CREATE FUNCTION public.current_shop_id() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  SELECT COALESCE(
-    (SELECT impersonated_shop_id FROM public.profiles WHERE id = auth.uid() AND role = 'super_admin'),
-    (SELECT shop_id FROM public.profiles WHERE id = auth.uid())
-  )
+  SELECT shop_id FROM public.profiles WHERE id = auth.uid()
 $$;
 
 
@@ -1886,26 +1883,6 @@ CREATE FUNCTION public.superadmin_get_unread_count() RETURNS bigint
   FROM public.superadmin_notifications
   WHERE public.is_super_admin()
     AND is_read = false;
-$$;
-
-
---
--- Name: superadmin_impersonate(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.superadmin_impersonate(_target_shop_id uuid DEFAULT NULL::uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-BEGIN
-  IF NOT public.is_super_admin() THEN
-    RAISE EXCEPTION 'Forbidden: requires super_admin role';
-  END IF;
-
-  UPDATE public.profiles
-  SET impersonated_shop_id = _target_shop_id
-  WHERE id = auth.uid();
-END;
 $$;
 
 

@@ -45,20 +45,15 @@ const requireProfile = requireApprovedContext
 /**
  * Возвращает АКТИВНЫЙ shop_id так, как его видят RLS-политики.
  *
- * RLS проверяет `shop_id = public.current_shop_id()`, а current_shop_id()
- * это COALESCE(impersonated_shop_id для super_admin, profiles.shop_id).
- * Раньше INSERT писал profile.shop_id: для суперадмина в режиме
- * имперсонации (и для профиля без магазина) значения расходились и Postgres
- * отклонял вставку с "new row violates row-level security policy".
+ * RLS проверяет `shop_id = public.current_shop_id()`, который теперь
+ * возвращает только profiles.shop_id. У суперадмина это назначенный global shop.
  */
 async function requireShopId(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  profile: { shop_id: string | null; impersonated_shop_id?: string | null; role?: string | null },
+  profile: { shop_id: string | null },
   resolvedShopId?: string | null,
 ): Promise<string> {
-  const fallbackShopId =
-    profile.role === "super_admin" ? profile.impersonated_shop_id ?? profile.shop_id : profile.shop_id
-  const shopId = resolvedShopId ?? fallbackShopId
+  const shopId = resolvedShopId ?? profile.shop_id
   if (!shopId) {
     throw new Error("Ваш аккаунт не привязан к магазину — обратитесь к администратору")
   }

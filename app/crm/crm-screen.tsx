@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"
-import type { Profile, ProfileWithImpersonation } from "@/lib/types"
+import type { Profile } from "@/lib/types"
 import { PendingScreen } from "@/components/screens/sklad/add-edit-Product/pending-screen"
 import { Dashboard } from "@/components/dashboard"
 import type { ScreenId } from "@/components/app-nav"
@@ -11,7 +11,7 @@ import { getCabinetData } from "@/app/actions/cabinet"
 import { getCashData } from "@/app/actions/cash"
 import { getMetalRates } from "@/app/actions/rates"
 import { getClients } from "@/app/actions/clients"
-import { getSuperAdminShops, getImpersonatedShop } from "@/app/actions/superadmin"
+import { getSuperAdminShops } from "@/app/actions/superadmin"
 import type { ShopBillingRow } from "@/app/actions/superadmin"
 import { getSupplierDebtData } from "@/app/actions/suppliers"
 import { getOwnShopPublicState } from "@/app/actions/shops"
@@ -28,7 +28,7 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
 
   // Любой пользователь (включая основателя магазина) должен быть подтверждён суперадмином.
   // Авто-подтверждение намеренно отключено в v18.
-  const typed = profile as ProfileWithImpersonation | null
+  const typed = profile as Profile | null
 
   // Если профиль не подтверждён — показываем экран ожидания, не вызывая никаких action-функций.
   if (!typed || typed.status !== "approved" || !typed.role) {
@@ -62,9 +62,9 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
   // История долга поставщиков не ограничена по размеру. Загружаем её только
   // при первом открытии соответствующего раздела, а не при старте кассы.
   // Оборачиваем в try/catch: если сессия устарела или профиль изменился между запросами — редиректим.
-  let products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, impersonatedShop, publicStorefrontState
+  let products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, publicStorefrontState
   try {
-    ;[products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, impersonatedShop, publicStorefrontState] =
+    ;[products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, publicStorefrontState] =
       await Promise.all([
         getProducts(),
         getSales(),
@@ -77,7 +77,6 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
           ? getSupplierDebtData()
           : Promise.resolve({ operations: [], suppliers: [], profiles: [] }),
         isSuperAdmin ? getSuperAdminShops() : Promise.resolve([] as ShopBillingRow[]),
-        isSuperAdmin ? getImpersonatedShop() : Promise.resolve(null),
         typed.role === "admin" ? getOwnShopPublicState() : Promise.resolve({ enabled: true, canToggle: false }),
       ])
   } catch (err) {
@@ -108,7 +107,6 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
       email={user.email ?? ""}
       clients={clients!}
       superAdminShops={isSuperAdmin ? superAdminShops : undefined}
-      impersonatedShop={impersonatedShop ?? undefined}
       publicStorefrontState={publicStorefrontState}
     />
   )

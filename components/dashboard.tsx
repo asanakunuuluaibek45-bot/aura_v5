@@ -1,7 +1,7 @@
 "use client"
 
 import { isOfflineSection } from "@/lib/offline-sections"
-import { memo, useMemo, useState, useTransition, useEffect, useRef, useCallback } from "react"
+import { memo, useMemo, useState, useEffect, useRef, useCallback } from "react"
 import dynamic from "next/dynamic"
 import type { Customer, Product, Profile, Role, Sale, SaleReturn } from "@/lib/types"
 import { AppHeader } from "@/components/app-header"
@@ -21,7 +21,6 @@ import {
   type SupplierDebtData,
   type SupplierProfile,
 } from "@/app/actions/suppliers"
-import { impersonateShop } from "@/app/actions/superadmin"
 import { useRouter } from "next/navigation"
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -49,7 +48,6 @@ const SuppliersScreen = memo(dynamic(() => import("@/components/screens/supplier
 const NotificationsPage = memo(dynamic(() => import("@/components/notifications").then((mod) => mod.NotificationsPage), { loading: SectionLoading }))
 const UserAnnouncementsPanel = memo(dynamic(() => import("@/components/announcements/user-announcements-panel").then((mod) => mod.UserAnnouncementsPanel), { loading: SectionLoading }))
 const SuperAdminShopsScreen = memo(dynamic(() => import("@/components/screens/superadmin/shops-panel").then((mod) => mod.SuperAdminShopsScreen), { loading: SectionLoading }))
-const ImpersonationBanner = dynamic(() => import("@/components/screens/superadmin/shops-panel").then((mod) => mod.ImpersonationBanner), { loading: () => null })
 const MemoizedKassaScreen = memo(KassaScreen)
 const MemoizedCashPanel = memo(CashPanel)
 
@@ -128,7 +126,6 @@ export function Dashboard({
   email,
   clients = [],
   superAdminShops,
-  impersonatedShop,
   publicStorefrontState = { enabled: true, canToggle: false },
 }: {
   /** Текущий экран определяется URL-роутом, а не внутренним состоянием. */
@@ -145,7 +142,6 @@ export function Dashboard({
   email: string
   clients?: Customer[]
   superAdminShops?: ShopBillingRow[]
-  impersonatedShop?: { shop_id: string; shop_name: string | null }
   publicStorefrontState?: { enabled: boolean; canToggle: boolean }
 }) {
   const router = useRouter()
@@ -190,20 +186,14 @@ export function Dashboard({
   const canSeePurchasePrice = viewRole === "admin" || viewRole === "super_admin"
   const isAdmin = viewRole === "admin" || viewRole === "super_admin"
   const isSuperAdmin = profile.role === "super_admin"
-  const isImpersonating = isSuperAdmin && Boolean(impersonatedShop?.shop_id)
-  const activeShopId = impersonatedShop?.shop_id ?? profile.shop_id ?? null
+  const activeShopId = profile.shop_id
   const [isOnline, setIsOnline] = useState(true)
 
-  const [, startTransition] = useTransition()
-
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true)
-      if (isImpersonating) router.refresh()
-    }
+    const handleOnline = () => setIsOnline(true)
     const handleOffline = () => {
       setIsOnline(false)
-      if (!isImpersonating && !isOfflineSection(activeScreenRef.current)) {
+      if (!isOfflineSection(activeScreenRef.current)) {
         setActiveScreen("kassa")
         window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
         toast.info("Нет интернета — открыта офлайн-касса")
@@ -216,7 +206,7 @@ export function Dashboard({
       window.removeEventListener("online", handleOnline)
       window.removeEventListener("offline", handleOffline)
     }
-  }, [isImpersonating, router])
+  }, [])
 
   useEffect(() => {
     setActiveScreen(screen)
@@ -256,10 +246,10 @@ export function Dashboard({
     }
   }, [activeScreen, isAdmin, supplierDebtLoaded, supplierDebtLoadError])
 
-  // Local-first data is disabled while the super admin views another store.
+  // Local-first data uses the profile's assigned shop, including Super Admin's global shop.
   const localCrm = useLocalCrm({
     profile,
-    enabled: !isImpersonating && Boolean(profile.shop_id),
+    enabled: Boolean(profile.shop_id),
     products,
     sales,
     returns,
@@ -269,9 +259,8 @@ export function Dashboard({
     supplierDebts,
   })
 
-  // Never persist the super-admin's impersonation session for offline startup.
   useEffect(() => {
-    if (profile?.id && !isImpersonating) {
+    if (profile?.id) {
       saveUserSession({
         userId: profile.id,
         email: email || profile.email || undefined,
@@ -279,23 +268,23 @@ export function Dashboard({
         shopId: profile.shop_id || undefined,
       }).catch((err) => console.warn("Failed to persist offline session:", err))
     }
-  }, [profile, email, isImpersonating])
+  }, [profile, email])
 
-  const currentProducts = !isImpersonating && localCrm.isReady ? localCrm.products : products
-  const currentSales = !isImpersonating && localCrm.isReady ? localCrm.sales : sales
+  const currentProducts = localCrm.isReady ? localCrm.products : products
+  const currentSales = localCrm.isReady ? localCrm.sales : sales
   const confirmedSales = useMemo(
     () => currentSales.filter((sale) => sale.sync_status !== "pending" && sale.sync_status !== "rejected"),
     [currentSales],
   )
-  const currentReturns = !isImpersonating && localCrm.isReady ? localCrm.returns : returns
-  const currentCash = !isImpersonating && localCrm.isReady ? localCrm.cash : cash
-  const currentRates = !isImpersonating && localCrm.isReady ? localCrm.rates : rates
-  const currentClients = !isImpersonating && localCrm.isReady ? localCrm.clients : clients
+  const currentReturns = localCrm.isReady ? localCrm.returns : returns
+  const currentCash = localCrm.isReady ? localCrm.cash : cash
+  const currentRates = localCrm.isReady ? localCrm.rates : rates
+  const currentClients = localCrm.isReady ? localCrm.clients : clients
 
   /** Переключение экрана: переход по отдельному URL. */
   const handleScreenChange = useCallback(
     (next: ScreenId) => {
-      if (!navigator.onLine && (isImpersonating || !isOfflineSection(next))) {
+      if (!navigator.onLine && !isOfflineSection(next)) {
         toast.info("Этот раздел доступен только с интернетом")
         return
       }
@@ -303,7 +292,7 @@ export function Dashboard({
       setActiveScreen(next)
       window.history.pushState({ [CRM_HISTORY_KEY]: next }, "", SCREEN_PATHS[next])
     },
-    [isImpersonating],
+    [],
   )
 
   /**
@@ -318,7 +307,7 @@ export function Dashboard({
           ([, path]) => path === window.location.pathname,
         )?.[0]
         if (!next) return
-        if (!navigator.onLine && !isOfflineSection(next) && !isImpersonating) {
+        if (!navigator.onLine && !isOfflineSection(next)) {
           setActiveScreen("kassa")
           window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
           return
@@ -338,7 +327,7 @@ export function Dashboard({
         ([, path]) => path === window.location.pathname,
       )?.[0]
       if (next && next !== "kassa") {
-        if (!navigator.onLine && !isOfflineSection(next) && !isImpersonating) {
+        if (!navigator.onLine && !isOfflineSection(next)) {
           window.history.replaceState({ [CRM_HISTORY_KEY]: "kassa" }, "", SCREEN_PATHS.kassa)
           setActiveScreen("kassa")
           toast.info("Без интернета доступны касса, склад, кабинет и ревизии")
@@ -374,7 +363,7 @@ export function Dashboard({
 
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
-  }, [activeScreen, isImpersonating])
+  }, [activeScreen])
 
   /** «Выйти» — разлогиниваем пользователя и уводим на страницу входа. */
   const handleExitCrm = async () => {
@@ -408,17 +397,6 @@ export function Dashboard({
     backCountRef.current = 0
   }
 
-  const handleExitImpersonation = async () => {
-    try {
-      await impersonateShop(null)
-      toast.success("Вернулись в панель суперадмина")
-      router.push(SCREEN_PATHS.shops)
-      startTransition(() => router.refresh())
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Ошибка")
-    }
-  }
-
   return (
     <div className="flex min-h-svh flex-col bg-background">
       {/* Модал подтверждения выхода из CRM */}
@@ -428,19 +406,9 @@ export function Dashboard({
         onConfirm={handleExitCrm}
       />
 
-      {/* Баннер режима имперсонации — отображается поверх всего */}
-      {isImpersonating && impersonatedShop && (
-        <ImpersonationBanner
-          shopName={impersonatedShop.shop_name}
-          onExit={handleExitImpersonation}
-          onSwitch={() => handleScreenChange("shops")}
-        />
-      )}
-
       <AppHeader
         profile={profile}
-        currentShopName={isImpersonating ? impersonatedShop?.shop_name : profile.shop_name}
-        onlineOnly={isImpersonating}
+        currentShopName={profile.shop_name}
         viewRole={viewRole}
         onChangeViewRole={setViewRole}
         onOpenCabinet={() => handleScreenChange("kabinet")}
@@ -463,7 +431,6 @@ export function Dashboard({
   onChangeViewRole={setViewRole}  
   isSuperAdmin={isSuperAdmin}
   activeShopId={activeShopId}
-  onlineOnly={isImpersonating}
   onNavigate={handleScreenChange}
   onOpenCabinet={() => handleScreenChange("kabinet")} 
   onOpenHelp={openSiteHelp}
@@ -474,18 +441,6 @@ export function Dashboard({
 />
 
         <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 py-6 md:px-6">
-        {isImpersonating && !isOnline ? (
-          <div
-            role="alert"
-            className="mx-auto mt-10 max-w-xl rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 text-center"
-          >
-            <p className="font-semibold text-amber-800 dark:text-amber-300">Нет подключения к интернету</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Просмотр другого магазина работает только онлайн. Локальные данные не используются; подключитесь к сети, чтобы продолжить.
-            </p>
-          </div>
-        ) : (
-          <>
         {activeScreen === "kassa" && (
           <MemoizedKassaScreen
             key={activeShopId ?? "no-shop"}
@@ -498,10 +453,9 @@ export function Dashboard({
             ledgerBalance={isOnline ? cash.ledgerBalance : null}
             rates={currentRates}
             clients={currentClients}
-            onlineOnly={isImpersonating}
             shopId={activeShopId}
             defaultReceiptType={cabinet.defaultReceiptType}
-            onLocalCheckout={isImpersonating ? undefined : localCrm.localCheckout}
+            onLocalCheckout={localCrm.localCheckout}
           />
         )}
         {activeScreen === "money" && (
@@ -518,7 +472,7 @@ export function Dashboard({
             products={currentProducts}
             canSeePurchasePrice={canSeePurchasePrice}
             isAdmin={isAdmin}
-            isShopAdmin={profile.role === "admin" && !isImpersonating}
+            isShopAdmin={profile.role === "admin"}
             storeId={profile.shop_id ?? ""}
             publicEnabled={publicStorefrontState.enabled}
             canManagePublicStorefront={publicStorefrontState.canToggle}
@@ -530,10 +484,10 @@ export function Dashboard({
             sales={confirmedSales}
             canSeePurchasePrice={canSeePurchasePrice}
             isAdmin={isAdmin}
-            allowOffline={!isImpersonating}
-            onProductSaved={!isImpersonating ? localCrm.cacheSavedProduct : undefined}
-            onProductDeleted={!isImpersonating ? localCrm.cacheDeletedProduct : undefined}
-            onOfflineDeleteProduct={!isImpersonating ? localCrm.localDeleteProduct : undefined}
+            allowOffline
+            onProductSaved={localCrm.cacheSavedProduct}
+            onProductDeleted={localCrm.cacheDeletedProduct}
+            onOfflineDeleteProduct={localCrm.localDeleteProduct}
             focusProduct={supplierInventoryTarget}
             onFocusProductHandled={(productId: string) =>
               setSupplierInventoryTarget((current) => current?.id === productId ? null : current)
@@ -549,7 +503,7 @@ export function Dashboard({
           />
         )}
         {activeScreen === "clients" && (
-          <ClientsScreen clients={currentClients} allowOffline={!isImpersonating} />
+          <ClientsScreen clients={currentClients} allowOffline />
         )}
         {activeScreen === "suppliers" && isAdmin && (
           supplierDebtLoading && !supplierDebtLoaded ? (
@@ -587,7 +541,7 @@ export function Dashboard({
             returns={currentReturns}
             data={cabinet}
             email={email}
-            syncLocal={!isImpersonating}
+            syncLocal
             historyShopId={activeShopId}
             onActionUndone={localCrm.cacheRestoredAction}
           />
@@ -613,8 +567,6 @@ export function Dashboard({
               Для просмотра объявлений выберите магазин.
             </div>
           )
-        )}
-          </>
         )}
         </main>
       </div>

@@ -30,11 +30,7 @@ export const getRequestCrmContext = cache(async () => {
     return { supabase, user, profile: null, shopId: null }
   }
 
-  const fallbackShopId =
-    profile.role === "super_admin"
-      ? profile.impersonated_shop_id ?? profile.shop_id
-      : profile.shop_id
-  const shopId = await getActiveShopId(supabase, fallbackShopId ?? null)
+  const shopId = await getActiveShopId(supabase, profile.shop_id ?? null)
 
   return { supabase, user, profile, shopId }
 })
