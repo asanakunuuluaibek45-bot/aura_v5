@@ -20,7 +20,7 @@ async function getContext() {
   // 2. Селективный запрос профиля
   const { data: profile } = await supabase
     .from("profiles")
-    .select("shop_id, impersonated_shop_id, role, status")
+    .select("shop_id, role, status")
     .eq("id", user.id)
     .single()
 
@@ -28,10 +28,8 @@ async function getContext() {
     throw new Error("Аккаунт не подтверждён")
   }
 
-  const shopId =
-    profile.role === "super_admin"
-      ? profile.impersonated_shop_id
-      : profile.shop_id
+  // Super Admin label templates intentionally remain in the shared global scope.
+  const shopId = profile.role === "super_admin" ? null : profile.shop_id
 
   return { supabase, user, profile, shopId }
 }

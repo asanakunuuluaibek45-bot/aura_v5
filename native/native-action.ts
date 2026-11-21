@@ -36,7 +36,10 @@ export function nativeAction<T extends (...args: any[]) => Promise<any>>(
       }
       response = result.data
     }
-    if (!/^(get|find|check|is|touch|generate)/.test(action)) {
+    const refreshLocalData =
+      !/^(get|find|check|is|touch|generate)/.test(action) &&
+      action !== "markAnnouncementFeedViewed"
+    if (refreshLocalData) {
       window.dispatchEvent(new CustomEvent("aura:native_action_complete", {
         detail: { module, action },
       }))

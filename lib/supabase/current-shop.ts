@@ -1,9 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 /**
- * Resolve the store selected by the authenticated database context.
- * For super admins this is the impersonated store; otherwise it is the
- * profile's own store. Keep the profile value as a fallback for older schemas.
+ * Resolve the authenticated profile's own store from the database context.
+ * Super admins stay in their assigned global store; tenant switching is disabled.
  */
 export async function getActiveShopId(
   supabase: SupabaseClient,

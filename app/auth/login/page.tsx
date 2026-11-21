@@ -1,6 +1,8 @@
 "use client"
 
 import { prepareDeviceSignIn, markDeviceSignedIn, createClient } from "@/lib/supabase/client"
+import { Capacitor } from "@capacitor/core"
+import { getPostLoginPath } from "@/lib/auth/post-login-route"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -59,10 +61,12 @@ export default function LoginPage() {
       await markDeviceSignedIn()
 
       // Persist auth session & profile in IndexedDB for offline access.
+      let profileForRoute: { role: string | null; status: string | null } | null = null
       if (data?.user) {
         try {
           const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single()
           if (profile) {
+            profileForRoute = profile
             await saveUserSession({
               userId: data.user.id,
               email: data.user.email,
@@ -77,7 +81,7 @@ export default function LoginPage() {
       }
 
       // Use a full navigation so Next proxy reads the fresh Supabase cookies before loading CRM.
-      window.location.replace("/crm/pos")
+      window.location.replace(getPostLoginPath(profileForRoute, Capacitor.isNativePlatform()))
     } catch (error: unknown) {
       console.error("[v0] Login error:", error)
       // If offline or network error, check if we can restore offline session
@@ -123,7 +127,15 @@ export default function LoginPage() {
           })
         }
       }
-      window.location.assign("/crm/pos")
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) throw userError || new Error("restore_failed")
+      const { data: currentProfile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, status")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (profileError) throw profileError
+      window.location.assign(getPostLoginPath(currentProfile, Capacitor.isNativePlatform()))
     } catch (err) {
       // Сеть «есть», но облако недоступно — пробуем открыть локальную копию.
       const msg = String((err as Error)?.message || "")

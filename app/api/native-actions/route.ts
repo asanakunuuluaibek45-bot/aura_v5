@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireApprovedContext } from "@/lib/supabase/request-context"
 import { isNativeAction } from "@/lib/native-action-contract.mjs"
+import * as adminAnnouncements from "@/app/actions/admin-announcements"
 import * as history from "@/app/actions/action-history"
 import * as article from "@/app/actions/article"
 import * as cabinet from "@/app/actions/cabinet"
@@ -25,7 +26,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const modules = {
-  "action-history": history, article, cabinet, cash, clients, labels,
+  "action-history": history, "admin-announcements": adminAnnouncements, article, cabinet, cash, clients, labels,
   notifications, products, "product-units": productUnits, qr, rates,
   returns, sales, shops, store, superadmin, suppliers, team,
 }

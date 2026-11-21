@@ -5,7 +5,6 @@ import {
   getSuperAdminShops,
   updateShopBilling,
   setShopFrozen,
-  impersonateShop,
   type ShopBillingRow,
 } from "@/app/actions/superadmin"
 import { type SubscriptionStatus, SUBSCRIPTION_STATUS_LABELS } from "@/lib/types"
@@ -34,7 +33,6 @@ import {
   CalendarDays,
   ShieldOff,
   ShieldCheck,
-  Eye,
   RotateCcw,
   Search,
   AlertTriangle,
@@ -44,7 +42,6 @@ import {
   Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
@@ -197,60 +194,14 @@ function BillingDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Баннер режима имперсонации
-// ---------------------------------------------------------------------------
-
-export function ImpersonationBanner({
-  shopName,
-  onExit,
-  onSwitch,
-}: {
-  shopName: string | null
-  onExit: () => void
-  onSwitch?: () => void
-}) {
-  return (
-    <div className="sticky top-0 z-50 flex items-center gap-3 border-b border-orange-500/40 bg-orange-500/10 px-4 py-2.5 backdrop-blur">
-      <Eye className="h-4 w-4 shrink-0 text-orange-600" />
-      <span className="flex-1 text-sm font-medium text-orange-700 dark:text-orange-400">
-        Режим просмотра магазина:{" "}
-        <span className="font-semibold">{shopName ?? "—"}</span>
-        <span className="ml-2 hidden text-xs font-normal sm:inline">· локальная база отключена, данные загружаются онлайн</span>
-      </span>
-      {onSwitch && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 border-orange-500/50 text-xs text-orange-700 hover:bg-orange-500/20 dark:text-orange-400"
-          onClick={onSwitch}
-        >
-          Сменить магазин
-        </Button>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 border-orange-500/50 text-xs text-orange-700 hover:bg-orange-500/20 dark:text-orange-400"
-        onClick={onExit}
-      >
-        <RotateCcw className="mr-1.5 h-3 w-3" />
-        Выйти из просмотра
-      </Button>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Основной экран: список магазинов для суперадмина
 // ---------------------------------------------------------------------------
 
 export function SuperAdminShopsScreen({ initialShops }: { initialShops: ShopBillingRow[] }) {
-  const router = useRouter()
   const [shops, setShops]         = useState<ShopBillingRow[]>(initialShops)
   const [query, setQuery]         = useState("")
   const [editingShop, setEditing] = useState<ShopBillingRow | null>(null)
   const [pending, start]          = useTransition()
-  const [impersonating, setImpersonating] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase()
@@ -285,34 +236,6 @@ export function SuperAdminShopsScreen({ initialShops }: { initialShops: ShopBill
     })
   }
 
-  const handleImpersonate = (shopId: string) => {
-    setImpersonating(shopId)
-    start(async () => {
-      try {
-        await impersonateShop(shopId)
-        toast.success("Переключились в контекст магазина")
-        router.push("/crm/pos")
-        router.refresh()
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Ошибка переключения")
-        setImpersonating(null)
-      }
-    })
-  }
-
-  const handleExitImpersonation = () => {
-    start(async () => {
-      try {
-        await impersonateShop(null)
-        setImpersonating(null)
-        toast.success("Вернулись в панель суперадмина")
-        router.refresh()
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Ошибка")
-      }
-    })
-  }
-
   const totalShops   = shops.length
   const activeShops  = shops.filter((s) => s.subscription_status === "active").length
   const frozenShops  = shops.filter((s) => s.is_frozen || s.subscription_status === "frozen").length
@@ -323,13 +246,6 @@ export function SuperAdminShopsScreen({ initialShops }: { initialShops: ShopBill
 
   return (
     <div className="space-y-5">
-      {impersonating && (
-        <ImpersonationBanner
-          shopName={shops.find((s) => s.shop_id === impersonating)?.shop_name ?? null}
-          onExit={handleExitImpersonation}
-        />
-      )}
-
       {/* Заголовок */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -449,17 +365,6 @@ export function SuperAdminShopsScreen({ initialShops }: { initialShops: ShopBill
                           variant="ghost"
                           size="sm"
                           className="h-7 gap-1 text-xs text-muted-foreground hover:text-primary"
-                          onClick={() => handleImpersonate(shop.shop_id)}
-                          disabled={pending}
-                          title="Войти в контекст магазина"
-                        >
-                          <Eye className="h-3 w-3" />
-                          Просмотр
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 text-xs text-muted-foreground hover:text-primary"
                           onClick={() => setEditing(shop)}
                           disabled={pending}
                           title="Редактировать биллинг"
@@ -546,16 +451,6 @@ export function SuperAdminShopsScreen({ initialShops }: { initialShops: ShopBill
                 </div>
 
                 <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 h-8 gap-1.5 text-xs bg-transparent"
-                    onClick={() => handleImpersonate(shop.shop_id)}
-                    disabled={pending}
-                  >
-                    <Eye className="h-3 w-3" />
-                    Просмотр
-                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

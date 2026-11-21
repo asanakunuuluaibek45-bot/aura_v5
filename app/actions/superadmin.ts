@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import type { SubscriptionStatus } from "@/lib/types"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"
+import { toAdminShopDirectory, type AdminShopSummary } from "@/lib/admin/shop-directory"
 
 // ---------------------------------------------------------------------------
 // Типы (реэкспорт для обратной совместимости импортов)
@@ -70,6 +71,14 @@ export async function getSuperAdminShops(): Promise<ShopBillingRow[]> {
   }))
 }
 
+/** Read-only platform directory. Only approved super_admin data reaches the UI. */
+export async function getPlatformShopDirectory(): Promise<AdminShopSummary[]> {
+  const { supabase } = await requireSuperAdmin()
+  const { data, error } = await supabase.rpc("superadmin_list_shops")
+  if (error) throw new Error(`Не удалось загрузить список магазинов: ${error.message}`)
+  return toAdminShopDirectory((data ?? []) as ShopBillingRow[])
+}
+
 // ---------------------------------------------------------------------------
 // Обновить биллинг магазина
 // ---------------------------------------------------------------------------
@@ -86,6 +95,8 @@ export async function updateShopBilling(input: UpdateShopBillingInput): Promise<
   })
   if (error) throw new Error(`Не удалось обновить биллинг: ${error.message}`)
   revalidatePath("/crm")
+  revalidatePath("/admin/shops")
+  revalidatePath(`/admin/shops/${encodeURIComponent(input.shop_id)}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -110,36 +121,6 @@ export async function setShopFrozen(shopId: string, frozen: boolean): Promise<vo
     )
   }
   revalidatePath("/crm")
-}
-
-// ---------------------------------------------------------------------------
-// Имперсонация: войти в магазин / выйти
-// ---------------------------------------------------------------------------
-
-export async function impersonateShop(shopId: string | null): Promise<void> {
-  const { supabase } = await requireSuperAdmin()
-  const { error } = await supabase.rpc("superadmin_impersonate", {
-    _target_shop_id: shopId,
-  })
-  if (error) throw new Error(`Ошибка переключения магазина: ${error.message}`)
-  revalidatePath("/crm")
-}
-
-// ---------------------------------------------------------------------------
-// Получить текущий impersonated_shop_id суперадмина (для баннера)
-// ---------------------------------------------------------------------------
-
-export async function getImpersonatedShop(): Promise<{ shop_id: string; shop_name: string | null } | null> {
-  const { supabase, profile } = await getRequestCrmContext()
-  if (!profile) return null
-
-  if (!profile?.impersonated_shop_id || profile.role !== "super_admin") return null
-
-  const { data: settings } = await supabase
-    .from("shop_settings")
-    .select("shop_id, shop_name")
-    .eq("shop_id", profile.impersonated_shop_id)
-    .single()
-
-  return settings ? { shop_id: settings.shop_id, shop_name: settings.shop_name } : null
+  revalidatePath("/admin/shops")
+  revalidatePath(`/admin/shops/${encodeURIComponent(shopId)}`)
 }

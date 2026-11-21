@@ -89,10 +89,6 @@ export type ShopSettings = {
 }
 
 /** Профиль с полем имперсонации (только для super_admin). */
-export type ProfileWithImpersonation = Profile & {
-  impersonated_shop_id: string | null
-}
-
 export type Product = {
   id: string
   shop_id: string

@@ -56,6 +56,16 @@ test("native gateway allowlist matches real server exports, rejects prototype/im
   }
 })
 
+test("native announcements expose only the shop-scoped feed and its compact view marker", () => {
+  assert.deepEqual(NATIVE_ACTIONS["admin-announcements"], [
+    "getUserAnnouncementFeed",
+    "markAnnouncementFeedViewed",
+  ])
+  assert.equal(isNativeAction("admin-announcements", "publishPlatformAnnouncement"), false)
+  assert.equal(isNativeAction("admin-announcements", "archivePlatformAnnouncement"), false)
+  assert.match(read("native/native-action.ts"), /action !== "markAnnouncementFeedViewed"/)
+})
+
 test("native gateway rejects missing, invalid and unapproved sessions without invoking any action", async () => {
   const missing = gateway()
   assert.equal((await missing.POST(missing.request(undefined, ""))).status, 401)

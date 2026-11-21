@@ -5,6 +5,7 @@ import type { Profile, Role } from "@/lib/types"
 import { roleLabel } from "@/lib/format"
 import { useOnline } from "@/hooks/use-online"
 import { isOfflineSection } from "@/lib/offline-sections"
+import { shouldHideSuperAdminCrmNavItem } from "@/lib/admin/crm-nav-policy"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -32,6 +33,7 @@ import {
   CircleHelp,
   Eye,
   LayoutGrid,
+  Megaphone,
   PackageCheck,
   Wallet,
   LogOut,
@@ -56,6 +58,7 @@ export type ScreenId =
   | "clients"
   | "shops"
   | "notifications"
+  | "announcements"
   | "suppliers"
 
 export const SCREEN_PATHS: Record<ScreenId, string> = {
@@ -68,6 +71,7 @@ export const SCREEN_PATHS: Record<ScreenId, string> = {
   otchety: "/crm/reports",
   shops: "/crm/stores",
   notifications: "/crm/notifications",
+  announcements: "/crm/announcements",
   suppliers: "/crm/suppliers",
   kabinet: "/crm/cabinet",
 }
@@ -80,6 +84,7 @@ type NavItem = {
   icon: LucideIcon
   adminOnly?: boolean
   superAdminOnly?: boolean
+  shopRequired?: boolean
   group: NavGroup
   description: string
 }
@@ -95,6 +100,7 @@ const ITEMS: NavItem[] = [
   { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
   { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
   { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления GOLDUCHET" },
+  { id: "announcements", label: "Объявления", icon: Megaphone, shopRequired: true, group: "system", description: "Сообщения для вашего магазина" },
   { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
 ]
 
@@ -112,6 +118,7 @@ interface AppNavProps {
   onChangeViewRole?: (role: Role) => void
   isAdmin: boolean
   isSuperAdmin?: boolean
+  activeShopId?: string | null
   onNavigate: (screen: ScreenId) => void
   onOpenCabinet?: () => void
   onOpenHelp?: () => void
@@ -129,6 +136,7 @@ export function AppNav({
   onChangeViewRole,
   isAdmin,
   isSuperAdmin = false,
+  activeShopId = null,
   onNavigate,
   onOpenHelp,
   mobileOpen = false,
@@ -152,11 +160,19 @@ export function AppNav({
   const visibleItems = useMemo(
     () =>
       ITEMS.filter((item) => {
+        if (
+          shouldHideSuperAdminCrmNavItem(
+            item.id,
+            isSuperAdmin,
+            process.env.NEXT_PUBLIC_BUILD_TARGET === "native",
+          )
+        ) return false
         if (item.superAdminOnly) return isSuperAdmin
         if (item.adminOnly) return isAdmin
+        if (item.shopRequired && !activeShopId) return false
         return true
       }),
-    [isAdmin, isSuperAdmin]
+    [activeShopId, isAdmin, isSuperAdmin]
   )
 
   const handleNavigate = (id: ScreenId) => {
