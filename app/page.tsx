@@ -6,6 +6,7 @@ import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
 import { PublicProductGrid } from "@/components/public-marketplace/product-grid"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Store } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export const revalidate = 300
 
@@ -32,6 +33,7 @@ export default async function LandingPage() {
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <GoldUchetLogo className="block w-24 max-w-full sm:w-28" />
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <Button asChild variant="outline" size="sm" className="hidden bg-transparent sm:inline-flex">
             <Link href="/for-shops">Для магазинов</Link>
           </Button>

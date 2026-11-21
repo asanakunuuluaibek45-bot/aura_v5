@@ -32,6 +32,7 @@ import {
 import { NotificationBell } from "@/components/notifications"
 import { StoreNotificationBell } from "@/components/notifications/StoreNotificationBell"
 import { SyncIndicator } from "@/components/sync/sync-indicator"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export function AppHeader({
   profile,
@@ -137,6 +138,7 @@ export function AppHeader({
         <div className="flex-1" />
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <ThemeToggle />
           {onlineOnly ? (
             <Badge variant="outline" className="hidden sm:inline-flex text-[10px] text-primary">
               Только онлайн

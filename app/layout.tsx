@@ -35,7 +35,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem("aura-theme")||"dark";document.documentElement.classList.toggle("dark",t==="dark");document.documentElement.style.colorScheme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",t==="dark"?"#29233d":"#fbfaff");}catch(e){document.documentElement.classList.add("dark")}})();`,
+            __html: `(function(){try{var saved=localStorage.getItem("aura-theme");var dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;var t=saved==="light"||saved==="dark"?saved:(dark?"dark":"light");document.documentElement.classList.toggle("dark",t==="dark");document.documentElement.style.colorScheme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",t==="dark"?"#29233d":"#fbfaff");}catch(e){var fallback=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.classList.toggle("dark",fallback==="dark");document.documentElement.style.colorScheme=fallback;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",fallback==="dark"?"#29233d":"#fbfaff")}})();`,
           }}
         />
       </head>
