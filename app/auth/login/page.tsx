@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { GoogleAuthButton } from "@/components/auth/google-auth-button"
 import { InlineLoader } from "@/components/ui/page-loader"
 import { getSavedUserSession, saveUserSession, type SavedUserSession } from "@/lib/local-db/db"
 import { WifiOff, UserCheck } from "lucide-react"
@@ -173,6 +174,10 @@ export default function LoginPage() {
           </Button>
         </div>
       )}
+
+      <div className="mb-4">
+        <GoogleAuthButton nextPath="/crm/pos" label="Войти через Google" />
+      </div>
 
       <form onSubmit={handleLogin} className="flex flex-col gap-5">
         <div className="grid gap-2">

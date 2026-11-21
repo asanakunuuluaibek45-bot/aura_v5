@@ -21,6 +21,17 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (!userError && user?.app_metadata?.provider === 'google') {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('shop_name, requested_role')
+          .eq('id', user.id)
+          .maybeSingle()
+        if (!profileError && (!profile?.shop_name?.trim() || !profile?.requested_role)) {
+          destination = new URL('/auth/complete-profile', origin)
+        }
+      }
       return NextResponse.redirect(destination)
     }
   }
