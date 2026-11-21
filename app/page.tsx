@@ -1,7 +1,12 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { getPublicShops } from "@/app/actions/shops"
-import { getPublicMarketplaceFacets, getPublicMarketplaceProducts } from "@/app/actions/store"
+import {
+  getPublicMarketplaceFacets,
+  getPublicMarketplacePage,
+  getPublicMarketplaceSettings,
+} from "@/app/actions/store"
+import { createClient } from "@/lib/supabase/server"
 import { GoldUchetLogo } from "@/components/shared/brand/golduchet-logo"
 import { PublicProductGrid } from "@/components/public/marketplace/product-grid"
 import { ShopDirectory } from "@/components/public/marketplace/shop-directory"
@@ -9,7 +14,7 @@ import { Button } from "@/components/shared/ui/button"
 import { ArrowRight, ArrowDown, Sparkles } from "lucide-react"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 
-export const revalidate = 300
+export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "GOLDUCHET — маркетплейс ювелирных магазинов и CRM",
@@ -24,30 +29,46 @@ export const metadata: Metadata = {
 }
 
 export default async function LandingPage() {
-  const [shops, productPage, facets] = await Promise.all([
+  const [shops, settings, signedIn] = await Promise.all([
     getPublicShops(),
-    getPublicMarketplaceProducts(null, 24),
-    getPublicMarketplaceFacets(),
+    getPublicMarketplaceSettings(),
+    (async () => {
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return false
+      try {
+        const supabase = await createClient()
+        const { data } = await supabase.auth.getUser()
+        return Boolean(data.user)
+      } catch {
+        return false
+      }
+    })(),
+  ])
+  const [productPage, facets] = await Promise.all([
+    getPublicMarketplacePage(
+      null,
+      1,
+      settings.productsPerPage,
+      "",
+      {},
+      settings.hideProductsWithoutPhoto,
+    ),
+    getPublicMarketplaceFacets(null, settings.hideProductsWithoutPhoto),
   ])
   const heroProduct = productPage.items[0]
-  const heroImage = heroProduct?.images?.[0] ?? heroProduct?.image_url
+  const heroImage = settings.heroImageUrl ?? heroProduct?.images?.[0] ?? heroProduct?.image_url
 
   return (
     <main className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 px-4 backdrop-blur-xl sm:px-8">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4">
           <GoldUchetLogo className="block w-24 max-w-full sm:w-28" />
-          <span className="hidden text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground md:block">
-            Ювелирный маркетплейс
-          </span>
-          <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button asChild variant="outline" size="sm" className="hidden rounded-full bg-transparent sm:inline-flex">
-            <Link href="/for-shops">Для магазинов</Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="rounded-full">
-            <Link href="/auth/login">Войти</Link>
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle className="h-10 w-10 rounded-full" />
+            {signedIn && (
+              <Button asChild variant="outline" size="sm" className="h-10 rounded-full px-4">
+                <Link href="/auth/login">Войти</Link>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -119,7 +140,13 @@ export default async function LandingPage() {
       </section>
 
       <section id="products" className="mx-auto max-w-7xl scroll-mt-20 px-5 py-14 sm:px-8 sm:py-16">
-        <PublicProductGrid initialPage={productPage} facets={facets} title="Украшения в наличии" />
+        <PublicProductGrid
+          initialPage={productPage}
+          facets={facets}
+          pageSize={settings.productsPerPage}
+          hideProductsWithoutPhoto={settings.hideProductsWithoutPhoto}
+          title="Украшения в наличии"
+        />
       </section>
 
       <section id="shops" className="scroll-mt-20 border-y border-border/60 bg-muted/20">
