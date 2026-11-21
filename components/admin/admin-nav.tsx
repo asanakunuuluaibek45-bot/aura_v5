@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ArrowLeft, LayoutDashboard, Megaphone, ShieldCheck, Store } from "lucide-react"
+import { ArrowLeft, Bell, LayoutDashboard, Megaphone, ShieldCheck, Store } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function AdminNav() {
@@ -10,6 +10,7 @@ export function AdminNav() {
   const onOverview = pathname === "/admin"
   const onShops = pathname.startsWith("/admin/shops")
   const onAnnouncements = pathname.startsWith("/admin/announcements")
+  const onNotifications = pathname.startsWith("/admin/notifications")
 
   return (
     <aside className="flex shrink-0 flex-col border-b border-border bg-card/40 px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
@@ -62,6 +63,19 @@ export function AdminNav() {
         >
           <Megaphone className="h-4 w-4" aria-hidden="true" />
           Объявления
+        </Link>
+        <Link
+          href="/admin/notifications"
+          aria-current={onNotifications ? "page" : undefined}
+          className={cn(
+            "inline-flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
+            onNotifications
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <Bell className="h-4 w-4" aria-hidden="true" />
+          Уведомления
         </Link>
       </nav>
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getAdminRouteDecision } from "../lib/admin/access-policy.ts";
+import { getPostLoginPath } from "../lib/auth/post-login-route.ts";
 
 test("direct admin route access requires an authenticated approved super_admin", () => {
   assert.equal(getAdminRouteDecision(false, null), "redirect-login");
@@ -28,4 +29,19 @@ test("only super_admin gets the admin link; other roles keep the shop control", 
   assert.match(header, /profile\.role === "super_admin" \?/);
   assert.match(header, /href="\/admin"/);
   assert.match(header, /fullShopName/);
+});
+
+test("approved web super_admin lands in Admin while native and ordinary CRM entry stays unchanged", () => {
+  assert.equal(getPostLoginPath({ role: "super_admin", status: "approved" }, false), "/admin");
+  assert.equal(getPostLoginPath({ role: "super_admin", status: "pending" }, false), "/crm/pos");
+  assert.equal(getPostLoginPath({ role: "admin", status: "approved" }, false), "/crm/pos");
+  assert.equal(getPostLoginPath({ role: "super_admin", status: "approved" }, true), "/crm/pos");
+});
+
+test("system notifications are available inside the separately guarded Admin area", () => {
+  const page = readFileSync(new URL("../app/admin/notifications/page.tsx", import.meta.url), "utf8");
+  const nav = readFileSync(new URL("../components/admin/admin-nav.tsx", import.meta.url), "utf8");
+  assert.match(page, /await requireSuperAdminPageAccess\(\)/);
+  assert.match(page, /<NotificationsPage \/>/);
+  assert.match(nav, /href="\/admin\/notifications"/);
 });
