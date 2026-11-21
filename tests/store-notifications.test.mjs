@@ -94,12 +94,12 @@ test("every privileged RPC checks super admin and direct access is revoked", () 
 })
 
 test("routes, bell and menu use Notifications and native actions retain an explicit allowlist", () => {
-  const nav = read("components/app-nav.tsx")
+  const nav = read("components/crm/app-nav.tsx")
   assert.match(nav, /id: "notifications", label: "Уведомления", icon: Bell, group: "system"/)
   assert.doesNotMatch(nav, /id: "announcements", label: "Объявления"/)
   assert.match(read("next.config.mjs"), /source: '\/crm\/announcements', destination: '\/announcements'/)
   assert.match(read("app/(crm)/announcements/page.tsx"), /screen="notifications"/)
-  assert.match(read("components/app-header.tsx"), /<StoreNotificationBell key=\{profile\.id\}/)
+  assert.match(read("components/crm/app-header.tsx"), /<StoreNotificationBell key=\{profile\.id\}/)
   for (const name of NATIVE_ACTIONS["store-notifications"]) {
     assert.match(read("app/actions/store-notifications.ts"), new RegExp(`export async function ${name}\\b`))
     assert.equal(isNativeAction("store-notifications", name), true)

@@ -9,7 +9,7 @@ const action = read("../app/actions/store.ts")
 const nativeContract = read("../lib/native-action-contract.mjs")
 const homePage = read("../app/page.tsx")
 const storePage = read("../app/store/[store_id]/page.tsx")
-const productGrid = read("../components/public-marketplace/product-grid.tsx")
+const productGrid = read("../components/public/marketplace/product-grid.tsx")
 const shopMarketingPage = read("../app/for-shops/page.tsx")
 
 test("marketplace paging only returns visible, in-stock public products", () => {

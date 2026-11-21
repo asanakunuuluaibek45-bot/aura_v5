@@ -1,0 +1,951 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { DecodeHintType, BarcodeFormat } from "@zxing/library"
+import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser"
+import { Button } from "@/components/shared/ui/button"
+import { Input } from "@/components/shared/ui/input"
+import { AlertTriangle, EyeOff, Image as ImageIcon, Keyboard, RefreshCw, X, Zap, ZapOff } from "lucide-react"
+import { playScanBeep } from "@/lib/sound"
+import { parseQrCode } from "@/lib/qr-code"
+import { getCameraPermissionError, readCameraPermissionState } from "@/lib/camera-permission"
+import { toast } from "sonner"
+import {
+  getVideoCoverTransform,
+  getOverlayTrackOpacity,
+  mapVideoPointsToViewport,
+  rectangleCorners,
+  shouldProcessRevisionSku,
+  updateOverlayTrackCache,
+  zxingPointsToPolygon,
+  type OverlayTrack,
+  type ScanPoint,
+} from "@/lib/scanner-overlay"
+import {
+  canUseNativeScanner,
+  ensureNativeCameraPermission,
+  startNativeScan,
+  type NativeScanSession,
+} from "@/lib/native-barcode-scanner"
+
+interface BarcodeScannerProps {
+  onClose: () => void
+  onScan: (code: string) => void
+  continuousScan?: boolean
+  checkedSkus?: Set<string>
+  revisionStats?: { total: number; checked: number; remaining: number }
+}
+
+type OverlayBarcode = {
+  text: string
+  points: ScanPoint[]
+}
+
+type NativeBarcode = {
+  rawValue?: string
+  cornerPoints?: ScanPoint[]
+  boundingBox?: { x: number; y: number; width: number; height: number }
+}
+
+export function BarcodeScannerModal({
+  onClose,
+  onScan,
+  continuousScan = false,
+  checkedSkus,
+  revisionStats,
+}: BarcodeScannerProps) {
+  const onScanRef = useRef(onScan)
+  const onCloseRef = useRef(onClose)
+  const checkedSkusRef = useRef(checkedSkus)
+  const previousRemainingRef = useRef(revisionStats?.remaining ?? 0)
+
+  useEffect(() => {
+    onScanRef.current = onScan
+    onCloseRef.current = onClose
+    checkedSkusRef.current = checkedSkus
+  }, [checkedSkus, onScan, onClose])
+
+  useEffect(() => {
+    if (!revisionStats) return
+    if (
+      revisionStats.total > 0 &&
+      previousRemainingRef.current > 0 &&
+      revisionStats.remaining === 0
+    ) {
+      toast.success("В выбранном списке всё отмечено")
+    }
+    previousRemainingRef.current = revisionStats.remaining
+  }, [revisionStats?.remaining, revisionStats?.total])
+
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
+  const activeStreamRef = useRef<MediaStream | null>(null)
+  const pendingBrowserStreamRef = useRef<MediaStream | null>(null)
+  const controlsRef = useRef<IScannerControls | null>(null)
+  const nativeSessionRef = useRef<NativeScanSession | null>(null)
+  const nativeStopPromiseRef = useRef<Promise<void>>(Promise.resolve())
+  const fileRef = useRef<HTMLInputElement>(null)
+  const closedRef = useRef(false)
+  const continuousCodesRef = useRef(new Map<string, number>())
+  const handledRevisionSkusRef = useRef(new Set<string>())
+  const overlayTracksRef = useRef(new Map<string, OverlayTrack>())
+  const animFrameRef = useRef<number | null>(null)
+
+  const camerasRef = useRef<MediaDeviceInfo[]>([])
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
+  const [deviceIndex, setDeviceIndex] = useState(0)
+  const [facing, setFacing] = useState<"environment" | "user">("environment")
+  const [error, setError] = useState<string | null>(null)
+  const [manual, setManual] = useState("")
+  const [manualMode, setManualMode] = useState(false)
+  const [nativeScannerActive, setNativeScannerActive] = useState(false)
+  const [cameraRetrying, setCameraRetrying] = useState(false)
+  const [canRetryBrowserCamera, setCanRetryBrowserCamera] = useState(false)
+  const [cameraRetrySequence, setCameraRetrySequence] = useState(0)
+
+  // Флаг: действительно ли текущий запущенный трек является селфи-камерой
+  const [isFrontCamera, setIsFrontCamera] = useState(false)
+
+  // Предупреждение о плохо читаемом / перекрытом коде
+  const [isBadQuality, setIsBadQuality] = useState(false)
+  const checksumErrorCountRef = useRef(0)
+
+  // Возможности камеры
+  const [torchAvailable, setTorchAvailable] = useState(false)
+  const [torchOn, setTorchOn] = useState(false)
+  const focusPointRef = useRef<HTMLDivElement>(null)
+
+  const clearOverlay = useCallback(() => {
+    overlayTracksRef.current.clear()
+    const canvas = overlayCanvasRef.current
+    const context = canvas?.getContext("2d")
+    if (canvas && context) context.clearRect(0, 0, canvas.width, canvas.height)
+  }, [])
+
+  const drawOverlay = useCallback((codes: OverlayBarcode[]) => {
+    const canvas = overlayCanvasRef.current
+    const video = videoRef.current
+    if (!canvas || !video || !checkedSkusRef.current) return
+
+    const bounds = canvas.getBoundingClientRect()
+    if (bounds.width <= 0 || bounds.height <= 0) return
+
+    const pixelRatio = window.devicePixelRatio || 1
+    const pixelWidth = Math.round(bounds.width * pixelRatio)
+    const pixelHeight = Math.round(bounds.height * pixelRatio)
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth
+      canvas.height = pixelHeight
+    }
+
+    const context = canvas.getContext("2d")
+    if (!context) return
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    context.clearRect(0, 0, bounds.width, bounds.height)
+
+    if (video.videoWidth <= 0 || video.videoHeight <= 0) return
+    const transform = getVideoCoverTransform(
+      video.videoWidth,
+      video.videoHeight,
+      bounds.width,
+      bounds.height,
+    )
+
+    const now = Date.now()
+    const detections: OverlayTrack[] = codes.map((code) => {
+      const sku = parseQrCode(code.text).sku.trim().toLocaleUpperCase("ru-RU")
+      const key = sku || code.text.trim().toLocaleUpperCase("ru-RU")
+      return { key, text: code.text, points: code.points, lastSeenAt: now }
+    }).filter((track) => track.key && track.points.length >= 2)
+    const tracks = updateOverlayTrackCache(overlayTracksRef.current, detections, now)
+
+    for (const track of tracks) {
+      const sku = parseQrCode(track.text).sku.trim().toLocaleUpperCase("ru-RU")
+      const isChecked = Boolean(sku && checkedSkusRef.current.has(sku))
+      const opacity = getOverlayTrackOpacity(now - track.lastSeenAt)
+      if (opacity <= 0) continue
+      const points = mapVideoPointsToViewport(track.points, transform)
+      const first = points[0]
+
+      context.beginPath()
+      context.moveTo(first.x, first.y)
+      for (let index = 1; index < points.length; index += 1) {
+        context.lineTo(points[index].x, points[index].y)
+      }
+      context.closePath()
+      context.globalAlpha = opacity
+      context.fillStyle = isChecked ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.16)"
+      context.strokeStyle = isChecked ? "#10b981" : "#f59e0b"
+      context.lineWidth = 3
+      context.fill()
+      context.stroke()
+    }
+    context.globalAlpha = 1
+  }, [])
+
+  // Подавление системных исключений ZXing в консоли Next.js / Turbopack
+  useEffect(() => {
+    const originalError = console.error
+    const originalWarn = console.warn
+
+    const filter = (orig: typeof console.error, ...args: unknown[]) => {
+      const msg = typeof args[0] === "string" ? args[0] : ""
+      if (
+        msg.includes("NotFoundException") ||
+        msg.includes("ChecksumException") ||
+        msg.includes("FormatException") ||
+        msg.includes("non-ReaderException")
+      ) {
+        return
+      }
+      orig.apply(console, args)
+    }
+
+    console.error = (...a) => filter(originalError, ...a)
+    console.warn = (...a) => filter(originalWarn, ...a)
+
+    return () => {
+      console.error = originalError
+      console.warn = originalWarn
+    }
+  }, [])
+
+  const stopEverything = useCallback(() => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current)
+      animFrameRef.current = null
+    }
+
+    try {
+      controlsRef.current?.stop()
+    } catch {
+      /* ignore */
+    }
+    controlsRef.current = null
+
+    const nativeSession = nativeSessionRef.current
+    nativeSessionRef.current = null
+    if (nativeSession) {
+      nativeStopPromiseRef.current = nativeSession.stop().catch(() => undefined)
+    }
+
+    const stream = activeStreamRef.current
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        try {
+          track.stop()
+        } catch {
+          /* ignore */
+        }
+      })
+      activeStreamRef.current = null
+    }
+
+    const video = videoRef.current
+    if (video) {
+      try {
+        video.pause()
+      } catch {
+        /* ignore */
+      }
+      video.srcObject = null
+    }
+    clearOverlay()
+    continuousCodesRef.current.clear()
+  }, [clearOverlay])
+
+  const close = useCallback(() => {
+    closedRef.current = true
+    pendingBrowserStreamRef.current?.getTracks().forEach((track) => track.stop())
+    pendingBrowserStreamRef.current = null
+    stopEverything()
+    onCloseRef.current()
+  }, [stopEverything])
+
+  const releaseContinuousScanLock = useCallback(() => {
+    if (!continuousScan) return
+    const now = Date.now()
+    for (const [code, lastSeenAt] of continuousCodesRef.current) {
+      if (now - lastSeenAt > 700) continuousCodesRef.current.delete(code)
+    }
+  }, [continuousScan])
+
+  const handleResult = useCallback(
+    (text: string) => {
+      const clean = text.trim()
+      if (clean.length < 3 || closedRef.current) return
+
+      if (checkedSkusRef.current) {
+        const sku = parseQrCode(clean).sku.trim().toLocaleUpperCase("ru-RU")
+        if (!shouldProcessRevisionSku(sku, checkedSkusRef.current, handledRevisionSkusRef.current)) return
+      }
+
+      if (continuousScan) {
+        const now = Date.now()
+        if (continuousCodesRef.current.has(clean)) {
+          continuousCodesRef.current.set(clean, now)
+          return
+        }
+        continuousCodesRef.current.set(clean, now)
+      } else {
+        closedRef.current = true
+      }
+
+      // «Пик» кассового аппарата при успешном распознавании кода.
+      playScanBeep()
+
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(80)
+      }
+
+      if (!continuousScan) stopEverything()
+      onScanRef.current(clean)
+      if (!continuousScan) onCloseRef.current()
+    },
+    [continuousScan, stopEverything],
+  )
+
+  useEffect(() => {
+    closedRef.current = false
+    return () => {
+      closedRef.current = true
+      pendingBrowserStreamRef.current?.getTracks().forEach((track) => track.stop())
+      pendingBrowserStreamRef.current = null
+    }
+  }, [])
+
+  const toggleTorch = async () => {
+    const nativeSession = nativeSessionRef.current
+    if (nativeSession) {
+      try {
+        setTorchOn(await nativeSession.toggleTorch())
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+
+    const track = activeStreamRef.current?.getVideoTracks()[0]
+    if (!track) return
+    try {
+      const nextState = !torchOn
+      await track.applyConstraints({
+        advanced: [{ torch: nextState } as MediaTrackConstraintSet],
+      })
+      setTorchOn(nextState)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const handleTapToFocus = async (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const marker = focusPointRef.current
+    if (marker) {
+      marker.style.left = `${x}px`
+      marker.style.top = `${y}px`
+      marker.classList.remove("hidden", "animate-ping")
+      void marker.offsetWidth
+      marker.classList.add("animate-ping")
+      window.setTimeout(() => marker.classList.add("hidden"), 1000)
+    }
+
+    const track = activeStreamRef.current?.getVideoTracks()[0]
+    if (!track) return
+
+    const capabilities = track.getCapabilities?.() as Record<string, unknown>
+    if (capabilities?.focusMode) {
+      try {
+        await track.applyConstraints({
+          advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+        })
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const start = async () => {
+      stopEverything()
+      await nativeStopPromiseRef.current
+      if (cancelled || closedRef.current) return
+      setError(null)
+      setIsBadQuality(false)
+      checksumErrorCountRef.current = 0
+      setTorchOn(false)
+      setTorchAvailable(false)
+      setCanRetryBrowserCamera(false)
+
+      if (canUseNativeScanner()) {
+        let permissionGranted = false
+        try {
+          permissionGranted = await ensureNativeCameraPermission()
+        } catch {
+          permissionGranted = false
+        }
+        if (cancelled || closedRef.current) return
+        if (!permissionGranted) {
+          setError("Разрешите доступ к камере в настройках iPhone, чтобы сканировать коды.")
+          return
+        }
+
+        try {
+          setNativeScannerActive(true)
+          const nativeSession = await startNativeScan((results) => {
+            if (cancelled || closedRef.current) return
+            for (const result of results) {
+              handleResult(result.rawValue)
+              if (!continuousScan) break
+            }
+          }, facing)
+          if (cancelled || closedRef.current) {
+            await nativeSession.stop()
+            setNativeScannerActive(false)
+            return
+          }
+          nativeSessionRef.current = nativeSession
+          setTorchAvailable(await nativeSession.isTorchAvailable())
+          return
+        } catch {
+          // Retain the browser scanner as a fallback if ML Kit cannot start.
+          setNativeScannerActive(false)
+        }
+      }
+
+      setNativeScannerActive(false)
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        setError("Браузер не поддерживает камеру или соединение не защищено (HTTPS).")
+        return
+      }
+
+      await new Promise((r) => setTimeout(r, 60))
+      if (cancelled || closedRef.current) return
+
+      const chosen = camerasRef.current[deviceIndex]
+      const constraints: MediaStreamConstraints = {
+        audio: false,
+        video: {
+          ...(chosen?.deviceId
+            ? { deviceId: { exact: chosen.deviceId } }
+            : { facingMode: { ideal: facing } }),
+          width: { ideal: 960, max: 1280 },
+          height: { ideal: 540, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        },
+      }
+
+      let stream = pendingBrowserStreamRef.current
+      if (stream) {
+        pendingBrowserStreamRef.current = null
+      } else {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints)
+        } catch (err) {
+          const name = (err as DOMException)?.name
+          if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+            const permissionState = await readCameraPermissionState(navigator.permissions)
+            setCanRetryBrowserCamera(true)
+            setError(getCameraPermissionError(permissionState))
+          } else {
+            setError(
+              name === "NotFoundError"
+                ? "Камера не найдена на устройстве."
+                : "Не удалось запустить камеру.",
+            )
+          }
+          return
+        }
+      }
+
+      if (cancelled || closedRef.current) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
+
+      activeStreamRef.current = stream
+      const video = videoRef.current
+      if (!video) {
+        stream.getTracks().forEach((t) => t.stop())
+        activeStreamRef.current = null
+        return
+      }
+
+      // Определяем, является ли текущая активная камера действительно фронтальной
+      const track = stream.getVideoTracks()[0]
+      if (track) {
+        const settings = track.getSettings?.()
+        const label = (chosen?.label || track.label || "").toLowerCase()
+        
+        const isUserFacing = 
+          settings?.facingMode === "user" ||
+          facing === "user" ||
+          label.includes("front") ||
+          label.includes("пользователь") ||
+          label.includes("selfie")
+
+        setIsFrontCamera(isUserFacing)
+
+        if (track.getCapabilities) {
+          const caps = track.getCapabilities() as Record<string, unknown>
+          if (caps.torch) setTorchAvailable(true)
+        }
+      }
+
+      video.srcObject = stream
+      try {
+        await video.play()
+      } catch {
+        /* autoplay catch */
+      }
+
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoInputs = devices.filter((d) => d.kind === "videoinput")
+        camerasRef.current = videoInputs
+        if (!cancelled && !closedRef.current) setCameras(videoInputs)
+      } catch {
+        /* ignore */
+      }
+
+      if (cancelled || closedRef.current) return
+
+      // 1. Нативный BarcodeDetector (Chrome / Android)
+      if ("BarcodeDetector" in window) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const barcodeDetector = new (window as any).BarcodeDetector({
+            formats: ["qr_code", "ean_13", "ean_8", "code_128", "code_39", "upc_a", "data_matrix"],
+          })
+
+          let lastScanTime = 0
+          const processFrame = async (time: number) => {
+            if (cancelled || closedRef.current) return
+
+            if (time - lastScanTime >= 120 && video.readyState >= 2) {
+              lastScanTime = time
+              try {
+                const barcodes = await barcodeDetector.detect(video)
+                const found = (barcodes as NativeBarcode[]).filter(
+                  (barcode): barcode is NativeBarcode & { rawValue: string } =>
+                    typeof barcode.rawValue === "string" && barcode.rawValue.length > 0,
+                )
+                if (found.length > 0) {
+                  setIsBadQuality(false)
+                  if (checkedSkusRef.current) {
+                    drawOverlay(found.map((barcode) => {
+                      const box = barcode.boundingBox
+                      const points = Array.isArray(barcode.cornerPoints) && barcode.cornerPoints.length >= 2
+                        ? barcode.cornerPoints
+                        : box
+                          ? rectangleCorners({ x: box.x, y: box.y, width: box.width, height: box.height })
+                          : []
+                      return { text: barcode.rawValue, points }
+                    }))
+                  }
+                  if (continuousScan) {
+                    for (const barcode of found) handleResult(barcode.rawValue)
+                    releaseContinuousScanLock()
+                  } else {
+                    handleResult(found[0].rawValue)
+                    return
+                  }
+                } else {
+                  drawOverlay([])
+                  releaseContinuousScanLock()
+                }
+              } catch {
+                drawOverlay([])
+                releaseContinuousScanLock()
+              }
+            }
+            animFrameRef.current = requestAnimationFrame(processFrame)
+          }
+
+          animFrameRef.current = requestAnimationFrame(processFrame)
+          return
+        } catch {
+          /* Fallback */
+        }
+      }
+
+      // 2. Fallback ZXing с трекингом качества изображения
+      const hints = new Map<DecodeHintType, any>()
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.UPC_A,
+      ])
+      const reader = new BrowserMultiFormatReader(hints, {
+        delayBetweenScanAttempts: 150,
+        delayBetweenScanSuccess: 500,
+      })
+      try {
+        let lastOverlayRenderAt = 0
+        const controls = await reader.decodeFromVideoElement(video, (result, err) => {
+          if (result) {
+            setIsBadQuality(false)
+            checksumErrorCountRef.current = 0
+            lastOverlayRenderAt = Date.now()
+            if (checkedSkusRef.current) {
+              const resultPoints = result.getResultPoints().map((point) => ({
+                x: point.getX(),
+                y: point.getY(),
+              }))
+              const points = zxingPointsToPolygon(resultPoints)
+              if (points.length >= 3) {
+                drawOverlay([{ text: result.getText(), points }])
+              } else {
+                drawOverlay([])
+              }
+            }
+            handleResult(result.getText())
+            return
+          }
+
+          const now = Date.now()
+          if (checkedSkusRef.current && now - lastOverlayRenderAt >= 135) {
+            drawOverlay([])
+            lastOverlayRenderAt = now
+          }
+          releaseContinuousScanLock()
+          if (err) {
+            const errName = err.name || err.constructor?.name
+            if (errName === "ChecksumException" || errName === "FormatException") {
+              checksumErrorCountRef.current += 1
+              if (checksumErrorCountRef.current >= 3) {
+                setIsBadQuality(true)
+              }
+            } else if (errName === "NotFoundException") {
+              if (checksumErrorCountRef.current > 0) {
+                checksumErrorCountRef.current -= 1
+                if (checksumErrorCountRef.current === 0) setIsBadQuality(false)
+              }
+            }
+          }
+        })
+
+        if (cancelled || closedRef.current) controls.stop()
+        else controlsRef.current = controls
+      } catch {
+        if (!cancelled && !closedRef.current) {
+          setError("Не удалось запустить распознавание. Загрузите фото.")
+        }
+      }
+    }
+
+    void start()
+
+    return () => {
+      cancelled = true
+      stopEverything()
+    }
+  }, [
+    continuousScan,
+    deviceIndex,
+    drawOverlay,
+    facing,
+    handleResult,
+    releaseContinuousScanLock,
+    stopEverything,
+    cameraRetrySequence,
+  ])
+
+  const retryBrowserCamera = async () => {
+    if (cameraRetrying || typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return
+    setCameraRetrying(true)
+    setError(null)
+    try {
+      const chosen = camerasRef.current[deviceIndex]
+      const constraints: MediaStreamConstraints = {
+        audio: false,
+        video: {
+          ...(chosen?.deviceId
+            ? { deviceId: { exact: chosen.deviceId } }
+            : { facingMode: { ideal: facing } }),
+          width: { ideal: 960, max: 1280 },
+          height: { ideal: 540, max: 720 },
+          frameRate: { ideal: 30, max: 30 },
+        },
+      }
+      // Call getUserMedia inside the tap handler so Chrome receives a direct
+      // user gesture and can show its permission prompt again when allowed.
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      if (closedRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
+      pendingBrowserStreamRef.current?.getTracks().forEach((track) => track.stop())
+      pendingBrowserStreamRef.current = stream
+      setCameraRetrySequence((sequence) => sequence + 1)
+    } catch {
+      const permissionState = await readCameraPermissionState(navigator.permissions)
+      setCanRetryBrowserCamera(true)
+      setError(getCameraPermissionError(permissionState))
+    } finally {
+      setCameraRetrying(false)
+    }
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [close])
+
+  const switchCamera = () => {
+    if (cameras.length > 1) {
+      setDeviceIndex((i) => (i + 1) % cameras.length)
+    } else {
+      setFacing((f) => (f === "environment" ? "user" : "environment"))
+    }
+  }
+
+  const decodeFile = async (file: File) => {
+    setError(null)
+    const url = URL.createObjectURL(file)
+    try {
+      const reader = new BrowserMultiFormatReader()
+      const result = await reader.decodeFromImageUrl(url)
+      handleResult(result.getText())
+    } catch {
+      setError("QR или штрихкод не найден на фото.")
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  if (typeof document === "undefined") return null
+  return createPortal(
+    <div
+      data-native-scanner-overlay
+      className={`fixed inset-0 z-[100] flex h-[100dvh] min-h-[100svh] w-screen flex-col text-white ${
+        nativeScannerActive ? "bg-transparent" : "bg-black"
+      }`}
+      style={{ height: "100dvh", minHeight: "100svh", touchAction: "none" }}
+      onClick={close}
+    >
+      <div
+        className={`relative flex h-full w-full flex-col justify-between overflow-hidden ${
+          nativeScannerActive ? "bg-transparent" : "bg-black"
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Шапка */}
+        <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between border-b border-white/10 bg-black/90 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pb-3">
+          <span className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            Сканер кодов
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 rounded-full bg-black/70 text-white hover:bg-white/20"
+            onClick={close}
+            aria-label="Закрыть"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Область камеры */}
+        <div
+          className={`relative flex-1 w-full overflow-hidden select-none cursor-pointer ${
+            nativeScannerActive ? "bg-transparent" : "bg-black"
+          }`}
+          onClick={handleTapToFocus}
+        >
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`h-full w-full object-cover transform-gpu ${
+              nativeScannerActive ? "invisible" : ""
+            } ${
+              isFrontCamera ? "scale-x-[-1]" : ""
+            }`}
+          />
+          {checkedSkus !== undefined && (
+            <canvas
+              ref={overlayCanvasRef}
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-0 z-10 h-full w-full transform-gpu ${
+                isFrontCamera ? "scale-x-[-1]" : ""
+              }`}
+            />
+          )}
+          {revisionStats && (
+            <div
+              aria-label="Статистика ревизии"
+              className={`pointer-events-none absolute inset-x-3 top-14 z-20 grid grid-cols-3 overflow-hidden rounded-xl border px-2 py-1.5 text-white shadow-lg backdrop-blur-md ${
+                revisionStats.remaining === 0
+                  ? "border-emerald-300/30 bg-emerald-950/55"
+                  : "border-white/15 bg-black/50"
+              }`}
+            >
+              <RevisionStat label="Всего" value={revisionStats.total} />
+              <RevisionStat label="Отмечено" value={revisionStats.checked} />
+              <RevisionStat label="Осталось" value={revisionStats.remaining} />
+            </div>
+          )}
+
+          {/* Рамка и скан-линия */}
+          {!error && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="relative h-64 w-64 sm:h-72 sm:w-72 rounded-3xl border-2 border-white/30 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]">
+                <div className="absolute -top-0.5 -left-0.5 h-6 w-6 border-t-2 border-l-2 border-primary rounded-tl-xl" />
+                <div className="absolute -top-0.5 -right-0.5 h-6 w-6 border-t-2 border-r-2 border-primary rounded-tr-xl" />
+                <div className="absolute -bottom-0.5 -left-0.5 h-6 w-6 border-b-2 border-l-2 border-primary rounded-bl-xl" />
+                <div className="absolute -bottom-0.5 -right-0.5 h-6 w-6 border-b-2 border-r-2 border-primary rounded-br-xl" />
+
+                <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent animate-scan-line" />
+              </div>
+            </div>
+          )}
+
+          {/* Плашка предупреждения: Перекрыт или расфокусирован */}
+          {isBadQuality && !error && (
+            <div className="pointer-events-none absolute bottom-6 inset-x-0 z-20 flex justify-center px-4 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 rounded-full bg-amber-500/90 px-4 py-2 text-xs font-medium text-black shadow-lg backdrop-blur-md">
+                <EyeOff className="h-4 w-4 shrink-0" />
+                <span>Код перекрыт, бликует или не в фокусе</span>
+              </div>
+            </div>
+          )}
+
+          {/* Точка фокусировки */}
+          <div
+            ref={focusPointRef}
+            className="pointer-events-none absolute hidden h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary/80"
+          />
+
+          {/* Вспышка */}
+          {torchAvailable && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                void toggleTorch()
+              }}
+              aria-label={torchOn ? "Выключить вспышку" : "Включить вспышку"}
+              aria-pressed={torchOn}
+              className="absolute right-4 top-[calc(env(safe-area-inset-top,0px)+5rem)] z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/75 text-white shadow-lg backdrop-blur-md transition-transform active:scale-95"
+            >
+              {torchOn ? <Zap className="h-5 w-5 text-yellow-400 fill-yellow-400" /> : <ZapOff className="h-5 w-5" />}
+            </button>
+          )}
+
+          {/* Ошибка */}
+          {error && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 px-6 text-center">
+              <AlertTriangle className="h-10 w-10 text-destructive" />
+              <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">{error}</p>
+              {canRetryBrowserCamera && (
+                <Button
+                  type="button"
+                  variant="default"
+                  disabled={cameraRetrying}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void retryBrowserCamera()
+                  }}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${cameraRetrying ? "animate-spin" : ""}`} />
+                  {cameraRetrying ? "Запрашиваем доступ…" : "Повторить запрос"}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Панель управления */}
+        <div className="z-20 shrink-0 space-y-3 border-t border-white/10 bg-black/85 px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="lg"
+              className="flex-1 text-xs rounded-xl h-11 bg-white/5 border-white/10 hover:bg-white/10 text-white"
+              onClick={switchCamera}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Сменить камеру
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="flex-1 text-xs rounded-xl h-11 bg-white/5 border-white/10 hover:bg-white/10 text-white"
+              onClick={() => fileRef.current?.click()}
+            >
+              <ImageIcon className="mr-2 h-4 w-4" />
+              Галерея
+            </Button>
+          </div>
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ""
+              if (file) void decodeFile(file)
+            }}
+          />
+
+          {manualMode ? (
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const code = manual.trim()
+                if (code) handleResult(code)
+              }}
+            >
+              <Input
+                autoFocus
+                value={manual}
+                onChange={(e) => setManual(e.target.value)}
+                placeholder="Код или артикул..."
+                className="h-11 text-xs rounded-xl bg-white/5 border-white/10 text-white"
+              />
+              <Button type="submit" size="lg" className="h-11 text-xs rounded-xl px-5" disabled={!manual.trim()}>
+                ОК
+              </Button>
+            </form>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-muted-foreground rounded-xl h-9 hover:bg-white/5"
+              onClick={() => setManualMode(true)}
+            >
+              <Keyboard className="mr-2 h-4 w-4" />
+              Ввести код вручную
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+function RevisionStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 px-1 text-center">
+      <div className="truncate text-[9px] leading-3 text-white/70">{label}</div>
+      <div className="font-mono text-sm font-semibold leading-5 tabular-nums">{value}</div>
+    </div>
+  )
+}

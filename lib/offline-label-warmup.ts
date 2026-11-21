@@ -19,13 +19,13 @@ export function warmUpLabelEditorOffline() {
   warmed = true
   const run = () => {
     void Promise.allSettled([
-      import("@/components/screens/sklad/label/label-editor"),
+      import("@/components/crm/screens/sklad/label/label-editor"),
       import("fabric"),
       import("niimbot-web-bluetooth"),
-      import("@/components/BarcodeScannerModal"),
-      import("@/components/sales-history/index"),
-      import("@/components/screens/kassa/cash-history"),
-      import("@/components/screens/kassa/cash-operation-dialog"),
+      import("@/components/crm/BarcodeScannerModal"),
+      import("@/components/crm/sales-history/index"),
+      import("@/components/crm/screens/kassa/cash-history"),
+      import("@/components/crm/screens/kassa/cash-operation-dialog"),
     ]).then((results) => {
       if (results.some((r) => r.status === "rejected")) warmed = false
     })

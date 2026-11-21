@@ -6,8 +6,8 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 test("superadmin tenant-view UI and server-action routes are removed", () => {
   const action = read("../app/actions/superadmin.ts");
-  const dashboard = read("../components/dashboard.tsx");
-  const shopsPanel = read("../components/screens/superadmin/shops-panel.tsx");
+  const dashboard = read("../components/crm/dashboard.tsx");
+  const shopsPanel = read("../components/crm/screens/superadmin/shops-panel.tsx");
   const nativeContract = read("../lib/native-action-contract.mjs");
   const nativeCrm = read("../native/app/native-crm.tsx");
 

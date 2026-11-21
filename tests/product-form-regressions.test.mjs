@@ -45,14 +45,14 @@ test("leaving silver resets its default purity and color for gold", () => {
 
 test("product form offers cancel, add-and-print, and numeric size entry without a print prompt", () => {
   const dialog = readFileSync(new URL(
-    "../components/screens/sklad/add-edit-Product/product-dialog.tsx",
+    "../components/crm/screens/sklad/add-edit-Product/product-dialog.tsx",
     import.meta.url,
   ), "utf8")
   const generalInfo = readFileSync(new URL(
-    "../components/screens/sklad/add-edit-Product/product-general-info.tsx",
+    "../components/crm/screens/sklad/add-edit-Product/product-general-info.tsx",
     import.meta.url,
   ), "utf8")
-  const metalPicker = readFileSync(new URL("../components/metal-picker.tsx", import.meta.url), "utf8")
+  const metalPicker = readFileSync(new URL("../components/crm/metal-picker.tsx", import.meta.url), "utf8")
 
   assert.match(dialog, /onClick=\{\(\) => void submit\(true\)\}/)
   assert.match(dialog, /"Добавить и распечатать"/)
@@ -66,10 +66,10 @@ test("product form offers cancel, add-and-print, and numeric size entry without 
 
 test("add-and-print keeps the next new-product form open while printing in a hidden FIFO renderer", () => {
   const dialog = readFileSync(new URL(
-    "../components/screens/sklad/add-edit-Product/product-dialog.tsx",
+    "../components/crm/screens/sklad/add-edit-Product/product-dialog.tsx",
     import.meta.url,
   ), "utf8")
-  const inventory = readFileSync(new URL("../components/screens/sklad/index.tsx", import.meta.url), "utf8")
+  const inventory = readFileSync(new URL("../components/crm/screens/sklad/index.tsx", import.meta.url), "utf8")
   const printQueue = inventory.slice(
     inventory.indexOf("const queueAutoPrintLabel"),
     inventory.indexOf("const onAdd"),

@@ -1,8 +1,8 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { ArrowRight, BarChart3, Package, Printer, ShoppingCart, WifiOff, Users } from "lucide-react"
-import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
-import { Button } from "@/components/ui/button"
+import { GoldUchetLogo } from "@/components/shared/brand/golduchet-logo"
+import { Button } from "@/components/shared/ui/button"
 
 export const metadata: Metadata = {
   title: "GOLDUCHET для ювелирных магазинов",

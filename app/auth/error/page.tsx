@@ -1,6 +1,6 @@
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { AuthShell } from "@/components/auth/auth-shell"
+import { Button } from "@/components/shared/ui/button"
+import { AuthShell } from "@/components/shared/auth/auth-shell"
 
 export default function AuthErrorPage() {
   return (

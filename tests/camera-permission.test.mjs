@@ -31,7 +31,7 @@ test("blocked browser permission explains how to re-enable Chrome site access", 
 })
 
 test("scanner offers a user-gesture retry without persisting a deny choice", () => {
-  const modal = read("components/BarcodeScannerModal.tsx")
+  const modal = read("components/crm/BarcodeScannerModal.tsx")
   assert.match(modal, /await navigator\.mediaDevices\.getUserMedia\(constraints\)/)
   assert.match(modal, /pendingBrowserStreamRef\.current = stream/)
   assert.match(modal, /onClick=\{\(event\) => \{\s*event\.stopPropagation\(\)\s*void retryBrowserCamera\(\)/)

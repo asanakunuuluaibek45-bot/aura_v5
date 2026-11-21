@@ -1,6 +1,6 @@
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { AuthShell } from "@/components/auth/auth-shell"
+import { Button } from "@/components/shared/ui/button"
+import { AuthShell } from "@/components/shared/auth/auth-shell"
 import { MailCheck } from "lucide-react"
 
 export default function SignUpSuccessPage() {

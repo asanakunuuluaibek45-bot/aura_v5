@@ -1,16 +1,16 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/shared/ui/button"
+import { Input } from "@/components/shared/ui/input"
+import { Label } from "@/components/shared/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/shared/ui/select"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { AuthShell } from "@/components/auth/auth-shell"
-import { GoogleAuthButton } from "@/components/auth/google-auth-button"
-import { InlineLoader } from "@/components/ui/page-loader"
+import { AuthShell } from "@/components/shared/auth/auth-shell"
+import { GoogleAuthButton } from "@/components/shared/auth/google-auth-button"
+import { InlineLoader } from "@/components/shared/ui/page-loader"
 
 function signUpErrorMessage(error: unknown): string {
   const { code, status } = (error ?? {}) as { code?: string; status?: number }

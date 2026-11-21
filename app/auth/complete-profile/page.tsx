@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { AuthShell } from "@/components/auth/auth-shell"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { InlineLoader } from "@/components/ui/page-loader"
+import { AuthShell } from "@/components/shared/auth/auth-shell"
+import { Button } from "@/components/shared/ui/button"
+import { Input } from "@/components/shared/ui/input"
+import { Label } from "@/components/shared/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/shared/ui/select"
+import { InlineLoader } from "@/components/shared/ui/page-loader"
 import { createClient } from "@/lib/supabase/client"
 
 export default function CompleteGoogleProfilePage() {

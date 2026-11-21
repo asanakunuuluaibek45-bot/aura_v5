@@ -1,4 +1,4 @@
-import { AdminShopsDirectory } from "@/components/admin/admin-shops-directory"
+import { AdminShopsDirectory } from "@/components/crm/admin/admin-shops-directory"
 import { getPlatformShopDirectory } from "@/app/actions/superadmin"
 import { requireSuperAdminPageAccess } from "@/lib/admin/require-page-access"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"

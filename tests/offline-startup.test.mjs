@@ -127,7 +127,7 @@ test("a CRM page is not exposed offline when no cashier shell was saved", async 
 })
 
 test("native camera controls do not overlap and the viewport cannot rubber-band", () => {
-  const modal = read("components/BarcodeScannerModal.tsx")
+  const modal = read("components/crm/BarcodeScannerModal.tsx")
   const nativeScanner = read("lib/native-barcode-scanner.ts")
   const css = read("app/globals.css")
   const capacitor = read("capacitor.config.ts")
@@ -145,7 +145,7 @@ test("native camera controls do not overlap and the viewport cannot rubber-band"
 
 test("the selected light or dark theme also colors browser chrome and offline screens", () => {
   const layout = read("app/layout.tsx")
-  const toggle = read("components/theme-toggle.tsx")
+  const toggle = read("components/shared/theme-toggle.tsx")
   const css = read("app/globals.css")
   const offline = read("public/offline.html")
   const manifest = JSON.parse(read("public/manifest.json"))

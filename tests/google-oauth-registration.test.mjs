@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs"
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 
 test("Google buttons use Supabase OAuth and native apps avoid unsupported redirects", () => {
-  const button = read("components/auth/google-auth-button.tsx")
+  const button = read("components/shared/auth/google-auth-button.tsx")
   assert.match(button, /provider:\s*"google"/)
   assert.match(button, /\/auth\/callback/)
   assert.match(button, /Capacitor\.isNativePlatform\(\)/)

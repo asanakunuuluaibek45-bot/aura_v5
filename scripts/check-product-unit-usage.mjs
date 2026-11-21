@@ -5,8 +5,8 @@ import { join } from "node:path"
 const root = process.cwd()
 const migration = readFileSync(join(root, "supabase/migrations/004_product_unit_usage.sql"), "utf8")
 const usageAction = readFileSync(join(root, "app/actions/product-units.ts"), "utf8")
-const stockStats = readFileSync(join(root, "components/screens/sklad/sklad-stats.tsx"), "utf8")
-const cabinetScreen = readFileSync(join(root, "components/screens/kabinet/index.tsx"), "utf8")
+const stockStats = readFileSync(join(root, "components/crm/screens/sklad/sklad-stats.tsx"), "utf8")
+const cabinetScreen = readFileSync(join(root, "components/crm/screens/kabinet/index.tsx"), "utf8")
 
 const checks = [
   [

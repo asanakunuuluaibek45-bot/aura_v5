@@ -83,9 +83,9 @@ test("Auth deletion is server-only and the native action is explicitly allowlist
 })
 
 test("the UI repeats the irreversible warning and exposes deletion before approval", () => {
-  const control = read("components/account-deletion-control.tsx")
-  const pending = read("components/pending-screen.tsx")
-  const cabinet = read("components/screens/kabinet/index.tsx")
+  const control = read("components/crm/account-deletion-control.tsx")
+  const pending = read("components/crm/pending-screen.tsx")
+  const cabinet = read("components/crm/screens/kabinet/index.tsx")
   const nativeStartup = read("native/app/native-crm.tsx")
   const login = read("app/auth/login/page.tsx")
 

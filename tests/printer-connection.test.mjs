@@ -181,8 +181,8 @@ test("Vercel uses npm consistently with the project manifest", () => {
 })
 
 test("label editor exposes printer reselection in the always-visible toolbar", () => {
-  const editor = readFileSync(new URL("../components/screens/sklad/label/label-editor.tsx", import.meta.url), "utf8")
-  const toolbar = readFileSync(new URL("../components/screens/sklad/label/components/toolbar.tsx", import.meta.url), "utf8")
+  const editor = readFileSync(new URL("../components/crm/screens/sklad/label/label-editor.tsx", import.meta.url), "utf8")
+  const toolbar = readFileSync(new URL("../components/crm/screens/sklad/label/components/toolbar.tsx", import.meta.url), "utf8")
   assert.match(editor, /onReconnectPrinter:\s*handleReconnect/)
   const button = toolbar.indexOf('data-testid="button-label-reselect-printer"')
   assert.ok(button > toolbar.indexOf("function BottomZone("))
@@ -191,7 +191,7 @@ test("label editor exposes printer reselection in the always-visible toolbar", (
 })
 
 test("label printing uses shared error text and reselection calls the real connection manager", () => {
-  const source = readFileSync(new URL("../components/screens/sklad/label/hooks/use-label-print.ts", import.meta.url), "utf8")
+  const source = readFileSync(new URL("../components/crm/screens/sklad/label/hooks/use-label-print.ts", import.meta.url), "utf8")
   assert.match(source, /import \{ getPrintErrorMessage \} from "@\/lib\/printer-errors"/)
   assert.doesNotMatch(source, /function getPrintErrorMessage/)
   assert.match(source, /const selection = changePrinterDevice\(printerProfile\.key\)/)
@@ -199,7 +199,7 @@ test("label printing uses shared error text and reselection calls the real conne
 })
 
 function loadLabelPrint(h) {
-  const source = readFileSync(new URL("../components/screens/sklad/label/hooks/use-label-print.ts", import.meta.url), "utf8")
+  const source = readFileSync(new URL("../components/crm/screens/sklad/label/hooks/use-label-print.ts", import.meta.url), "utf8")
     .replace(/^import .*$/gm, "").replace(/^export /gm, "")
   const toasts = []
   const context = vm.createContext({

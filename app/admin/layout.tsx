@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { AdminNav } from "@/components/admin/admin-nav"
+import { AdminNav } from "@/components/crm/admin/admin-nav"
 import { requireSuperAdminPageAccess } from "@/lib/admin/require-page-access"
 
 export const dynamic = "force-dynamic"

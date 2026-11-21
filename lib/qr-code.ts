@@ -1,7 +1,7 @@
 /**
  * Разбор содержимого QR-кода с этикетки.
  *
- * Формат QR (см. components/screens/sklad/label/data/qr.ts → buildQrUrl):
+ * Формат QR (см. components/crm/screens/sklad/label/data/qr.ts → buildQrUrl):
  *   "{seq_id магазина}/{SKU}", например "1/RY00042" или "12/BR00007".
  *
  * Для обратной совместимости также понимаем старые полные ссылки:

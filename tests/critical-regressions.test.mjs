@@ -249,7 +249,7 @@ test("return replay requires an existing exact server row, not just a conflict",
 
 
 test("local-first POS checkout does not refresh the server route, while server checkout still does", async () => {
-  const source = readFileSync(new URL("../components/screens/kassa/index.tsx", import.meta.url), "utf8")
+  const source = readFileSync(new URL("../components/crm/screens/kassa/index.tsx", import.meta.url), "utf8")
   const checkoutSource = source.slice(source.indexOf("  const doCheckout = async () => {"), source.indexOf("  const submit = () => {"))
   for (const local of [true, false]) {
     const calls = { local: 0, server: 0, refresh: 0, reset: 0, errors: [] }

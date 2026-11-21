@@ -7,9 +7,9 @@ import vm from "node:vm"
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
 
 test("template confirmation and backdrop are above the fullscreen editor and portalled menus", () => {
-  const editor = read("components/screens/sklad/label/label-editor.tsx")
-  const inventory = read("components/screens/sklad/index.tsx")
-  const toolbar = read("components/screens/sklad/label/components/toolbar.tsx")
+  const editor = read("components/crm/screens/sklad/label/label-editor.tsx")
+  const inventory = read("components/crm/screens/sklad/index.tsx")
+  const toolbar = read("components/crm/screens/sklad/label/components/toolbar.tsx")
   const confirmation = editor.match(/<DialogContent\s+className="([^"]+)"\s+overlayClassName="([^"]+)"/)
   assert.ok(confirmation, "the nested template dialog must set both layers explicitly")
   const layer = (classes) => Number(classes.match(/z-\[(\d+)\]/)?.[1])
@@ -21,7 +21,7 @@ test("template confirmation and backdrop are above the fullscreen editor and por
 })
 
 test("Save and Reset close the format menu before opening their confirmation dialog", () => {
-  const toolbar = read("components/screens/sklad/label/components/toolbar.tsx")
+  const toolbar = read("components/crm/screens/sklad/label/components/toolbar.tsx")
   for (const action of ["onSaveTemplate", "onReloadTemplate"]) {
     const handler = toolbar.match(new RegExp(`onClick=\\{\\(\\) => \\{([^}]*${action}\\(\\)[^}]*)\\}\\}`))
     assert.ok(handler, `${action} must use a menu-closing handler`)
@@ -35,7 +35,7 @@ test("Save and Reset close the format menu before opening their confirmation dia
 })
 
 test("shared dialog applies the optional backdrop class without changing its default layer", () => {
-  const dialog = read("components/ui/dialog.tsx")
+  const dialog = read("components/shared/ui/dialog.tsx")
   assert.match(dialog, /overlayClassName\?: string/)
   assert.match(dialog, /<DialogOverlay className=\{overlayClassName\}/)
   assert.match(dialog, /fixed inset-0 isolate z-50/)
