@@ -9,6 +9,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { AuthShell } from "@/components/auth/auth-shell"
+import { GoogleAuthButton } from "@/components/auth/google-auth-button"
 import { InlineLoader } from "@/components/ui/page-loader"
 
 function signUpErrorMessage(error: unknown): string {
@@ -71,6 +72,9 @@ export default function SignUpPage() {
 
   return (
     <AuthShell title="Регистрация" subtitle="Создайте аккаунт. Доступ активирует администратор магазина.">
+      <div className="mb-4">
+        <GoogleAuthButton nextPath="/crm/pos" label="Зарегистрироваться с Google" />
+      </div>
       <form onSubmit={handleSignUp} className="flex flex-col gap-4">
         <div className="grid gap-2">
           <Label htmlFor="fullName">Ваше имя</Label>

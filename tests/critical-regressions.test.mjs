@@ -37,7 +37,23 @@ test("public QR routes bypass auth, but /stores and /crm remain protected", () =
 test("auth callback accepts local paths and rejects normalized external redirects", async () => {
   const GET = loadSource("app/auth/callback/route.ts", "GET", {
     createClient: async () => ({
-      auth: { exchangeCodeForSession: async () => ({ error: null }) },
+      auth: {
+        exchangeCodeForSession: async () => ({ error: null }),
+        getUser: async () => ({
+          data: { user: { id: "user-1", app_metadata: { provider: "google" } } },
+          error: null,
+        }),
+      },
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: { shop_name: "Магазин", requested_role: "seller" },
+              error: null,
+            }),
+          }),
+        }),
+      }),
     }),
     NextResponse: { redirect: (url) => new URL(url).href },
   })
@@ -49,6 +65,33 @@ test("auth callback accepts local paths and rejects normalized external redirect
   }
   const nextUrl = new URL("https://aura.example/auth/callback?code=test&next=%2Fcrm%2Fpos%3Ftab%3D1")
   assert.equal(await GET({ nextUrl }), "https://aura.example/crm/pos?tab=1")
+})
+
+test("new Google accounts are sent to registration completion", async () => {
+  const GET = loadSource("app/auth/callback/route.ts", "GET", {
+    createClient: async () => ({
+      auth: {
+        exchangeCodeForSession: async () => ({ error: null }),
+        getUser: async () => ({
+          data: { user: { id: "new-user", app_metadata: { provider: "google" } } },
+          error: null,
+        }),
+      },
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: { shop_name: null, requested_role: null },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    }),
+    NextResponse: { redirect: (url) => new URL(url).href },
+  })
+  const nextUrl = new URL("https://aura.example/auth/callback?code=test&next=%2Fcrm%2Fpos")
+  assert.equal(await GET({ nextUrl }), "https://aura.example/auth/complete-profile")
 })
 
 function makeEngine(overrides = {}) {
