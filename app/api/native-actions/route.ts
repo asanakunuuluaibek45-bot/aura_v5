@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { requireApprovedContext } from "@/lib/supabase/request-context"
 import { isNativeAction } from "@/lib/native-action-contract.mjs"
 import * as adminAnnouncements from "@/app/actions/admin-announcements"
+import * as account from "@/app/actions/account"
 import * as history from "@/app/actions/action-history"
 import * as article from "@/app/actions/article"
 import * as cabinet from "@/app/actions/cabinet"
@@ -27,7 +28,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const modules = {
-  "action-history": history, "admin-announcements": adminAnnouncements, article, cabinet, cash, clients, labels,
+  "action-history": history, account, "admin-announcements": adminAnnouncements, article, cabinet, cash, clients, labels,
   notifications, "store-notifications": storeNotifications, products, "product-units": productUnits, qr, rates,
   returns, sales, shops, store, superadmin, suppliers, team,
 }
@@ -73,10 +74,14 @@ export async function POST(request: NextRequest) {
     refresh_token: "native-request-no-refresh",
   })
   if (session.error) return reply({ error: "Сессия истекла" }, 401)
-  try {
-    await requireApprovedContext()
-  } catch {
-    return reply({ error: "Аккаунт не подтверждён" }, 403)
+  const isAccountDeletion =
+    body.module === "account" && body.action === "deleteMyAccount"
+  if (!isAccountDeletion) {
+    try {
+      await requireApprovedContext()
+    } catch {
+      return reply({ error: "Аккаунт не подтверждён" }, 403)
+    }
   }
   const actions = modules[body.module as keyof typeof modules] as unknown as Record<
     string, (...args: unknown[]) => Promise<unknown>

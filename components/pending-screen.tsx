@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Clock, XCircle } from "lucide-react"
+import { AccountDeletionControl } from "@/components/account-deletion-control"
 
 export function PendingScreen({ profile, email }: { profile: Profile | null; email: string }) {
   const router = useRouter()
@@ -50,6 +51,9 @@ export function PendingScreen({ profile, email }: { profile: Profile | null; ema
             ? "Администратор магазина отклонил вашу заявку. Свяжитесь с ним для уточнения деталей."
             : `Ваш аккаунт (${email}) зарегистрирован в магазине «${profile?.shop_name ?? ""}». Администратор должен подтвердить доступ.`}
         </p>
+        <div className="mt-6">
+          <AccountDeletionControl profile={profile} />
+        </div>
         <Button variant="outline" className="mt-6 w-full bg-transparent" onClick={signOut}>
           Выйти
         </Button>

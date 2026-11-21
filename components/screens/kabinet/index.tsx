@@ -45,6 +45,7 @@ import { syncEngine } from "@/lib/sync/sync-engine"
 import { ActionHistory } from "./action-history"
 import { InstallAppButton } from "@/components/install-app-button"
 import { CabinetProfileCard } from "./profile-card"
+import { AccountDeletionControl } from "@/components/account-deletion-control"
 import type { UndoActionResult } from "@/lib/action-history"
 import type { UndoLocalBaseline } from "@/lib/local-db/undo-cache"
 
@@ -678,6 +679,7 @@ export function KabinetScreen({
     <div className="space-y-6">
       {/* Профиль */}
       <CabinetProfileCard profile={profile} email={email} />
+      <AccountDeletionControl profile={profile} />
 
       {/* Счётчик новых товарных карточек */}
       {isAdmin && usageShopId && (

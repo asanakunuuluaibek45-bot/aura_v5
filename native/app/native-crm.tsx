@@ -10,6 +10,7 @@ import { SCREEN_PATHS, type ScreenId } from "@/components/app-nav"
 import { PageLoader } from "@/components/ui/page-loader"
 import { getSavedUserSession, getMeta, setMeta, saveUserSession } from "@/lib/local-db/db"
 import { isDeviceSignedOut, createClient } from "@/lib/supabase/client"
+import { purgeDeletedAccountData } from "@/lib/local-db/device-logout"
 import { getCabinetData } from "@/app/actions/cabinet"
 import { getOwnShopPublicState } from "@/app/actions/shops"
 import { getSuperAdminShops } from "@/app/actions/superadmin"
@@ -92,11 +93,28 @@ export function NativeCrm() {
           const supabase = createClient()
           const { data } = await supabase.auth.getSession()
           if (data.session?.user.id === saved.userId) {
-            const { data: profile } = await supabase
+            const { data: profile, error: profileError } = await supabase
               .from("profiles")
               .select("id,full_name,shop_name,shop_id,phone,requested_role,role,status,bonus_points,bonus_rate,manager_id,last_seen_at,email,created_at")
               .eq("id", saved.userId)
-              .single()
+              .maybeSingle()
+            if (active && !profileError && !profile) {
+              // A verified online session with no Auth-linked profile means
+              // the account was deleted elsewhere. Purge this device's offline
+              // copy and keep it from reopening on a later offline launch.
+              let cleanupPending = false
+              try {
+                await purgeDeletedAccountData()
+              } catch {
+                // Continue to local sign-out even if IndexedDB cleanup fails.
+                cleanupPending = true
+              }
+              await supabase.auth.signOut({ scope: "local" }).catch(() => {})
+              if (active) {
+                router.replace(`/auth/login?accountDeleted=1${cleanupPending ? "&cleanupPending=1" : ""}`)
+              }
+              return
+            }
             if (active && profile && !(await isDeviceSignedOut())) {
               currentProfile = profile as Profile
               setIdentity({ profile: currentProfile, email: saved.email ?? "" })

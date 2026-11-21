@@ -64,6 +64,32 @@ A preview protected by Vercel SSO is not a usable native backend. Do not embed
 preview bypass credentials in the IPA. This branch does not publish production;
 backend deployment needs separate approval/merge.
 
+## Account deletion for App Store review
+
+The app provides account deletion in the Cabinet and on the pending/rejected
+account screen, with two explicit warnings before the destructive action. The
+server deletes accounts through Supabase Auth Admin; do not implement this with
+a browser key or bundle a privileged key in the iOS app.
+
+Before enabling this flow in the deployed backend:
+
+1. Apply `supabase/migrations/016_account_deletion.sql` to the existing
+   Supabase project. It removes account-owned records and deletes shop-scoped
+   database data only when the last approved shop admin is deleted.
+2. Configure `SUPABASE_SERVICE_ROLE_KEY` as a server-only secret in the
+   production backend environment. Never name it `NEXT_PUBLIC_*` or expose it
+   to the iOS build workflow or app bundle.
+3. Test deletion with a seller, one of two admins, and the final admin. Confirm
+   product and supplier photos are removed for a deleted shop, then test a
+   second iOS device reconnecting after its account has been removed. A client
+   that verifies its profile is gone clears its local offline data.
+
+This flow supports Apple's in-app account-deletion requirement for apps with
+account creation ([App Review Guideline 5.1.1(v)](https://developer.apple.com/help/app-review/guideline-reference/5-1-1-account-deletion)).
+The repository's current iOS workflow creates an **unsigned** IPA; an Apple
+Developer signing certificate, provisioning profile, and signed distribution
+process are still required before TestFlight or App Store submission.
+
 ## Native hardware and session fixes retained
 
 | Finding | Change |
