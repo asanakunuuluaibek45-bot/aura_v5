@@ -45,8 +45,7 @@ const OtchetyScreen = memo(dynamic(() => import("@/components/screens/otchety").
 const KabinetScreen = memo(OfflineKabinetScreen)
 const ClientsScreen = memo(dynamic(() => import("@/components/screens/clients").then((mod) => mod.ClientsScreen), { loading: SectionLoading }))
 const SuppliersScreen = memo(dynamic(() => import("@/components/screens/suppliers").then((mod) => mod.SuppliersScreen), { loading: SectionLoading }))
-const NotificationsPage = memo(dynamic(() => import("@/components/notifications").then((mod) => mod.NotificationsPage), { loading: SectionLoading }))
-const UserAnnouncementsPanel = memo(dynamic(() => import("@/components/announcements/user-announcements-panel").then((mod) => mod.UserAnnouncementsPanel), { loading: SectionLoading }))
+const StoreNotificationsPage = memo(dynamic(() => import("@/components/notifications/StoreNotificationsPage").then((mod) => mod.StoreNotificationsPage), { loading: SectionLoading }))
 const SuperAdminShopsScreen = memo(dynamic(() => import("@/components/screens/superadmin/shops-panel").then((mod) => mod.SuperAdminShopsScreen), { loading: SectionLoading }))
 const MemoizedKassaScreen = memo(KassaScreen)
 const MemoizedCashPanel = memo(CashPanel)
@@ -558,16 +557,8 @@ export function Dashboard({
         {activeScreen === "shops" && isSuperAdmin && superAdminShops && (
           <SuperAdminShopsScreen initialShops={superAdminShops} />
         )}
-        {activeScreen === "notifications" && isSuperAdmin && <NotificationsPage />}
-        {activeScreen === "announcements" && (
-          activeShopId ? (
-            <UserAnnouncementsPanel />
-          ) : (
-            <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-border p-6 text-center text-sm text-muted-foreground">
-              Для просмотра объявлений выберите магазин.
-            </div>
-          )
-        )}
+        {activeScreen === "notifications" && <StoreNotificationsPage key={profile.id} profile={profile} shops={superAdminShops ?? []} />}
+        {activeScreen === "announcements" && <StoreNotificationsPage key={profile.id} profile={profile} shops={superAdminShops ?? []} />}
         </main>
       </div>
       <SiteHelp screen={activeScreen} isAdmin={isAdmin} onRegisterOpenHelp={registerSiteHelpOpener} />

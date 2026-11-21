@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react"
 import { NotificationBell } from "@/components/notifications"
+import { StoreNotificationBell } from "@/components/notifications/StoreNotificationBell"
 import { SyncIndicator } from "@/components/sync/sync-indicator"
 
 export function AppHeader({
@@ -169,8 +170,11 @@ export function AppHeader({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          {online ? <NotificationBell visible={profile.role === "super_admin"} onSeeAll={onOpenNotifications} />
-            : profile.role === "super_admin" && <Button disabled variant="ghost" size="icon" aria-label="Уведомления — нужен интернет"><Bell /></Button>}
+          {online
+            ? profile.role === "super_admin"
+              ? <NotificationBell visible onSeeAll={onOpenNotifications} />
+              : <StoreNotificationBell key={profile.id} onSeeAll={onOpenNotifications} />
+            : <Button disabled variant="ghost" size="icon" aria-label="Уведомления — нужен интернет"><Bell /></Button>}
         </div>
       </div>
     </header>

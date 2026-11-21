@@ -43,7 +43,7 @@ test("system notifications are available inside the separately guarded Admin are
   const page = readFileSync(new URL("../app/admin/notifications/page.tsx", import.meta.url), "utf8");
   const nav = readFileSync(new URL("../components/admin/admin-nav.tsx", import.meta.url), "utf8");
   assert.match(page, /await requireSuperAdminPageAccess\(\)/);
-  assert.match(page, /<NotificationsPage \/>/);
+  assert.match(page, /<StoreNotificationsPage profile=/);
   assert.match(nav, /href="\/admin\/notifications"/);
 });
 

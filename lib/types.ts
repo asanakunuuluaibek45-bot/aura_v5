@@ -400,6 +400,32 @@ export type SuperadminNotification = {
   created_at: string
 }
 
+export type StoreNotification = {
+  id: string
+  shop_id: string
+  title: string
+  message: string
+  created_at: string
+  is_read: boolean
+}
+
+export type StoreNotificationRecipient = {
+  profile_id: string
+  full_name: string | null
+  role: "admin" | "seller"
+}
+
+export type ManagedStoreNotification = {
+  id: string
+  shop_id: string
+  shop_name: string | null
+  recipient_profile_id: string | null
+  recipient_name: string | null
+  title: string
+  message: string
+  created_at: string
+}
+
 /** Результат сервер-экшна (единый формат успех/ошибка). */
 export type ActionResult<T = void> =
   | { success: true; data: T }
