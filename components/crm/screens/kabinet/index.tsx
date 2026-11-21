@@ -192,8 +192,8 @@ export function KabinetScreen({
     <div className="mx-auto w-full max-w-[1440px] space-y-5 px-1 sm:px-2">
       <CabinetProfileCard profile={profile} email={email} />
 
-      <div className="grid min-w-0 gap-5 xl:grid-cols-12">
-        <section className="min-w-0 space-y-5 xl:col-span-7" aria-label="Основная информация">
+      <div className="min-w-0 space-y-5">
+        <section className="min-w-0 space-y-5" aria-label="Основная информация">
           {isAdmin && usageShopId && (
             <Card className="min-w-0">
               <CardContent className="flex min-w-0 items-start gap-3 pt-4">
@@ -217,16 +217,9 @@ export function KabinetScreen({
             </Card>
           )}
 
-          <ActionHistory
-            key={historyShopId ?? profile.shop_id ?? "no-shop"}
-            syncLocal={syncLocal}
-            canUndoRates={isAdmin}
-            onActionUndone={onActionUndone}
-          />
-
         </section>
 
-        <aside className="min-w-0 space-y-5 xl:col-span-5" aria-label="Показатели и настройки">
+        <aside className="min-w-0 space-y-5" aria-label="Показатели и настройки">
           {!isAdmin && <SellerStats sales={sales} returns={returns} profile={profile} />}
           {isAdmin && (
             <div className="grid grid-cols-2 gap-3">
@@ -283,7 +276,7 @@ export function KabinetScreen({
                         <div className="grid grid-cols-2 gap-2 sm:flex">
                           <Button
                             size="sm"
-                            className="min-w-0 whitespace-normal"
+                            className="min-w-0 whitespace-nowrap px-3"
                             disabled={pending || !connected}
                             onClick={() =>
                               run(
@@ -293,12 +286,12 @@ export function KabinetScreen({
                             }
                           >
                             <UserCheck className="mr-1.5 h-3.5 w-3.5 shrink-0" />
-                            {r.requested_role === "admin" ? "Сделать админом" : "Одобрить"}
+                            Одобрить
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="min-w-0 whitespace-normal bg-transparent text-destructive"
+                            className="min-w-0 whitespace-nowrap bg-transparent px-3 text-destructive"
                             disabled={pending || !connected}
                             onClick={() => run(() => rejectRequest(r.id), "Заявка отклонена")}
                           >
@@ -386,8 +379,15 @@ export function KabinetScreen({
           )}
         </aside>
 
+        <ActionHistory
+          key={historyShopId ?? profile.shop_id ?? "no-shop"}
+          syncLocal={syncLocal}
+          canUndoRates={isAdmin}
+          onActionUndone={onActionUndone}
+        />
+
         {isAdmin && (
-          <div className="min-w-0 xl:col-span-12">
+          <div className="min-w-0">
             <TeamSales
               sales={sales}
               returns={returns}
@@ -403,7 +403,7 @@ export function KabinetScreen({
         )}
 
         {isAdmin && (
-          <div className="min-w-0 xl:col-span-12">
+          <div className="min-w-0">
             <Card className="min-w-0">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { getPublicMarketplaceProducts, getPublicShopProducts } from "@/app/actions/store"
+import { getPublicMarketplaceFacets, getPublicMarketplaceProducts, getPublicShopProducts } from "@/app/actions/store"
 import { isPublicShopEnabled } from "@/app/actions/shops"
 import { PublicProductGrid } from "@/components/public/marketplace/product-grid"
 import { AuraMark } from "@/components/shared/brand/aura-mark"
@@ -31,7 +31,10 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 export default async function StorePage({ params }: { params: Promise<Params> }) {
   const { store_id } = await params
   if (!(await isPublicShopEnabled(store_id))) notFound()
-  const productPage = await getPublicMarketplaceProducts(store_id, 24)
+  const [productPage, facets] = await Promise.all([
+    getPublicMarketplaceProducts(store_id, 24),
+    getPublicMarketplaceFacets(store_id),
+  ])
   const shop = productPage.items[0]?.shop_name ?? "Ювелирный магазин"
 
   return (
@@ -47,14 +50,23 @@ export default async function StorePage({ params }: { params: Promise<Params> })
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-5 py-10">
-        <h1 className="font-serif text-3xl">{shop}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Изделия в наличии</p>
-        <div className="mt-8">
+      <section className="mx-auto max-w-7xl px-5 py-10 sm:px-8 sm:py-14">
+        <div className="rounded-[2rem] border border-border/70 bg-gradient-to-br from-primary/10 via-muted/30 to-background px-6 py-8 sm:px-10 sm:py-10">
+          <Link href="/" className="text-xs font-medium text-muted-foreground transition hover:text-primary">
+            ← Все магазины
+          </Link>
+          <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Открытая витрина</p>
+          <h1 className="mt-2 font-serif text-3xl sm:text-4xl">{shop}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Выберите категорию и металл, укажите бюджет или найдите изделие по названию и артикулу.
+          </p>
+        </div>
+        <div className="mt-10">
           <PublicProductGrid
             key={store_id}
             shopId={store_id}
             initialPage={productPage}
+            facets={facets}
             title="Каталог магазина"
             searchPlaceholder="Название, артикул или металл"
           />

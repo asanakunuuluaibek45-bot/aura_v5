@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -7,13 +7,13 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 test("superadmin tenant-view UI and server-action routes are removed", () => {
   const action = read("../app/actions/superadmin.ts");
   const dashboard = read("../components/crm/dashboard.tsx");
-  const shopsPanel = read("../components/crm/screens/superadmin/shops-panel.tsx");
+  const shopsPanelPath = new URL("../components/crm/screens/superadmin/shops-panel.tsx", import.meta.url);
   const nativeContract = read("../lib/native-action-contract.mjs");
   const nativeCrm = read("../native/app/native-crm.tsx");
 
   assert.doesNotMatch(action, /impersonateShop|getImpersonatedShop/);
   assert.doesNotMatch(dashboard, /impersonat|ImpersonationBanner/);
-  assert.doesNotMatch(shopsPanel, /impersonateShop|handleImpersonate|ImpersonationBanner/);
+  assert.equal(existsSync(shopsPanelPath), false, "the removed superadmin shop panel must stay deleted");
   assert.doesNotMatch(nativeContract, /impersonateShop|getImpersonatedShop/);
   assert.doesNotMatch(nativeCrm, /getImpersonatedShop|impersonatedShop|impersonate/);
 });

@@ -138,6 +138,14 @@ export function AppHeader({
         <div className="flex-1" />
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <Link
+            href="/"
+            title="Открыть маркетплейс"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-2.5 text-xs font-medium transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3"
+          >
+            <Store aria-hidden="true" className="h-4 w-4 text-primary" />
+            <span className="hidden xl:inline">Маркетплейс</span>
+          </Link>
           <ThemeToggle />
           {onlineOnly ? (
             <Badge variant="outline" className="hidden sm:inline-flex text-[10px] text-primary">

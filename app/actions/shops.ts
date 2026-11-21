@@ -10,17 +10,18 @@ export type PublicShop = {
 }
 
 /** Список публичных магазинов для главной страницы (витрина маркетплейса). */
-export async function getPublicShops(limit = 24): Promise<PublicShop[]> {
+export async function getPublicShops(limit = 100): Promise<PublicShop[]> {
   try {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       return []
     }
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.trunc(limit))) : 100
     const supabase = await createClient()
     const { data, error } = await supabase
       .from("shop_settings")
       .select("shop_id, shop_name")
       .eq("public_enabled", true)
-      .limit(limit)
+      .limit(safeLimit)
 
     if (error) {
       console.error("[shops] public shops error:", error.message)
