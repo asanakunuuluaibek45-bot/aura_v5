@@ -83,6 +83,7 @@ type NavItem = {
   icon: LucideIcon
   adminOnly?: boolean
   superAdminOnly?: boolean
+  shopRequired?: boolean
   group: NavGroup
   description: string
 }
@@ -98,7 +99,7 @@ const ITEMS: NavItem[] = [
   { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
   { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
   { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления GOLDUCHET" },
-  { id: "announcements", label: "Объявления", icon: Megaphone, group: "system", description: "Сообщения для вашего магазина" },
+  { id: "announcements", label: "Объявления", icon: Megaphone, shopRequired: true, group: "system", description: "Сообщения для вашего магазина" },
   { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
 ]
 
@@ -116,6 +117,7 @@ interface AppNavProps {
   onChangeViewRole?: (role: Role) => void
   isAdmin: boolean
   isSuperAdmin?: boolean
+  activeShopId?: string | null
   onNavigate: (screen: ScreenId) => void
   onOpenCabinet?: () => void
   onOpenHelp?: () => void
@@ -133,6 +135,7 @@ export function AppNav({
   onChangeViewRole,
   isAdmin,
   isSuperAdmin = false,
+  activeShopId = null,
   onNavigate,
   onOpenHelp,
   mobileOpen = false,
@@ -158,9 +161,10 @@ export function AppNav({
       ITEMS.filter((item) => {
         if (item.superAdminOnly) return isSuperAdmin
         if (item.adminOnly) return isAdmin
+        if (item.shopRequired && !activeShopId) return false
         return true
       }),
-    [isAdmin, isSuperAdmin]
+    [activeShopId, isAdmin, isSuperAdmin]
   )
 
   const handleNavigate = (id: ScreenId) => {

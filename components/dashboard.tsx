@@ -462,6 +462,7 @@ export function Dashboard({
   viewRole={viewRole}                      
   onChangeViewRole={setViewRole}  
   isSuperAdmin={isSuperAdmin}
+  activeShopId={activeShopId}
   onlineOnly={isImpersonating}
   onNavigate={handleScreenChange}
   onOpenCabinet={() => handleScreenChange("kabinet")} 
@@ -604,7 +605,15 @@ export function Dashboard({
           <SuperAdminShopsScreen initialShops={superAdminShops} />
         )}
         {activeScreen === "notifications" && isSuperAdmin && <NotificationsPage />}
-        {activeScreen === "announcements" && <UserAnnouncementsPanel />}
+        {activeScreen === "announcements" && (
+          activeShopId ? (
+            <UserAnnouncementsPanel />
+          ) : (
+            <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-border p-6 text-center text-sm text-muted-foreground">
+              Для просмотра объявлений выберите магазин.
+            </div>
+          )
+        )}
           </>
         )}
         </main>
