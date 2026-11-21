@@ -33,7 +33,6 @@ import {
   CircleHelp,
   Eye,
   LayoutGrid,
-  Megaphone,
   PackageCheck,
   Wallet,
   LogOut,
@@ -99,8 +98,7 @@ const ITEMS: NavItem[] = [
   { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management", description: "Поставщики, долги и расчёты" },
   { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
   { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
-  { id: "notifications", label: "Уведомления", icon: Bell, superAdminOnly: true, group: "system", description: "Системные уведомления GOLDUCHET" },
-  { id: "announcements", label: "Объявления", icon: Megaphone, shopRequired: true, group: "system", description: "Сообщения для вашего магазина" },
+  { id: "notifications", label: "Уведомления", icon: Bell, group: "system", description: "Сообщения и уведомления магазина" },
   { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
 ]
 

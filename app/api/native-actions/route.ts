@@ -10,6 +10,7 @@ import * as cash from "@/app/actions/cash"
 import * as clients from "@/app/actions/clients"
 import * as labels from "@/app/actions/labels"
 import * as notifications from "@/app/actions/notifications"
+import * as storeNotifications from "@/app/actions/store-notifications"
 import * as products from "@/app/actions/products"
 import * as productUnits from "@/app/actions/product-units"
 import * as qr from "@/app/actions/qr"
@@ -27,7 +28,7 @@ export const dynamic = "force-dynamic"
 
 const modules = {
   "action-history": history, "admin-announcements": adminAnnouncements, article, cabinet, cash, clients, labels,
-  notifications, products, "product-units": productUnits, qr, rates,
+  notifications, "store-notifications": storeNotifications, products, "product-units": productUnits, qr, rates,
   returns, sales, shops, store, superadmin, suppliers, team,
 }
 

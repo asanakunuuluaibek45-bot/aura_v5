@@ -56,7 +56,7 @@ export function UserAnnouncementsPanel() {
     <div className="mx-auto max-w-3xl space-y-5">
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Для вашего магазина</p>
-        <h1 className="mt-2 font-serif text-3xl tracking-tight">Объявления</h1>
+        <h2 className="mt-2 text-lg font-semibold">Общие уведомления</h2>
       </header>
 
       {error ? (
