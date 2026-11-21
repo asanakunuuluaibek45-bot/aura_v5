@@ -1,7 +1,12 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
-import { getPublicMarketplaceFacets, getPublicMarketplaceProducts, getPublicShopProducts } from "@/app/actions/store"
+import {
+  getPublicMarketplaceFacets,
+  getPublicMarketplacePage,
+  getPublicMarketplaceSettings,
+  getPublicShopProducts,
+} from "@/app/actions/store"
 import { isPublicShopEnabled } from "@/app/actions/shops"
 import { PublicProductGrid } from "@/components/public/marketplace/product-grid"
 import { AuraMark } from "@/components/shared/brand/aura-mark"
@@ -31,9 +36,17 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 export default async function StorePage({ params }: { params: Promise<Params> }) {
   const { store_id } = await params
   if (!(await isPublicShopEnabled(store_id))) notFound()
+  const settings = await getPublicMarketplaceSettings()
   const [productPage, facets] = await Promise.all([
-    getPublicMarketplaceProducts(store_id, 24),
-    getPublicMarketplaceFacets(store_id),
+    getPublicMarketplacePage(
+      store_id,
+      1,
+      settings.productsPerPage,
+      "",
+      {},
+      settings.hideProductsWithoutPhoto,
+    ),
+    getPublicMarketplaceFacets(store_id, settings.hideProductsWithoutPhoto),
   ])
   const shop = productPage.items[0]?.shop_name ?? "Ювелирный магазин"
 
@@ -67,6 +80,8 @@ export default async function StorePage({ params }: { params: Promise<Params> })
             shopId={store_id}
             initialPage={productPage}
             facets={facets}
+            pageSize={settings.productsPerPage}
+            hideProductsWithoutPhoto={settings.hideProductsWithoutPhoto}
             title="Каталог магазина"
             searchPlaceholder="Название, артикул или металл"
           />

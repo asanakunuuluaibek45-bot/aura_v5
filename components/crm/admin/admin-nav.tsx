@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ArrowLeft, Bell, LayoutDashboard, Megaphone, ShieldCheck, Store, Users } from "lucide-react"
+import { ArrowLeft, Bell, LayoutDashboard, Megaphone, ShieldCheck, ShoppingBag, Store, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function AdminNav() {
@@ -12,6 +12,7 @@ export function AdminNav() {
   const onUsers = pathname.startsWith("/admin/users")
   const onAnnouncements = pathname.startsWith("/admin/announcements")
   const onNotifications = pathname.startsWith("/admin/notifications")
+  const onMarketplace = pathname.startsWith("/admin/marketplace")
 
   return (
     <aside className="flex shrink-0 flex-col border-b border-border bg-card/40 px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
@@ -51,6 +52,19 @@ export function AdminNav() {
         >
           <Store className="h-4 w-4" aria-hidden="true" />
           Магазины
+        </Link>
+        <Link
+          href="/admin/marketplace"
+          aria-current={onMarketplace ? "page" : undefined}
+          className={cn(
+            "inline-flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
+            onMarketplace
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+          Маркетплейс
         </Link>
         <Link
           href="/admin/users"

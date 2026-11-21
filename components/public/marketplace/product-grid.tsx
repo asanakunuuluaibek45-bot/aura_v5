@@ -1,25 +1,25 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowRight, LoaderCircle, Search } from "lucide-react"
+import { useCallback, useRef, useState } from "react"
+import { ChevronLeft, ChevronRight, LoaderCircle, Search } from "lucide-react"
 import {
-  getPublicMarketplaceProducts,
+  getPublicMarketplacePage,
   type PublicMarketplaceFacets,
+  type PublicMarketplaceQueryPage,
   type PublicProduct,
-  type PublicProductPage,
 } from "@/app/actions/store"
 import { Button } from "@/components/shared/ui/button"
 import { formatSom, formatWeight } from "@/lib/format"
 
-const PAGE_SIZE = 24
-
 type PublicProductGridProps = {
-  initialPage: PublicProductPage
+  initialPage: PublicMarketplaceQueryPage
   shopId?: string
   title: string
   searchPlaceholder?: string
   facets?: PublicMarketplaceFacets
+  pageSize: number
+  hideProductsWithoutPhoto: boolean
 }
 
 export function PublicProductGrid({
@@ -28,9 +28,12 @@ export function PublicProductGrid({
   title,
   searchPlaceholder = "Название, артикул, металл или магазин",
   facets = { categories: [], metals: [] },
+  pageSize,
+  hideProductsWithoutPhoto,
 }: PublicProductGridProps) {
   const [products, setProducts] = useState(initialPage.items)
-  const [hasMore, setHasMore] = useState(initialPage.hasMore)
+  const [currentPage, setCurrentPage] = useState(initialPage.page)
+  const [totalCount, setTotalCount] = useState(initialPage.totalCount)
   const [migrationPending, setMigrationPending] = useState(Boolean(initialPage.migrationPending))
   const [searchInput, setSearchInput] = useState("")
   const [activeSearch, setActiveSearch] = useState("")
@@ -40,54 +43,49 @@ export function PublicProductGrid({
   const [errorMessage, setErrorMessage] = useState(initialPage.error ?? "")
   const loadingRef = useRef(false)
   const requestIdRef = useRef(0)
-  const sentinelRef = useRef<HTMLDivElement>(null)
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
   const loadPage = useCallback(async (
-    replace: boolean,
+    targetPage: number,
     searchTerm: string,
     filters: typeof activeFilters,
   ) => {
     if (loadingRef.current) return
     loadingRef.current = true
     const requestId = ++requestIdRef.current
-    const cursor = !replace && products.length
-      ? { id: products[products.length - 1].id, created_at: products[products.length - 1].created_at }
-      : undefined
 
     setLoading(true)
     setErrorMessage("")
-    if (replace) {
-      setProducts([])
-      setHasMore(true)
-      setMigrationPending(false)
-    }
+    setMigrationPending(false)
 
     try {
-      const page = await getPublicMarketplaceProducts(shopId ?? null, PAGE_SIZE, cursor, searchTerm, {
-        category: filters.category || undefined,
-        metal: filters.metal || undefined,
-        minPrice: filters.minPrice ? Number(filters.minPrice) : null,
-        maxPrice: filters.maxPrice ? Number(filters.maxPrice) : null,
-      })
+      const page = await getPublicMarketplacePage(
+        shopId ?? null,
+        targetPage,
+        pageSize,
+        searchTerm,
+        {
+          category: filters.category || undefined,
+          metal: filters.metal || undefined,
+          minPrice: filters.minPrice ? Number(filters.minPrice) : null,
+          maxPrice: filters.maxPrice ? Number(filters.maxPrice) : null,
+        },
+        hideProductsWithoutPhoto,
+      )
       if (requestId !== requestIdRef.current) return
 
       if (page.error) {
         setErrorMessage(page.error)
-        setHasMore(true)
         return
       }
 
-      setProducts((current) => {
-        if (replace) return page.items
-        const knownIds = new Set(current.map((product) => product.id))
-        return [...current, ...page.items.filter((product) => !knownIds.has(product.id))]
-      })
-      setHasMore(page.hasMore)
+      setProducts(page.items)
+      setCurrentPage(page.page)
+      setTotalCount(page.totalCount)
       setMigrationPending(Boolean(page.migrationPending))
     } catch {
       if (requestId === requestIdRef.current) {
         setErrorMessage("Не удалось загрузить товары. Попробуйте ещё раз.")
-        setHasMore(true)
       }
     } finally {
       if (requestId === requestIdRef.current) {
@@ -95,26 +93,7 @@ export function PublicProductGrid({
         setLoading(false)
       }
     }
-  }, [products, shopId])
-
-  const loadMore = useCallback(() => {
-    if (hasMore && !loading) void loadPage(false, activeSearch, activeFilters)
-  }, [activeFilters, activeSearch, hasMore, loadPage, loading])
-
-  useEffect(() => {
-    const sentinel = sentinelRef.current
-    if (!sentinel || !hasMore || loading || errorMessage || migrationPending) return
-    if (typeof IntersectionObserver === "undefined") return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadMore()
-      },
-      { rootMargin: "400px 0px" },
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [errorMessage, hasMore, loadMore, loading, migrationPending])
+  }, [hideProductsWithoutPhoto, pageSize, shopId])
 
   function submitSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -137,7 +116,7 @@ export function PublicProductGrid({
     const nextFilters = { ...draftFilters, minPrice: min, maxPrice: max }
     setActiveSearch(nextSearch)
     setActiveFilters(nextFilters)
-    void loadPage(true, nextSearch, nextFilters)
+    void loadPage(1, nextSearch, nextFilters)
   }
 
   function clearFilters() {
@@ -147,7 +126,7 @@ export function PublicProductGrid({
     setActiveSearch("")
     setDraftFilters(empty)
     setActiveFilters(empty)
-    void loadPage(true, "", empty)
+    void loadPage(1, "", empty)
   }
 
   return (
@@ -238,7 +217,9 @@ export function PublicProductGrid({
 
       {products.length > 0 && (
         <p className="mt-5 text-xs text-muted-foreground">
-          {hasMore ? `Показано ${products.length} изделий — каталог можно пролистать дальше.` : `Найдено изделий: ${products.length}.`}
+          {migrationPending
+            ? `Показано ${products.length} изделий. Каталог обновляется.`
+            : `Показано ${products.length} из ${totalCount.toLocaleString("ru")} изделий · страница ${currentPage} из ${totalPages}`}
         </p>
       )}
 
@@ -266,7 +247,7 @@ export function PublicProductGrid({
 
       {errorMessage && products.length === 0 && (
         <div className="mt-4 text-center">
-          <Button type="button" variant="outline" onClick={() => void loadPage(true, activeSearch, activeFilters)} disabled={loading}>
+          <Button type="button" variant="outline" onClick={() => void loadPage(currentPage, activeSearch, activeFilters)} disabled={loading}>
             {loading ? "Загружаем…" : "Повторить"}
           </Button>
         </div>
@@ -275,46 +256,86 @@ export function PublicProductGrid({
       {migrationPending && (
         <p role="status" className="mt-4 rounded-lg border border-border bg-muted/40 p-3 text-center text-xs text-muted-foreground">
           {activeFilters.category || activeFilters.metal || activeFilters.minPrice || activeFilters.maxPrice
-            ? "Расширенные фильтры временно недоступны, пока каталог обновляется. Попробуйте поиск по названию или зайдите позже."
-            : "Показана первая страница каталога. Полная подгрузка станет доступна после обновления базы данных."}
+            ? "Фильтры и страницы каталога станут доступны после обновления базы данных."
+            : "Показана первая страница каталога. Нумерованные страницы станут доступны после обновления базы данных."}
         </p>
       )}
 
       {errorMessage && products.length > 0 && (
         <div className="mt-5 text-center">
           <p role="alert" className="mb-2 text-sm text-destructive">{errorMessage}</p>
-          <Button type="button" variant="outline" onClick={loadMore} disabled={loading}>
-            Повторить загрузку
+          <Button type="button" variant="outline" onClick={() => void loadPage(currentPage, activeSearch, activeFilters)} disabled={loading}>
+            Повторить
           </Button>
         </div>
       )}
 
-      {hasMore && !errorMessage && !migrationPending && (
-        <div className="mt-6 flex flex-col items-center gap-3">
-          <div ref={sentinelRef} aria-hidden="true" className="h-1 w-full" />
-          <Button type="button" variant="outline" onClick={loadMore} disabled={loading}>
-            {loading ? (
-              <>
-                <LoaderCircle aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />
-                Загружаем…
-              </>
-            ) : (
-              <>
-                Показать ещё
-                <ArrowRight aria-hidden="true" className="ml-2 h-4 w-4" />
-              </>
-            )}
+      {totalPages > 1 && !migrationPending && !errorMessage && (
+        <nav aria-label="Страницы каталога" className="mt-8 flex flex-wrap items-center justify-center gap-2" aria-busy={loading}>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 rounded-full"
+            aria-label="Предыдущая страница"
+            disabled={currentPage <= 1 || loading}
+            onClick={() => void loadPage(currentPage - 1, activeSearch, activeFilters)}
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           </Button>
-        </div>
-      )}
-
-      {!hasMore && products.length > 0 && !migrationPending && (
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Вы просмотрели весь каталог.
-        </p>
+          <div className="flex items-center gap-1">
+            {getVisiblePageNumbers(currentPage, totalPages).map((page, index) => (
+              typeof page === "number" ? (
+                <Button
+                  key={page}
+                  type="button"
+                  variant={currentPage === page ? "default" : "ghost"}
+                  className="h-10 w-10 rounded-full p-0"
+                  aria-label={`Страница ${page}`}
+                  aria-current={currentPage === page ? "page" : undefined}
+                  disabled={loading}
+                  onClick={() => void loadPage(page, activeSearch, activeFilters)}
+                >
+                  {page}
+                </Button>
+              ) : (
+                <span key={`${page}-${index}`} aria-hidden="true" className="px-1 text-muted-foreground">…</span>
+              )
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 rounded-full"
+            aria-label="Следующая страница"
+            disabled={currentPage >= totalPages || loading}
+            onClick={() => void loadPage(currentPage + 1, activeSearch, activeFilters)}
+          >
+            {loading
+              ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+              : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+          </Button>
+        </nav>
       )}
     </section>
   )
+}
+
+function getVisiblePageNumbers(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1)
+
+  const visible = new Set([1, totalPages])
+  for (let page = Math.max(2, currentPage - 1); page <= Math.min(totalPages - 1, currentPage + 1); page += 1) {
+    visible.add(page)
+  }
+  const sorted = [...visible].sort((a, b) => a - b)
+  const result: Array<number | "ellipsis"> = []
+  sorted.forEach((page, index) => {
+    if (index > 0 && page - sorted[index - 1] > 1) result.push("ellipsis")
+    result.push(page)
+  })
+  return result
 }
 
 function MarketplaceProductCard({ product }: { product: PublicProduct }) {

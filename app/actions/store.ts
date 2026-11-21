@@ -46,21 +46,94 @@ export type PublicMarketplaceFacets = {
   metals: string[]
 }
 
+export type PublicMarketplaceSettings = {
+  heroImageUrl: string | null
+  hideProductsWithoutPhoto: boolean
+  productsPerPage: number
+  available: boolean
+}
+
+export type PublicMarketplaceQueryPage = {
+  items: PublicProduct[]
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  migrationPending?: boolean
+  error?: string
+}
+
+const DEFAULT_MARKETPLACE_PAGE_SIZE = 12
+const ALLOWED_MARKETPLACE_PAGE_SIZES = [8, 12, 16, 24]
+
+/** Публичные параметры витрины; при отсутствии миграции включаются безопасные значения по умолчанию. */
+export async function getPublicMarketplaceSettings(): Promise<PublicMarketplaceSettings> {
+  const fallback: PublicMarketplaceSettings = {
+    heroImageUrl: null,
+    hideProductsWithoutPhoto: false,
+    productsPerPage: DEFAULT_MARKETPLACE_PAGE_SIZE,
+    available: false,
+  }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return fallback
+
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc("public_marketplace_settings")
+    if (error) {
+      if (!["PGRST202", "42883"].includes(error.code ?? "")) {
+        console.error("[store] public_marketplace_settings error:", error.message)
+      }
+      return fallback
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as {
+      hero_image_url?: unknown
+      hide_products_without_photo?: unknown
+      products_per_page?: unknown
+    } | null
+    const pageSize = Number(row?.products_per_page)
+    return {
+      heroImageUrl: typeof row?.hero_image_url === "string" ? row.hero_image_url : null,
+      hideProductsWithoutPhoto: row?.hide_products_without_photo === true,
+      productsPerPage: ALLOWED_MARKETPLACE_PAGE_SIZES.includes(pageSize)
+        ? pageSize
+        : DEFAULT_MARKETPLACE_PAGE_SIZE,
+      available: Boolean(row),
+    }
+  } catch (error) {
+    console.error("[store] public_marketplace_settings failed:", error)
+    return fallback
+  }
+}
+
 /** Доступные категории и металлы только из публичных изделий в наличии. */
 export async function getPublicMarketplaceFacets(
   storeId: string | null = null,
+  hideWithoutPhoto = false,
 ): Promise<PublicMarketplaceFacets> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return { categories: [], metals: [] }
   }
   try {
     const supabase = await createClient()
-    const { data, error } = await supabase.rpc("public_marketplace_facets", {
+    const { data, error } = await supabase.rpc("public_marketplace_facets_policy", {
       _shop_id: storeId,
+      _hide_without_photo: hideWithoutPhoto,
     })
     if (error) {
       if (!["PGRST202", "42883"].includes(error.code ?? "")) {
         console.error("[store] public_marketplace_facets error:", error.message)
+      }
+      if (!["PGRST202", "42883"].includes(error.code ?? "")) {
+        return { categories: [], metals: [] }
+      }
+      const legacy = await supabase.rpc("public_marketplace_facets", { _shop_id: storeId })
+      if (!legacy.error) {
+        const legacyRow = Array.isArray(legacy.data) ? legacy.data[0] : legacy.data
+        const legacyFacets = legacyRow as Partial<PublicMarketplaceFacets> | null
+        return {
+          categories: Array.isArray(legacyFacets?.categories) ? legacyFacets.categories : [],
+          metals: Array.isArray(legacyFacets?.metals) ? legacyFacets.metals : [],
+        }
       }
       return { categories: [], metals: [] }
     }
@@ -77,6 +150,171 @@ export async function getPublicMarketplaceFacets(
   } catch (error) {
     console.error("[store] public_marketplace_facets failed:", error)
     return { categories: [], metals: [] }
+  }
+}
+
+/** Страничная выдача публичного каталога с нумерованной пагинацией. */
+export async function getPublicMarketplacePage(
+  storeId: string | null = null,
+  pageNumber = 1,
+  pageSize = DEFAULT_MARKETPLACE_PAGE_SIZE,
+  search = "",
+  filters: PublicMarketplaceFilters = {},
+  hideWithoutPhoto = false,
+): Promise<PublicMarketplaceQueryPage> {
+  const safePageSize = ALLOWED_MARKETPLACE_PAGE_SIZES.includes(Math.trunc(pageSize))
+    ? Math.trunc(pageSize)
+    : DEFAULT_MARKETPLACE_PAGE_SIZE
+  const safePage = Number.isFinite(pageNumber)
+    ? Math.max(1, Math.min(10_000, Math.trunc(pageNumber)))
+    : 1
+  const safeOffset = (safePage - 1) * safePageSize
+  const normalizedSearch = typeof search === "string" ? search.trim().slice(0, 100) : ""
+  const category = typeof filters.category === "string" ? filters.category.trim().slice(0, 80) : ""
+  const metal = typeof filters.metal === "string" ? filters.metal.trim().slice(0, 80) : ""
+  const minPrice = typeof filters.minPrice === "number" && Number.isFinite(filters.minPrice) && filters.minPrice >= 0
+    ? filters.minPrice
+    : null
+  const maxPrice = typeof filters.maxPrice === "number" && Number.isFinite(filters.maxPrice) && filters.maxPrice >= 0
+    ? filters.maxPrice
+    : null
+  const hasFilters = Boolean(category || metal || minPrice !== null || maxPrice !== null)
+  if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
+    return {
+      items: [],
+      page: 1,
+      pageSize: safePageSize,
+      totalCount: 0,
+      totalPages: 1,
+      error: "Минимальная цена не может быть больше максимальной.",
+    }
+  }
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return {
+      items: [],
+      page: 1,
+      pageSize: safePageSize,
+      totalCount: 0,
+      totalPages: 1,
+      error: "Каталог временно недоступен.",
+    }
+  }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc("public_marketplace_products_page", {
+    _shop_id: storeId || null,
+    _search: normalizedSearch || null,
+    _category: category || null,
+    _metal: metal || null,
+    _min_price: minPrice,
+    _max_price: maxPrice,
+    _hide_without_photo: hideWithoutPhoto,
+    _offset: safeOffset,
+    _limit: safePageSize,
+  })
+
+  if (!error) {
+    const rows = (data as Array<PublicProduct & { total_count?: number | string }>) ?? []
+    if (rows.length === 0 && safePage > 1) {
+      return getPublicMarketplacePage(storeId, 1, safePageSize, normalizedSearch, filters, hideWithoutPhoto)
+    }
+    const totalCount = Number(rows[0]?.total_count) || 0
+    const items = rows.map(({ total_count: _totalCount, ...product }) => product as PublicProduct)
+    const totalPages = Math.max(1, Math.ceil(totalCount / safePageSize))
+    return {
+      items,
+      page: Math.min(safePage, totalPages),
+      pageSize: safePageSize,
+      totalCount,
+      totalPages,
+    }
+  }
+
+  if (!["PGRST202", "42883"].includes(error.code ?? "")) {
+    console.error("[store] public_marketplace_products_page error:", error.message)
+    return {
+      items: [],
+      page: safePage,
+      pageSize: safePageSize,
+      totalCount: 0,
+      totalPages: 1,
+      error: "Не удалось загрузить каталог товаров.",
+    }
+  }
+
+  // Keep the first page usable while the numbered-pagination migration rolls out.
+  if (!hideWithoutPhoto) {
+    const filtered = await supabase.rpc("public_marketplace_products_filtered", {
+      _shop_id: storeId || null,
+      _search: normalizedSearch || null,
+      _category: category || null,
+      _metal: metal || null,
+      _min_price: minPrice,
+      _max_price: maxPrice,
+      _before_created_at: null,
+      _before_id: null,
+      _limit: safePageSize + 1,
+    })
+    if (!filtered.error) {
+      const rows = (filtered.data as PublicProduct[]) ?? []
+      const items = rows.slice(0, safePageSize)
+      return {
+        items,
+        page: 1,
+        pageSize: safePageSize,
+        totalCount: rows.length > safePageSize ? safePageSize + 1 : items.length,
+        totalPages: 1,
+        migrationPending: true,
+      }
+    }
+  }
+
+  if (!hasFilters && !hideWithoutPhoto) {
+    const legacy = await supabase.rpc("public_marketplace_products", {
+      _shop_id: storeId || null,
+      _search: normalizedSearch || null,
+      _before_created_at: null,
+      _before_id: null,
+      _limit: safePageSize + 1,
+    })
+    if (!legacy.error) {
+      const rows = (legacy.data as PublicProduct[]) ?? []
+      const items = rows.slice(0, safePageSize)
+      return {
+        items,
+        page: 1,
+        pageSize: safePageSize,
+        totalCount: rows.length > safePageSize ? safePageSize + 1 : items.length,
+        totalPages: 1,
+        migrationPending: true,
+      }
+    }
+    if (storeId && !normalizedSearch) {
+      const storeProducts = await supabase.rpc("public_shop_products", {
+        _shop_id: storeId,
+        _limit: safePageSize,
+      })
+      if (!storeProducts.error) {
+        const items = (storeProducts.data as PublicProduct[]) ?? []
+        return {
+          items,
+          page: 1,
+          pageSize: safePageSize,
+          totalCount: items.length,
+          totalPages: 1,
+          migrationPending: true,
+        }
+      }
+    }
+  }
+
+  return {
+    items: [],
+    page: 1,
+    pageSize: safePageSize,
+    totalCount: 0,
+    totalPages: 1,
+    migrationPending: true,
   }
 }
 

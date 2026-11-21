@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Moon, Sun } from "lucide-react"
 import { Button } from "@/components/shared/ui/button"
+import { cn } from "@/lib/utils"
 
 type Theme = "light" | "dark"
 const STORAGE_KEY = "aura-theme"
@@ -32,7 +33,7 @@ function applyTheme(next: Theme, persist = false) {
   )
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string } = {}) {
   const [theme, setTheme] = useState<Theme>("light")
   const manuallyChosen = useRef(false)
 
@@ -67,7 +68,7 @@ export function ThemeToggle() {
       size="icon"
       aria-label={theme === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}
       title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
-      className="h-9 w-9 bg-transparent"
+      className={cn("h-9 w-9 bg-transparent", className)}
       onClick={toggle}
     >
       {theme === "dark" ? (

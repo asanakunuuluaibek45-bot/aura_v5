@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
+import Link from "next/link"
 import type { Product } from "@/lib/types"
 import { CATEGORIES } from "@/lib/types"
 import { formatSom, formatWeight } from "@/lib/format"
@@ -9,7 +10,7 @@ import { Badge } from "@/components/shared/ui/badge"
 import { Button } from "@/components/shared/ui/button"
 import { Switch } from "@/components/shared/ui/switch"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/shared/ui/dialog"
-import { ChevronLeft, ChevronRight, Copy, Download, Eye, EyeOff, QrCode, Sparkles, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, EyeOff, QrCode, Sparkles, Store, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { updateProduct } from "@/app/actions/products"
 import { setOwnShopPublicEnabled } from "@/app/actions/shops"
@@ -164,6 +165,12 @@ export function VitrinaScreen({
         <div>
           <h1 className="font-serif text-2xl">Витрина</h1>
           <p className="text-sm text-muted-foreground">Каталог украшений магазина</p>
+          <Button asChild variant="outline" size="sm" className="mt-3 w-fit rounded-full">
+            <Link href="/">
+              <Store className="mr-2 h-4 w-4 text-primary" aria-hidden="true" />
+              Открыть маркетплейс
+            </Link>
+          </Button>
         </div>
         {isShopAdmin && (
           <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
