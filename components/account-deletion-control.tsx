@@ -95,14 +95,12 @@ export function AccountDeletionControl({ profile }: Props) {
             <DialogTitle>
               {warningStep === 1 ? "Предупреждение 1 из 2" : "Предупреждение 2 из 2"}
             </DialogTitle>
-            <DialogDescription asChild>
-              <div className="space-y-2 text-sm leading-relaxed">
-                <p>
-                  Удаление необратимо: аккаунт нельзя восстановить. Все перечисленные данные будут
-                  стёрты без возможности восстановления.
-                </p>
-                <p>{impact}</p>
-              </div>
+            <DialogDescription className="space-y-2 text-sm leading-relaxed">
+              <span className="block">
+                Удаление необратимо: аккаунт нельзя восстановить. Все перечисленные данные будут
+                стёрты без возможности восстановления.
+              </span>
+              <span className="block">{impact}</span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-2">

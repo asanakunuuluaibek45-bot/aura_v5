@@ -93,6 +93,7 @@ test("the UI repeats the irreversible warning and exposes deletion before approv
   assert.match(control, /Предупреждение 2 из 2/)
   assert.match(control, /аккаунт нельзя восстановить/)
   assert.match(control, /данными и фотографиями/)
+  assert.doesNotMatch(control, /DialogDescription asChild/)
   assert.match(pending, /AccountDeletionControl/)
   assert.match(cabinet, /AccountDeletionControl/)
   assert.match(nativeStartup, /!profileError && !profile/)
