@@ -9,11 +9,13 @@ test("superadmin tenant-view UI and server-action routes are removed", () => {
   const dashboard = read("../components/dashboard.tsx");
   const shopsPanel = read("../components/screens/superadmin/shops-panel.tsx");
   const nativeContract = read("../lib/native-action-contract.mjs");
+  const nativeCrm = read("../native/app/native-crm.tsx");
 
   assert.doesNotMatch(action, /impersonateShop|getImpersonatedShop/);
   assert.doesNotMatch(dashboard, /impersonat|ImpersonationBanner/);
   assert.doesNotMatch(shopsPanel, /impersonateShop|handleImpersonate|ImpersonationBanner/);
   assert.doesNotMatch(nativeContract, /impersonateShop|getImpersonatedShop/);
+  assert.doesNotMatch(nativeCrm, /getImpersonatedShop|impersonatedShop|impersonate/);
 });
 
 test("tenant RLS uses the assigned shop and migration clears only temporary contexts", () => {

@@ -12,28 +12,13 @@ import { getSavedUserSession, getMeta, setMeta, saveUserSession } from "@/lib/lo
 import { isDeviceSignedOut, createClient } from "@/lib/supabase/client"
 import { getCabinetData } from "@/app/actions/cabinet"
 import { getOwnShopPublicState } from "@/app/actions/shops"
-import { getSuperAdminShops, getImpersonatedShop } from "@/app/actions/superadmin"
-import { getProducts } from "@/app/actions/products"
-import { getSales } from "@/app/actions/sales"
-import { getSaleReturns } from "@/app/actions/returns"
-import { getCashData } from "@/app/actions/cash"
-import { getMetalRates } from "@/app/actions/rates"
-import { getClients } from "@/app/actions/clients"
+import { getSuperAdminShops } from "@/app/actions/superadmin"
 import type { Profile } from "@/lib/types"
 
 type WebMetadata = {
   cabinet: Awaited<ReturnType<typeof getCabinetData>>
   publicStorefrontState: Awaited<ReturnType<typeof getOwnShopPublicState>>
   superAdminShops?: Awaited<ReturnType<typeof getSuperAdminShops>>
-  impersonatedShop?: Awaited<ReturnType<typeof getImpersonatedShop>>
-  onlineData?: {
-    products: Awaited<ReturnType<typeof getProducts>>
-    sales: Awaited<ReturnType<typeof getSales>>
-    returns: Awaited<ReturnType<typeof getSaleReturns>>
-    cash: Awaited<ReturnType<typeof getCashData>>
-    rates: Awaited<ReturnType<typeof getMetalRates>>
-    clients: Awaited<ReturnType<typeof getClients>>
-  }
 }
 const defaults: WebMetadata = {
   cabinet: { team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask" },
@@ -62,27 +47,15 @@ export function NativeCrm() {
     const refreshMetadata = async (profile: Profile) => {
       if (!navigator.onLine || await isDeviceSignedOut()) return
       try {
-        const [cabinet, publicStorefrontState, superAdminShops, impersonatedShop] = await Promise.all([
+        const [cabinet, publicStorefrontState, superAdminShops] = await Promise.all([
           getCabinetData(),
           getOwnShopPublicState(),
           profile.role === "super_admin" ? getSuperAdminShops() : Promise.resolve(undefined),
-          profile.role === "super_admin" ? getImpersonatedShop() : Promise.resolve(null),
         ])
-        // As in the PWA, an impersonated shop is online-only. Never seed its
-        // records into the account's own IndexedDB/outbox or offline metadata.
-        let onlineData: WebMetadata["onlineData"]
-        if (impersonatedShop) {
-          const [products, sales, returns, cash, rates, clients] = await Promise.all([
-            getProducts(), getSales(), getSaleReturns(), getCashData(), getMetalRates(), getClients(),
-          ])
-          onlineData = { products, sales, returns, cash, rates, clients }
-        }
         if (!active || await isDeviceSignedOut()) return
-        const next = { cabinet, publicStorefrontState, superAdminShops, impersonatedShop, onlineData }
+        const next = { cabinet, publicStorefrontState, superAdminShops }
         setMetadata(next)
-        if (!impersonatedShop) {
-          await setMeta(`native_web_metadata:${profile.id}:${profile.shop_id ?? "global"}`, next)
-        }
+        await setMeta(`native_web_metadata:${profile.id}:${profile.shop_id ?? "global"}`, next)
       } catch {
         // An unavailable backend must not replace the working offline PWA UI.
       }
@@ -98,9 +71,16 @@ export function NativeCrm() {
           return
         }
         currentProfile = saved.profile
-        const cached = await getMeta<WebMetadata>(`native_web_metadata:${saved.userId}:${saved.profile.shop_id ?? "global"}`, defaults).catch(() => defaults)
+        const metadataKey = `native_web_metadata:${saved.userId}:${saved.profile.shop_id ?? "global"}`
+        const cached = await getMeta<Partial<WebMetadata>>(metadataKey, defaults).catch(() => defaults)
         if (!active) return
-        setMetadata(cached)
+        const safeCached: WebMetadata = {
+          cabinet: cached.cabinet ?? defaults.cabinet,
+          publicStorefrontState: cached.publicStorefrontState ?? defaults.publicStorefrontState,
+          ...(cached.superAdminShops ? { superAdminShops: cached.superAdminShops } : {}),
+        }
+        setMetadata(safeCached)
+        await setMeta(metadataKey, safeCached).catch(() => {})
         if (saved.profile.role === "super_admin" && navigator.onLine) {
           await refreshMetadata(saved.profile)
         }
@@ -112,13 +92,17 @@ export function NativeCrm() {
           const supabase = createClient()
           const { data } = await supabase.auth.getSession()
           if (data.session?.user.id === saved.userId) {
-            const { data: profile } = await supabase.from("profiles").select("*").eq("id", saved.userId).single()
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("id,full_name,shop_name,shop_id,phone,requested_role,role,status,bonus_points,bonus_rate,manager_id,last_seen_at,email,created_at")
+              .eq("id", saved.userId)
+              .single()
             if (active && profile && !(await isDeviceSignedOut())) {
               currentProfile = profile as Profile
               setIdentity({ profile: currentProfile, email: saved.email ?? "" })
               await saveUserSession({
                 ...saved,
-                profile: { ...currentProfile, impersonated_shop_id: undefined },
+                profile: currentProfile,
                 shopId: currentProfile.shop_id ?? undefined,
                 session: data.session,
               })
@@ -154,7 +138,6 @@ export function NativeCrm() {
   const { profile, email } = identity
   if (profile.status !== "approved") return <PendingScreen profile={profile} email={email} />
   const screen = (Object.entries(SCREEN_PATHS).find(([, path]) => path === pathname?.replace(/\/$/, ""))?.[0] ?? "kassa") as ScreenId
-  const { onlineData, ...webMetadata } = metadata
   return (
     <Dashboard
       key={profile.id}
@@ -168,9 +151,7 @@ export function NativeCrm() {
       rates={[]}
       cash={{ operations: [], presets: [] }}
       supplierDebts={{ suppliers: [], operations: [], profiles: [] }}
-      {...onlineData}
-      {...webMetadata}
-      impersonatedShop={webMetadata.impersonatedShop ?? undefined}
+      {...metadata}
     />
   )
 }
