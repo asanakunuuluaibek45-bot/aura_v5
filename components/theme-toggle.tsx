@@ -16,19 +16,19 @@ function getSavedTheme(): Theme | null {
   }
 }
 
-function applyTheme(theme: Theme, persist = false) {
+function applyTheme(next: Theme, persist = false) {
   if (persist) {
     try {
-      localStorage.setItem(STORAGE_KEY, theme)
+      localStorage.setItem(STORAGE_KEY, next)
     } catch {
       // The theme still applies for this session if storage is unavailable.
     }
   }
-  document.documentElement.classList.toggle("dark", theme === "dark")
-  document.documentElement.style.colorScheme = theme
+  document.documentElement.classList.toggle("dark", next === "dark")
+  document.documentElement.style.colorScheme = next
   document.querySelector('meta[name="theme-color"]')?.setAttribute(
     "content",
-    theme === "dark" ? "#29233d" : "#fbfaff",
+    next === "dark" ? "#29233d" : "#fbfaff",
   )
 }
 
