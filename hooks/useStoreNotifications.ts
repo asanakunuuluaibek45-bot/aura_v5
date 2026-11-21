@@ -11,6 +11,8 @@ import {
 } from "@/app/actions/store-notifications"
 import { toast } from "sonner"
 
+const STORE_NOTIFICATION_POLL_MS = 60_000
+
 export function useStoreNotifications() {
   const online = useOnline()
   const [items, setItems] = useState<StoreNotification[]>([])
@@ -46,8 +48,10 @@ export function useStoreNotifications() {
     void refresh().catch(() => setIsLoading(false))
     if (!online) return
     const timer = window.setInterval(() => {
-      if (navigator.onLine) void refresh().catch(() => {})
-    }, 20_000)
+      if (navigator.onLine && document.visibilityState === "visible") {
+        void refresh().catch(() => {})
+      }
+    }, STORE_NOTIFICATION_POLL_MS)
     return () => window.clearInterval(timer)
   }, [online, refresh])
 

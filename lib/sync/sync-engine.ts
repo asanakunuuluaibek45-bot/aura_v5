@@ -15,6 +15,7 @@ import {
 } from '../local-db/outbox'
 import { setLocalSaleSyncState } from '../local-db/sale-record'
 import { updateSyncState, resetSyncState, recomputeStaleness } from '../local-db/sync-store'
+import { PERIODIC_SYNC_MS, shouldRunPeriodicSync } from './sync-schedule'
 import type { OutboxItem, TableName } from '../local-db/schema'
 
 interface CursorInfo {
@@ -26,7 +27,6 @@ interface CursorInfo {
 const REQUEST_TIMEOUT_MS = 20000
 /** Whole-pull safety valve, so pagination cannot loop forever. */
 const MAX_PAGES_PER_TABLE = 500
-const PERIODIC_SYNC_MS = 15000
 /** Retry schedule for failed pulls (exponential with jitter). */
 const PULL_BACKOFF_BASE_MS = 5000
 const PULL_BACKOFF_MAX_MS = 5 * 60 * 1000
@@ -300,7 +300,12 @@ class SyncEngine {
   private startPeriodicSync() {
     if (this.syncTimer) clearInterval(this.syncTimer)
     this.syncTimer = setInterval(() => {
-      if (this.isOnline && !this.isRunning && !this.stopped) {
+      if (shouldRunPeriodicSync({
+        online: this.isOnline,
+        running: this.isRunning,
+        stopped: this.stopped,
+        visible: typeof document !== 'undefined' && document.visibilityState === 'visible',
+      })) {
         this.runDeltaSync()
         this.flushOutbox()
       }
