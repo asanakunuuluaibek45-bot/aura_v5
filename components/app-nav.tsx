@@ -5,6 +5,7 @@ import type { Profile, Role } from "@/lib/types"
 import { roleLabel } from "@/lib/format"
 import { useOnline } from "@/hooks/use-online"
 import { isOfflineSection } from "@/lib/offline-sections"
+import { shouldHideSuperAdminCrmNavItem } from "@/lib/admin/crm-nav-policy"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -159,6 +160,13 @@ export function AppNav({
   const visibleItems = useMemo(
     () =>
       ITEMS.filter((item) => {
+        if (
+          shouldHideSuperAdminCrmNavItem(
+            item.id,
+            isSuperAdmin,
+            process.env.NEXT_PUBLIC_BUILD_TARGET === "native",
+          )
+        ) return false
         if (item.superAdminOnly) return isSuperAdmin
         if (item.adminOnly) return isAdmin
         if (item.shopRequired && !activeShopId) return false

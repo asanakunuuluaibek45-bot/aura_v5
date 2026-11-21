@@ -50,4 +50,6 @@ test("shop pages and data action are guarded and read-only", () => {
   assert.match(detail, /await requireSuperAdminPageAccess\(\)/);
   assert.match(detail, /if \(!shop\) notFound\(\)/);
   assert.doesNotMatch(directory, /setShopFrozen|updateShopBilling|impersonateShop|deleteShop/i);
+  assert.match(directory, /href="\/crm\/stores"/);
+  assert.match(directory, /Выбрать магазин для работы в CRM/);
 });

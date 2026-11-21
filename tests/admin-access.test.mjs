@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getAdminRouteDecision } from "../lib/admin/access-policy.ts";
+import { shouldHideSuperAdminCrmNavItem } from "../lib/admin/crm-nav-policy.ts";
 import { getPostLoginPath } from "../lib/auth/post-login-route.ts";
 
 test("direct admin route access requires an authenticated approved super_admin", () => {
@@ -44,4 +45,13 @@ test("system notifications are available inside the separately guarded Admin are
   assert.match(page, /await requireSuperAdminPageAccess\(\)/);
   assert.match(page, /<NotificationsPage \/>/);
   assert.match(nav, /href="\/admin\/notifications"/);
+});
+
+test("web super_admin uses Admin links while native CRM and regular-user announcements remain", () => {
+  assert.equal(shouldHideSuperAdminCrmNavItem("shops", true, false), true);
+  assert.equal(shouldHideSuperAdminCrmNavItem("announcements", true, false), true);
+  assert.equal(shouldHideSuperAdminCrmNavItem("shops", true, true), false);
+  assert.equal(shouldHideSuperAdminCrmNavItem("announcements", true, true), false);
+  assert.equal(shouldHideSuperAdminCrmNavItem("announcements", false, false), false);
+  assert.equal(shouldHideSuperAdminCrmNavItem("notifications", true, false), false);
 });

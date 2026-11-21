@@ -5,6 +5,7 @@ import { useMemo, useState } from "react"
 import { Search, Store } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { filterAdminShopDirectory, type AdminShopSummary } from "@/lib/admin/shop-directory"
 import { SUBSCRIPTION_STATUS_LABELS } from "@/lib/types"
@@ -25,9 +26,14 @@ export function AdminShopsDirectory({ shops }: { shops: AdminShopSummary[] }) {
             Список и основные сведения. Управляющие действия в этом разделе отключены.
           </p>
         </div>
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          {filteredShops.length} из {shops.length}
-        </p>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {filteredShops.length} из {shops.length}
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/crm/stores">Выбрать магазин для работы в CRM</Link>
+          </Button>
+        </div>
       </div>
 
       <label className="relative block max-w-xl">
