@@ -34,6 +34,58 @@ export type UpdateShopBillingInput = {
   notes?:              string | null
 }
 
+export type AdminUserRow = {
+  user_id: string
+  full_name: string | null
+  phone: string | null
+  email: string | null
+  role: "seller" | "admin" | "super_admin" | null
+  status: "pending" | "approved" | "rejected"
+  shop_id: string | null
+  shop_name: string | null
+  requested_role: string | null
+  created_at: string
+  has_business_data: boolean
+}
+
+export type UpdateAdminUserInput = {
+  user_id: string
+  full_name: string
+  phone: string
+  role: "seller" | "admin" | "super_admin"
+  status: "pending" | "approved" | "rejected"
+  shop_id: string | null
+}
+
+type RequestSupabase = Awaited<ReturnType<typeof getRequestCrmContext>>["supabase"]
+
+async function getShopStoragePaths(supabase: RequestSupabase, folder: string): Promise<string[]> {
+  const pageSize = 100
+  const paths: string[] = []
+
+  async function visit(currentFolder: string): Promise<void> {
+    let offset = 0
+    while (true) {
+      const { data, error } = await supabase.storage
+        .from("product-images")
+        .list(currentFolder, { limit: pageSize, offset })
+      if (error) throw new Error(`Не удалось прочитать фотографии магазина: ${error.message}`)
+
+      const entries = data ?? []
+      for (const entry of entries) {
+        const path = `${currentFolder}/${entry.name}`
+        if (entry.id === null) await visit(path)
+        else paths.push(path)
+      }
+      if (entries.length < pageSize) break
+      offset += pageSize
+    }
+  }
+
+  await visit(folder)
+  return paths
+}
+
 // ---------------------------------------------------------------------------
 // Хелпер: проверить права суперадмина
 // ---------------------------------------------------------------------------
@@ -77,6 +129,66 @@ export async function getPlatformShopDirectory(): Promise<AdminShopSummary[]> {
   const { data, error } = await supabase.rpc("superadmin_list_shops")
   if (error) throw new Error(`Не удалось загрузить список магазинов: ${error.message}`)
   return toAdminShopDirectory((data ?? []) as ShopBillingRow[])
+}
+
+/** Platform-wide account list; hard deletion is flagged when business history exists. */
+export async function getPlatformUsers(): Promise<AdminUserRow[]> {
+  const { supabase } = await requireSuperAdmin()
+  const { data, error } = await supabase.rpc("superadmin_list_users")
+  if (error) throw new Error(`Не удалось загрузить список пользователей: ${error.message}`)
+  return (data ?? []) as AdminUserRow[]
+}
+
+export async function updatePlatformUser(input: UpdateAdminUserInput): Promise<void> {
+  const { supabase } = await requireSuperAdmin()
+  const { error } = await supabase.rpc("superadmin_update_user", {
+    _user_id: input.user_id,
+    _full_name: input.full_name,
+    _phone: input.phone,
+    _role: input.role,
+    _status: input.status,
+    _shop_id: input.shop_id,
+  })
+  if (error) throw new Error(`Не удалось обновить пользователя: ${error.message}`)
+  revalidatePath("/admin/users")
+  revalidatePath("/admin/shops")
+  revalidatePath("/crm")
+}
+
+export async function deletePlatformUser(userId: string): Promise<void> {
+  const { supabase } = await requireSuperAdmin()
+  const { error } = await supabase.rpc("superadmin_delete_user", { _user_id: userId })
+  if (error) throw new Error(`Не удалось удалить пользователя: ${error.message}`)
+  revalidatePath("/admin/users")
+  revalidatePath("/admin/shops")
+  revalidatePath("/crm")
+}
+
+export async function deletePlatformShop(shopId: string): Promise<void> {
+  const { supabase } = await requireSuperAdmin()
+  const { error: authorizationError } = await supabase.rpc(
+    "superadmin_authorize_shop_storage_cleanup",
+    { _shop_id: shopId },
+  )
+  if (authorizationError) {
+    throw new Error(`Не удалось подготовить безопасное удаление магазина: ${authorizationError.message}`)
+  }
+
+  const paths = await getShopStoragePaths(supabase, shopId)
+  for (let offset = 0; offset < paths.length; offset += 100) {
+    const { error } = await supabase.storage
+      .from("product-images")
+      .remove(paths.slice(offset, offset + 100))
+    if (error) throw new Error(`Не удалось удалить фотографии магазина: ${error.message}`)
+  }
+
+  const { error } = await supabase.rpc("superadmin_delete_shop", { _shop_id: shopId })
+  if (error) throw new Error(`Не удалось удалить магазин: ${error.message}`)
+  revalidatePath("/admin")
+  revalidatePath("/admin/shops")
+  revalidatePath("/admin/users")
+  revalidatePath("/admin/notifications")
+  revalidatePath("/crm")
 }
 
 // ---------------------------------------------------------------------------
