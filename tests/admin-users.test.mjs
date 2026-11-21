@@ -27,6 +27,7 @@ test("user management exposes role, name, phone, access status and shop assignme
   assert.match(component, /admin-user-role/);
   assert.match(component, /admin-user-status/);
   assert.match(component, /admin-user-shop/);
+  assert.match(component, /onValueChange=\{\(value\) => setShopId\(value \?\? "unassigned"\)\}/);
   assert.match(migration, /public\.superadmin_update_user/);
   assert.match(migration, /role = v_role/);
   assert.match(migration, /status = v_status/);

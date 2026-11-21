@@ -297,7 +297,7 @@ export function AdminUsersDirectory({
                 <Label htmlFor="admin-user-shop">Магазин</Label>
                 <Select
                   value={shopId}
-                  onValueChange={setShopId}
+                  onValueChange={(value) => setShopId(value ?? "unassigned")}
                   disabled={pending || editing.user_id === currentUserId || editing.has_business_data}
                 >
                   <SelectTrigger id="admin-user-shop"><SelectValue /></SelectTrigger>
