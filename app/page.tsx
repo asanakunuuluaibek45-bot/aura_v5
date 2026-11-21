@@ -1,9 +1,11 @@
 import Link from "next/link"
 import type { Metadata } from "next"
 import { getPublicShops } from "@/app/actions/shops"
+import { getPublicMarketplaceProducts } from "@/app/actions/store"
 import { GoldUchetLogo } from "@/components/brand/golduchet-logo"
+import { PublicProductGrid } from "@/components/public-marketplace/product-grid"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Gem, ShieldCheck, Store } from "lucide-react"
+import { ArrowRight, Store } from "lucide-react"
 
 export const revalidate = 300
 
@@ -20,58 +22,50 @@ export const metadata: Metadata = {
 }
 
 export default async function LandingPage() {
-  const shops = await getPublicShops()
+  const [shops, productPage] = await Promise.all([
+    getPublicShops(),
+    getPublicMarketplaceProducts(null, 24),
+  ])
 
   return (
     <main className="min-h-screen bg-background">
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
         <GoldUchetLogo className="block w-24 max-w-full sm:w-28" />
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/auth/login">Вход</Link>
+          <Button asChild variant="outline" size="sm" className="hidden bg-transparent sm:inline-flex">
+            <Link href="/for-shops">Для магазинов</Link>
           </Button>
-          <Button asChild size="sm">
-            <Link href="/auth/sign-up">Регистрация</Link>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/auth/login">Войти</Link>
           </Button>
         </div>
       </header>
 
       <section className="mx-auto max-w-4xl px-5 py-16 text-center">
         <h1 className="font-serif text-4xl leading-tight sm:text-5xl">
-          Ювелирные магазины и учёт в одном месте
+          Украшения из открытых витрин магазинов
         </h1>
         <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
-          App — публичные витрины изделий для покупателей. CRM — склад, касса, этикетки и бонусы
-          для команды магазина.
+          Смотрите товары и цены в магазинах GOLDUCHET. Каталог и карточки изделий доступны без регистрации.
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Button asChild size="lg" className="gap-2">
-            <Link href="/auth/sign-up">
-              Регистрация
+            <Link href="#products">
+              Смотреть товары
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="bg-transparent">
-            <Link href="/crm">Войти в CRM</Link>
+            <Link href="#shops">Найти магазин</Link>
           </Button>
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-5 pb-16">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Feature icon={<Store className="h-5 w-5 text-primary" />} title="App — витрины">
-            Каталог магазинов, карточки изделий по QR-коду с этикетки.
-          </Feature>
-          <Feature icon={<Gem className="h-5 w-5 text-primary" />} title="CRM — учёт">
-            Склад, касса, отчёты, печать этикеток Niimbot и артикулы.
-          </Feature>
-          <Feature icon={<ShieldCheck className="h-5 w-5 text-primary" />} title="Роли и бонусы">
-            Супер админ, админ и продавцы с бонусами от прибыли.
-          </Feature>
-        </div>
+      <section id="products" className="mx-auto max-w-6xl scroll-mt-6 px-5 pb-16">
+        <PublicProductGrid initialPage={productPage} title="Товары в наличии" />
       </section>
 
-      <section className="mx-auto max-w-5xl px-5 pb-20">
+      <section id="shops" className="mx-auto max-w-6xl scroll-mt-6 px-5 pb-16">
         <h2 className="font-serif text-2xl">Магазины</h2>
         <p className="mt-1 text-sm text-muted-foreground">Публичные витрины участников GOLDUCHET</p>
 
@@ -101,9 +95,40 @@ export default async function LandingPage() {
         )}
       </section>
 
+      <section className="mx-auto max-w-6xl px-5 pb-16">
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6 sm:p-9">
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+            Для владельцев и администраторов
+          </p>
+          <h2 className="mt-2 font-serif text-2xl sm:text-3xl">
+            Управляйте магазином и откройте свою витрину
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Склад, касса, отчёты, сотрудники и публичный каталог — в одной системе для ювелирного магазина.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button asChild className="gap-2">
+              <Link href="/for-shops">
+                Как работает GOLDUCHET
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="bg-transparent">
+              <Link href="/auth/sign-up">Создать аккаунт магазина</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
       <footer className="border-t border-border px-5 py-6 text-center text-xs text-muted-foreground">
-        <p>© {new Date().getFullYear()} GOLDUCHET · app + crm</p>
+        <p>© {new Date().getFullYear()} GOLDUCHET · маркетплейс и система учёта</p>
         <nav aria-label="Юридическая информация" className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2">
+          <Link href="/for-shops" className="underline underline-offset-4 hover:text-foreground">
+            Для магазинов
+          </Link>
+          <Link href="/crm" className="underline underline-offset-4 hover:text-foreground">
+            Войти в CRM
+          </Link>
           <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground">
             Конфиденциальность
           </Link>
@@ -116,23 +141,5 @@ export default async function LandingPage() {
         </nav>
       </footer>
     </main>
-  )
-}
-
-function Feature({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">{icon}</div>
-      <div className="mt-3 font-medium">{title}</div>
-      <p className="mt-1 text-sm text-muted-foreground">{children}</p>
-    </div>
   )
 }

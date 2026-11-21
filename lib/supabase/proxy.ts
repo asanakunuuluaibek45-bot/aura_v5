@@ -24,8 +24,14 @@ export async function updateSession(request: NextRequest) {
     path === "/site.webmanifest" ||
     path === "/robots.txt" ||
     path === "/favicon.ico"
-  const isPublicStore = path === "/" || path === "/store" || path.startsWith("/store/") ||
-    path === "/q" || path.startsWith("/q/")
+  const isPublicStore =
+    path === "/" ||
+    path === "/for-shops" ||
+    path.startsWith("/for-shops/") ||
+    path === "/store" ||
+    path.startsWith("/store/") ||
+    path === "/q" ||
+    path.startsWith("/q/")
 
   // Gracefully handle missing Supabase environment variables
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {

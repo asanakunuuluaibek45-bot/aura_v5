@@ -34,6 +34,30 @@ test("public QR routes bypass auth, but /stores and /crm remain protected", () =
   }
 })
 
+test("shop marketing page is public while CRM stays protected", async () => {
+  const updateSession = loadSource("lib/supabase/proxy.ts", "updateSession", {
+    NextResponse: {
+      next: () => ({ kind: "next" }),
+      redirect: (url) => ({ kind: "redirect", pathname: url.pathname }),
+    },
+  })
+  const requestFor = (pathname) => ({
+    nextUrl: {
+      pathname,
+      clone() {
+        return { pathname: this.pathname }
+      },
+    },
+  })
+
+  assert.deepEqual(await updateSession(requestFor("/for-shops")), { kind: "next" })
+  assert.deepEqual(await updateSession(requestFor("/for-shops/details")), { kind: "next" })
+  assert.deepEqual(await updateSession(requestFor("/crm/pos")), {
+    kind: "redirect",
+    pathname: "/auth/login",
+  })
+})
+
 test("auth callback accepts local paths and rejects normalized external redirects", async () => {
   const GET = loadSource("app/auth/callback/route.ts", "GET", {
     createClient: async () => ({
