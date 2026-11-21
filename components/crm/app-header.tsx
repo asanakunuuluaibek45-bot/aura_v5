@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useOnline } from "@/hooks/use-online"
 import { useState } from "react"
 import type { Profile, Role } from "@/lib/types"
