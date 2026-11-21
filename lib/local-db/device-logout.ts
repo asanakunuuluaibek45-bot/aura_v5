@@ -1,9 +1,9 @@
 import { requireLogoutConsent, type LogoutOptions } from '../offline-policy'
 import type { Profile } from '../types'
 import { createClient, clearDeviceAuth, isDeviceSignedOut } from '../supabase/client'
-import { getSavedUserSession } from './db'
+import { getSavedUserSession, wipeLocalDatabase } from './db'
 import { getUnresolvedOutboxOperationCount } from './outbox'
-import { runLogoutCleanup } from './logout-cleanup'
+import { clearServiceWorkerCaches, runLogoutCleanup } from './logout-cleanup'
 import { syncEngine } from '../sync/sync-engine'
 
 export async function restoreDeviceProfile(): Promise<Profile | null> {
@@ -31,4 +31,17 @@ export async function logoutDeviceAccount(options: LogoutOptions = {}): Promise<
     if (profile?.shop_id) void syncEngine.init(profile.shop_id)
     throw error
   }
+}
+
+/**
+ * A server-confirmed account deletion makes all cached business data stale.
+ * Unlike ordinary logout, there is no surviving account to protect from
+ * accidental unsynced-data loss, so purge the local database without consent.
+ */
+export async function purgeDeletedAccountData(): Promise<void> {
+  await syncEngine.stopAndDrain()
+  createClient().auth.stopAutoRefresh()
+  await clearDeviceAuth()
+  await wipeLocalDatabase()
+  await clearServiceWorkerCaches()
 }

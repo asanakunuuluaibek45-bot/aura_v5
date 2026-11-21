@@ -1,6 +1,7 @@
 "use client"
 
 import { prepareDeviceSignIn, markDeviceSignedIn, createClient } from "@/lib/supabase/client"
+import { purgeDeletedAccountData } from "@/lib/local-db/device-logout"
 import { Capacitor } from "@capacitor/core"
 import { getPostLoginPath } from "@/lib/auth/post-login-route"
 import { Button } from "@/components/ui/button"
@@ -29,20 +30,34 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [savedSession, setSavedSession] = useState<SavedUserSession | null>(null)
   const [isOffline, setIsOffline] = useState(false)
+  const [accountDeleted, setAccountDeleted] = useState(false)
+  const [cleanupPending, setCleanupPending] = useState(false)
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const wasDeleted = params.get("accountDeleted") === "1"
+    setAccountDeleted(wasDeleted)
+    setCleanupPending(params.get("cleanupPending") === "1")
     setIsOffline(!navigator.onLine)
     const handleOnline = () => setIsOffline(false)
     const handleOffline = () => setIsOffline(true)
     window.addEventListener("online", handleOnline)
     window.addEventListener("offline", handleOffline)
 
-    // Check if an offline profile exists in IndexedDB.
-    getSavedUserSession().then((session) => {
-      if (session && session.profile) {
-        setSavedSession(session)
-      }
-    })
+    if (wasDeleted) {
+      // Retry a local purge before rendering any cached-account option.
+      void purgeDeletedAccountData()
+        .then(() => createClient().auth.signOut({ scope: "local" }))
+        .then(() => setCleanupPending(false))
+        .catch(() => setCleanupPending(true))
+    } else {
+      // Check if an offline profile exists in IndexedDB.
+      getSavedUserSession().then((session) => {
+        if (session && session.profile) {
+          setSavedSession(session)
+        }
+      })
+    }
 
     return () => {
       window.removeEventListener("online", handleOnline)
@@ -152,6 +167,13 @@ export default function LoginPage() {
 
   return (
     <AuthShell title="Вход в систему" subtitle="Введите данные, чтобы войти в личный кабинет GOLDUCHET">
+      {accountDeleted && (
+        <p className={`mb-4 rounded-xl border p-4 text-sm ${cleanupPending ? "border-amber-400 bg-amber-50 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100" : "border-emerald-400 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/40 dark:text-emerald-100"}`}>
+          {cleanupPending
+            ? "Аккаунт удалён. Очистку части данных подтвердить не удалось — свяжитесь с администратором."
+            : "Аккаунт и связанные данные удалены."}
+        </p>
+      )}
       {savedSession && (
         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-sm dark:border-amber-800/80 dark:bg-amber-950/40 shadow-xs">
           <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
