@@ -68,3 +68,16 @@ test("shop cards open guarded Admin details with billing controls, not CRM links
   assert.match(management, /window\.confirm/);
   assert.doesNotMatch(directory, /href="\/crm\/stores"/);
 });
+
+test("shop hard deletion is separately confirmed and unavailable for the platform shop", () => {
+  const action = readFileSync(new URL("../app/actions/superadmin.ts", import.meta.url), "utf8");
+  const management = readFileSync(new URL("../components/admin/admin-shop-management.tsx", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../supabase/migrations/016_platform_admin_management.sql", import.meta.url), "utf8");
+
+  assert.match(action, /deletePlatformShop[\s\S]*?requireSuperAdmin\(\)/);
+  assert.match(management, /if \(isGlobalShop\) return/);
+  assert.match(management, /window\.prompt/);
+  assert.match(management, /window\.confirm/);
+  assert.match(migration, /public\.superadmin_delete_shop/);
+  assert.match(migration, /Нельзя удалить глобальный магазин платформы/);
+});

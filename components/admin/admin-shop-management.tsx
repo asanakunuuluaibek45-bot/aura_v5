@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { CalendarDays, Loader2, ShieldCheck, ShieldOff } from "lucide-react"
+import { CalendarDays, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import {
+  deletePlatformShop,
   setShopFrozen,
   updateShopBilling,
   type ShopBillingRow,
@@ -93,6 +94,29 @@ export function AdminShopManagement({
     })
   }
 
+  const deleteShop = () => {
+    if (isGlobalShop) return
+    const shopName = shop.shop_name?.trim() || shop.shop_id
+    const confirmation = window.prompt(
+      `Удаление необратимо удалит все данные магазина и отключит доступ его пользователям. Введите название магазина «${shopName}» для подтверждения:`,
+    )
+    if (confirmation?.trim() !== shopName) return
+    if (!window.confirm(
+      `Последнее подтверждение: полностью удалить магазин «${shopName}» и его данные? Это действие нельзя отменить.`,
+    )) return
+
+    startTransition(async () => {
+      try {
+        await deletePlatformShop(shop.shop_id)
+        toast.success("Магазин и его данные удалены")
+        router.push("/admin/shops")
+        router.refresh()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Не удалось удалить магазин")
+      }
+    })
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -159,6 +183,15 @@ export function AdminShopManagement({
                 <ShieldOff className="h-4 w-4" aria-hidden="true" />
               )}
               {frozen ? "Разморозить магазин" : "Заморозить магазин"}
+            </Button>
+            <Button
+              variant="destructive"
+              className="gap-2 sm:ml-auto"
+              onClick={deleteShop}
+              disabled={pending}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Удалить магазин полностью
             </Button>
           </div>
         )}
