@@ -34,6 +34,52 @@ export type PublicProductPage = {
   error?: string
 }
 
+export type PublicMarketplaceFilters = {
+  category?: string
+  metal?: string
+  minPrice?: number | null
+  maxPrice?: number | null
+}
+
+export type PublicMarketplaceFacets = {
+  categories: string[]
+  metals: string[]
+}
+
+/** Доступные категории и металлы только из публичных изделий в наличии. */
+export async function getPublicMarketplaceFacets(
+  storeId: string | null = null,
+): Promise<PublicMarketplaceFacets> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return { categories: [], metals: [] }
+  }
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc("public_marketplace_facets", {
+      _shop_id: storeId,
+    })
+    if (error) {
+      if (!["PGRST202", "42883"].includes(error.code ?? "")) {
+        console.error("[store] public_marketplace_facets error:", error.message)
+      }
+      return { categories: [], metals: [] }
+    }
+    const row = Array.isArray(data) ? data[0] : data
+    const facets = row as Partial<PublicMarketplaceFacets> | null
+    return {
+      categories: Array.isArray(facets?.categories)
+        ? facets.categories.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [],
+      metals: Array.isArray(facets?.metals)
+        ? facets.metals.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [],
+    }
+  } catch (error) {
+    console.error("[store] public_marketplace_facets failed:", error)
+    return { categories: [], metals: [] }
+  }
+}
+
 /**
  * Читает изделие по числовому seq_id магазина и SKU (новый маршрут /q/…).
  * Если shopKey — не число, автоматически fallback на UUID.
@@ -103,18 +149,35 @@ export async function getPublicMarketplaceProducts(
   limit = 24,
   cursor?: PublicProductCursor,
   search = "",
+  filters: PublicMarketplaceFilters = {},
 ): Promise<PublicProductPage> {
   const safeLimit = Number.isFinite(limit)
     ? Math.max(1, Math.min(48, Math.trunc(limit)))
     : 24
   const normalizedSearch = typeof search === "string" ? search.trim().slice(0, 100) : ""
+  const category = typeof filters.category === "string" ? filters.category.trim().slice(0, 80) : ""
+  const metal = typeof filters.metal === "string" ? filters.metal.trim().slice(0, 80) : ""
+  const minPrice = typeof filters.minPrice === "number" && Number.isFinite(filters.minPrice) && filters.minPrice >= 0
+    ? filters.minPrice
+    : null
+  const maxPrice = typeof filters.maxPrice === "number" && Number.isFinite(filters.maxPrice) && filters.maxPrice >= 0
+    ? filters.maxPrice
+    : null
+  if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
+    return { items: [], hasMore: false, error: "Минимальная цена не может быть больше максимальной." }
+  }
+  const hasFilters = Boolean(category || metal || minPrice !== null || maxPrice !== null)
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return { items: [], hasMore: false, error: "Каталог временно недоступен." }
   }
   const supabase = await createClient()
-  const { data, error } = await supabase.rpc("public_marketplace_products", {
+  const { data, error } = await supabase.rpc("public_marketplace_products_filtered", {
     _shop_id: storeId || null,
     _search: normalizedSearch || null,
+    _category: category || null,
+    _metal: metal || null,
+    _min_price: minPrice,
+    _max_price: maxPrice,
     _before_created_at: cursor?.created_at ?? null,
     _before_id: cursor?.id ?? null,
     // Fetch one extra row to tell the client whether another page exists.
@@ -123,6 +186,19 @@ export async function getPublicMarketplaceProducts(
 
   if (error) {
     if (["PGRST202", "42883"].includes(error.code ?? "")) {
+      if (hasFilters) return { items: [], hasMore: false, migrationPending: true }
+      const legacyMarketplace = await supabase.rpc("public_marketplace_products", {
+        _shop_id: storeId || null,
+        _search: normalizedSearch || null,
+        _before_created_at: cursor?.created_at ?? null,
+        _before_id: cursor?.id ?? null,
+        _limit: safeLimit + 1,
+      })
+      if (!legacyMarketplace.error) {
+        const legacyRows = (legacyMarketplace.data as PublicProduct[]) ?? []
+        return { items: legacyRows.slice(0, safeLimit), hasMore: legacyRows.length > safeLimit }
+      }
+
       // Keep existing store pages useful while the additive SQL migration rolls out.
       if (storeId && !cursor && !normalizedSearch) {
         const legacy = await supabase.rpc("public_shop_products", {

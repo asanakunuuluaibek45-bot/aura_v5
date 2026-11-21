@@ -14,8 +14,7 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isAuthRoute = path.startsWith("/auth")
-  const isLoginOrHomeRoute =
-    path === "/" || path === "/auth/login" || path === "/auth/login/"
+  const isLoginRoute = path === "/auth/login" || path === "/auth/login/"
   const isPublicAsset =
     path.startsWith("/api") ||
     path === "/sw.js" ||
@@ -73,8 +72,9 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Authenticated users should not see the public landing or login form.
-  if (user && isLoginOrHomeRoute) {
+  // Keep the marketplace public to signed-in users; only bounce an authenticated
+  // user away from the login form.
+  if (user && isLoginRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/crm/pos"
     url.search = ""

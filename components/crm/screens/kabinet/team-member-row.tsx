@@ -67,7 +67,7 @@ export function MemberRow({
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
         {canEditRate && (
           <div className="flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
             <Input
@@ -83,7 +83,7 @@ export function MemberRow({
             <Button
               size="sm"
               variant="outline"
-              className="h-9 bg-transparent"
+              className="h-9 shrink-0 whitespace-nowrap bg-transparent px-2.5"
               disabled={busy}
               onClick={() => onRate(member.id, Number(rate))}
             >
