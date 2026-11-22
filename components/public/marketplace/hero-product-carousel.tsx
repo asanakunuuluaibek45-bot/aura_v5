@@ -344,7 +344,7 @@ export function HeroProductCarousel({
               className={"group absolute bottom-6 left-4 right-4 top-3 block cursor-grab rounded-[30px] bg-card p-2 shadow-[0_20px_45px_-12px_rgba(24,28,56,0.16),0_6px_16px_-4px_rgba(24,28,56,0.08)] outline-none ring-primary/50 active:cursor-grabbing focus-visible:ring-2 " + (isDragging ? "transition-none" : "transition-[transform,opacity,box-shadow] duration-[560ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none")}
               style={{
                 transform: "translate3d(calc(" + (layer.translateX + stackNudge) + "px + var(--drag-x, 0px)), calc(" + layer.translateY + "px + var(--drag-y, 0px)), 0) rotateX(var(--drag-rotate-x, 0deg)) rotateY(var(--drag-rotate-y, 0deg)) rotate(calc(" + layer.rotate + "deg + var(--drag-rotate-z, 0deg))) scale(" + layer.scale + ")",
-                opacity,
+                opacity: layer.opacity,
                 zIndex: layer.zIndex,
                 touchAction: "pan-y",
                 transformStyle: "preserve-3d",
