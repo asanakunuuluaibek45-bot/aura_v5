@@ -104,7 +104,7 @@ test("landing hero uses real store products in a draggable stack", () => {
   assert.ok(heroCarousel.includes("localStorage"))
   assert.ok(heroCarousel.includes("prefers-reduced-motion"))
   assert.ok(heroCarousel.includes("setActiveCard(activeIndexRef.current + 1)"))
-  assert.ok(heroCarousel.includes("rotateY"))
+  assert.ok(heroCarousel.includes("const dynamicRotate = layer.rotate + drag.deltaX * 0.045"))
   assert.ok(heroCarousel.includes("transition-none"))
   assert.ok(heroCarousel.includes("rotate: -2.5"))
   assert.ok(heroCarousel.includes("requestAnimationFrame"))
