@@ -5,6 +5,7 @@ import {
   getPublicMarketplaceFacets,
   getPublicMarketplacePage,
   getPublicMarketplaceSettings,
+  getPublicProduct,
 } from "@/app/actions/store"
 import { createClient } from "@/lib/supabase/server"
 import { GoldUchetLogo } from "@/components/shared/brand/golduchet-logo"
@@ -44,7 +45,7 @@ export default async function LandingPage() {
       }
     })(),
   ])
-  const [productPage, facets] = await Promise.all([
+  const [productPage, facets, heroCarouselPage, selectedHeroProduct] = await Promise.all([
     getPublicMarketplacePage(
       null,
       1,
@@ -54,9 +55,21 @@ export default async function LandingPage() {
       settings.hideProductsWithoutPhoto,
     ),
     getPublicMarketplaceFacets(null, settings.hideProductsWithoutPhoto),
+    getPublicMarketplacePage(settings.heroShopId, 1, 24, "", {}, true),
+    settings.heroShopId && settings.heroProductId
+      ? getPublicProduct(settings.heroShopId, settings.heroProductId)
+      : Promise.resolve(null),
   ])
 
-  const heroProducts = productPage.items.slice(0, 8)
+  const featuredProduct = selectedHeroProduct?.status === "in_stock"
+    && Boolean(selectedHeroProduct.images?.some((image) => image.trim()) || selectedHeroProduct.image_url?.trim())
+    ? selectedHeroProduct
+    : null
+  const carouselProducts = heroCarouselPage.items
+  const heroProducts = [
+    ...(featuredProduct ? [featuredProduct] : []),
+    ...carouselProducts.filter((product) => product.id !== featuredProduct?.id),
+  ].slice(0, 5)
 
   return (
     <main className="min-h-screen bg-background">
@@ -105,11 +118,12 @@ export default async function LandingPage() {
           </div>
 
           <div className="relative mx-auto w-full max-w-[34rem]">
-            <HeroProductCarousel products={heroProducts} featuredImageUrl={settings.heroImageUrl} />
-            <div className="absolute -bottom-4 -left-3 rounded-2xl border border-border/70 bg-card/95 px-4 py-3 shadow-lg backdrop-blur sm:-left-8">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Ассортимент</p>
-              <p className="mt-0.5 text-sm font-semibold">{heroProducts.length} изделий в карусели</p>
-            </div>
+            <HeroProductCarousel
+              products={heroProducts}
+              featuredImageUrl={settings.heroImageUrl}
+              featuredProductId={featuredProduct?.id ?? null}
+              featuredPhotoIndex={settings.heroPhotoIndex}
+            />
           </div>
         </div>
       </section>

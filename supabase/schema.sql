@@ -1452,19 +1452,31 @@ $$;
 -- Name: public_product(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.public_product(_shop_id uuid, _article text) RETURNS TABLE(id uuid, shop_id uuid, shop_seq_id integer, shop_name text, name text, category text, metal text, metal_color text, weight numeric, size text, sku text, stones text, description text, sale_price numeric, status text, images text[], image_url text, created_at timestamp with time zone)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
+CREATE FUNCTION public.public_product(_shop_id uuid, _article text)
+RETURNS TABLE(
+  id uuid, shop_id uuid, shop_seq_id integer, shop_name text, name text,
+  category text, metal text, metal_color text, weight numeric, size text,
+  sku text, stones text, description text, sale_price numeric, status text,
+  images text[], image_url text, created_at timestamp with time zone
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
   SELECT p.id, p.shop_id, s.seq_id, s.shop_name, p.name, p.category, p.metal,
          p.metal_color, p.weight, p.size, p.sku, p.stones, p.description,
          p.sale_price, p.status::text, p.images, p.image_url, p.created_at
     FROM public.products p
     JOIN public.shop_settings s ON s.shop_id = p.shop_id
    WHERE p.shop_id = _shop_id
-     AND p.sku = upper(btrim(_article))
+     AND (
+       p.id::text = lower(btrim(_article))
+       OR p.sku = upper(btrim(_article))
+     )
      AND coalesce(p.is_hidden, false) = false
      AND s.public_enabled = true
+   ORDER BY (p.id::text = lower(btrim(_article))) DESC
    LIMIT 1;
 $$;
 
@@ -4866,6 +4878,9 @@ CREATE TRIGGER on_auth_user_delete_cleanup
 CREATE TABLE public.marketplace_settings (
   id boolean PRIMARY KEY DEFAULT true CHECK (id = true),
   hero_image_url text,
+  hero_shop_id uuid,
+  hero_product_id uuid,
+  hero_photo_index integer NOT NULL DEFAULT 0 CHECK (hero_photo_index >= 0),
   hide_products_without_photo boolean NOT NULL DEFAULT false,
   products_per_page integer NOT NULL DEFAULT 12
     CHECK (products_per_page IN (8, 12, 16, 24)),
@@ -4886,10 +4901,22 @@ REVOKE ALL ON TABLE public.marketplace_settings FROM PUBLIC, anon, authenticated
 INSERT INTO public.marketplace_settings (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
 
 CREATE FUNCTION public.public_marketplace_settings()
-RETURNS TABLE(hero_image_url text, hide_products_without_photo boolean, products_per_page integer)
+RETURNS TABLE(
+  hero_image_url text,
+  hero_shop_id uuid,
+  hero_product_id uuid,
+  hero_photo_index integer,
+  hide_products_without_photo boolean,
+  products_per_page integer
+)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
 AS $$
-  SELECT settings.hero_image_url, settings.hide_products_without_photo, settings.products_per_page
+  SELECT settings.hero_image_url,
+         settings.hero_shop_id,
+         settings.hero_product_id,
+         settings.hero_photo_index,
+         settings.hide_products_without_photo,
+         settings.products_per_page
     FROM public.marketplace_settings AS settings
    WHERE settings.id = true;
 $$;
@@ -4999,6 +5026,9 @@ GRANT EXECUTE ON FUNCTION public.public_marketplace_facets_policy(uuid, boolean)
 
 CREATE FUNCTION public.superadmin_update_marketplace_settings(
   _hero_image_url text,
+  _hero_shop_id uuid,
+  _hero_product_id uuid,
+  _hero_photo_index integer,
   _hide_products_without_photo boolean,
   _products_per_page integer
 )
@@ -5019,8 +5049,45 @@ BEGIN
      AND (length(_hero_image_url) > 2048 OR _hero_image_url !~* '^https://[^[:space:]]+$') THEN
     RAISE EXCEPTION 'Hero image must use a valid HTTPS URL' USING errcode = '22023';
   END IF;
+  IF _hero_photo_index IS NULL OR _hero_photo_index < 0 THEN
+    RAISE EXCEPTION 'Invalid featured product photo index' USING errcode = '22023';
+  END IF;
+  IF _hero_product_id IS NOT NULL AND _hero_shop_id IS NULL THEN
+    RAISE EXCEPTION 'A featured product requires a shop' USING errcode = '22023';
+  END IF;
+  IF _hero_shop_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM public.shop_settings AS shop
+     WHERE shop.shop_id = _hero_shop_id
+       AND shop.public_enabled = true
+  ) THEN
+    RAISE EXCEPTION 'Featured shop is not publicly available' USING errcode = '22023';
+  END IF;
+  IF _hero_product_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1
+      FROM public.products AS product
+      JOIN public.shop_settings AS shop ON shop.shop_id = product.shop_id
+     WHERE product.id = _hero_product_id
+       AND product.shop_id = _hero_shop_id
+       AND product.status = 'in_stock'
+       AND coalesce(product.is_hidden, false) = false
+       AND shop.public_enabled = true
+       AND (
+         EXISTS (
+           SELECT 1
+             FROM unnest(coalesce(product.images, ARRAY[]::text[])) AS image(value)
+            WHERE nullif(btrim(image.value), '') IS NOT NULL
+         )
+         OR nullif(btrim(product.image_url), '') IS NOT NULL
+       )
+  ) THEN
+    RAISE EXCEPTION 'Featured product must be a public in-stock product with a photo in the selected shop' USING errcode = '22023';
+  END IF;
+
   UPDATE public.marketplace_settings
      SET hero_image_url = _hero_image_url,
+         hero_shop_id = _hero_shop_id,
+         hero_product_id = _hero_product_id,
+         hero_photo_index = CASE WHEN _hero_product_id IS NULL THEN 0 ELSE _hero_photo_index END,
          hide_products_without_photo = _hide_products_without_photo,
          products_per_page = _products_per_page,
          updated_at = now(),
@@ -5028,5 +5095,5 @@ BEGIN
    WHERE id = true;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.superadmin_update_marketplace_settings(text, boolean, integer) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.superadmin_update_marketplace_settings(text, boolean, integer) TO authenticated;
+REVOKE ALL ON FUNCTION public.superadmin_update_marketplace_settings(text, uuid, uuid, integer, boolean, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.superadmin_update_marketplace_settings(text, uuid, uuid, integer, boolean, integer) TO authenticated;
