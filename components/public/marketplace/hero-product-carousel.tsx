@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react"
 import { ArrowUpRight, ChevronLeft, ChevronRight, Sparkles } from "lucide-react"
 import type { PublicProduct } from "@/app/actions/store"
+import { parseMetal } from "@/lib/metal"
 
 type StackLayer = {
   rotate: number
@@ -22,6 +23,9 @@ type DragState = {
   deltaX: number
   deltaY: number
   moved: boolean
+  lastX: number
+  lastTime: number
+  velocityX: number
 }
 
 const STACK_LAYERS: StackLayer[] = [
@@ -35,6 +39,12 @@ const STACK_LAYERS: StackLayer[] = [
 const MAX_CARDS = 5
 const SWIPE_THRESHOLD = 75
 const INTRO_STORAGE_KEY = "golduchet-marketplace-carousel-intro-v1"
+
+function compactMetalLabel(metal: string | null): string | null {
+  if (!metal?.trim()) return null
+  const parsed = parseMetal(metal)
+  return [parsed.base, parsed.purity].filter(Boolean).join(" ")
+}
 
 type HeroProductCarouselProps = {
   products: PublicProduct[]
@@ -51,12 +61,13 @@ export function HeroProductCarousel({
 }: HeroProductCarouselProps) {
   const items = products.slice(0, MAX_CARDS)
   const [activeIndex, setActiveIndex] = useState(0)
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [showSwipeHint, setShowSwipeHint] = useState(true)
   const [hintOffset, setHintOffset] = useState(0)
   const activeIndexRef = useRef(0)
   const dragRef = useRef<DragState | null>(null)
+  const dragFrameRef = useRef<number | null>(null)
+  const carouselRef = useRef<HTMLDivElement>(null)
   const suppressClickRef = useRef(false)
   const interactionStartedRef = useRef(false)
   const introTimersRef = useRef<number[]>([])
@@ -72,12 +83,6 @@ export function HeroProductCarousel({
     setActiveIndex(normalized)
   }, [items.length])
 
-  useEffect(() => {
-    if (items.length === 0 || activeIndexRef.current >= items.length) {
-      setActiveCard(0)
-    }
-  }, [items.length, setActiveCard])
-
   const markInteracted = useCallback(() => {
     if (!interactionStartedRef.current) {
       interactionStartedRef.current = true
@@ -86,20 +91,38 @@ export function HeroProductCarousel({
       try {
         window.localStorage.setItem(INTRO_STORAGE_KEY, "1")
       } catch {
-        // Storage may be disabled; the interaction still stops this page's motion.
+        // Storage may be disabled; interaction still stops the motion on this page.
       }
     }
     setHintOffset(0)
     setShowSwipeHint(false)
   }, [])
 
+  const applyDragTransform = useCallback((drag: DragState) => {
+    const selector = '[data-carousel-card][data-card-index="' + drag.cardIndex + '"]'
+    const card = carouselRef.current?.querySelector<HTMLElement>(selector)
+    if (!card) return
+    card.style.setProperty("--drag-x", drag.deltaX + "px")
+    card.style.setProperty("--drag-y", drag.deltaY * 0.25 + "px")
+    card.style.setProperty("--drag-rotate-x", Math.max(-10, Math.min(10, drag.deltaY * -0.06)) + "deg")
+    card.style.setProperty("--drag-rotate-y", Math.max(-14, Math.min(14, drag.deltaX * 0.07)) + "deg")
+    card.style.setProperty("--drag-rotate-z", drag.deltaX * 0.045 + "deg")
+  }, [])
+
+  useEffect(() => {
+    if (items.length === 0 || activeIndexRef.current >= items.length) {
+      setActiveCard(0)
+    }
+  }, [items.length, setActiveCard])
+
   useEffect(() => {
     if (items.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
 
+    let introSeen = false
     try {
-      if (window.localStorage.getItem(INTRO_STORAGE_KEY) === "1") return
+      introSeen = window.localStorage.getItem(INTRO_STORAGE_KEY) === "1"
     } catch {
-      // Continue with a one-page intro if storage is unavailable.
+      // Continue with the first-visit intro if storage is unavailable.
     }
 
     introTimersRef.current = []
@@ -107,23 +130,30 @@ export function HeroProductCarousel({
       const timer = window.setTimeout(callback, delay)
       introTimersRef.current.push(timer)
     }
-
-    schedule(() => {
-      if (interactionStartedRef.current) return
-      try {
-        window.localStorage.setItem(INTRO_STORAGE_KEY, "1")
-      } catch {
-        // The intro remains limited to this mount if storage is unavailable.
-      }
-      setActiveCard(activeIndexRef.current + 1)
+    const scheduleNudge = (delay: number) => {
       schedule(() => {
         if (interactionStartedRef.current) return
-        setHintOffset(-6)
-        schedule(() => setHintOffset(5), 180)
-        schedule(() => setHintOffset(-3), 360)
-        schedule(() => setHintOffset(0), 540)
-      }, 900)
-    }, 1100)
+        setHintOffset(-5)
+        schedule(() => setHintOffset(4), 150)
+        schedule(() => setHintOffset(-2), 300)
+        schedule(() => setHintOffset(0), 450)
+      }, delay)
+    }
+
+    if (!introSeen) {
+      schedule(() => {
+        if (interactionStartedRef.current) return
+        try {
+          window.localStorage.setItem(INTRO_STORAGE_KEY, "1")
+        } catch {
+          // The intro remains limited to this page mount if storage is unavailable.
+        }
+        setActiveCard(activeIndexRef.current + 1)
+      }, 1100)
+      scheduleNudge(2100)
+    } else {
+      scheduleNudge(1350)
+    }
 
     return () => {
       introTimersRef.current.forEach((timer) => window.clearTimeout(timer))
@@ -132,16 +162,29 @@ export function HeroProductCarousel({
   }, [items.length, setActiveCard])
 
   useEffect(() => {
+    function queueDragFrame() {
+      if (dragFrameRef.current !== null) return
+      dragFrameRef.current = window.requestAnimationFrame(() => {
+        dragFrameRef.current = null
+        const drag = dragRef.current
+        if (drag) applyDragTransform(drag)
+      })
+    }
+
     function handlePointerMove(event: PointerEvent) {
       const drag = dragRef.current
       if (!drag || event.pointerId !== drag.pointerId) return
 
       drag.deltaX = event.clientX - drag.startX
       drag.deltaY = event.clientY - drag.startY
+      const deltaTime = Math.max(event.timeStamp - drag.lastTime, 1)
+      drag.velocityX = (event.clientX - drag.lastX) / deltaTime
+      drag.lastX = event.clientX
+      drag.lastTime = event.timeStamp
       if (Math.abs(drag.deltaX) > 6 || Math.abs(drag.deltaY) > 6) drag.moved = true
 
       if (event.pointerType === "mouse" || Math.abs(drag.deltaX) > Math.abs(drag.deltaY) * 1.15) {
-        setDragOffset({ x: drag.deltaX, y: drag.deltaY })
+        queueDragFrame()
       }
     }
 
@@ -149,16 +192,36 @@ export function HeroProductCarousel({
       const drag = dragRef.current
       if (!drag || event.pointerId !== drag.pointerId) return
 
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current)
+        dragFrameRef.current = null
+      }
+      applyDragTransform(drag)
       dragRef.current = null
       setIsDragging(false)
-      setDragOffset({ x: 0, y: 0 })
       suppressClickRef.current = drag.moved
       window.setTimeout(() => {
         suppressClickRef.current = false
       }, 300)
 
-      if (drag.moved && Math.abs(drag.deltaX) >= SWIPE_THRESHOLD && Math.abs(drag.deltaX) > Math.abs(drag.deltaY)) {
-        setActiveCard(drag.cardIndex + (drag.deltaX < 0 ? 1 : -1))
+      const selector = '[data-carousel-card][data-card-index="' + drag.cardIndex + '"]'
+      window.requestAnimationFrame(() => {
+        if (dragRef.current?.pointerId === drag.pointerId) return
+        const card = carouselRef.current?.querySelector<HTMLElement>(selector)
+        if (!card) return
+        card.style.removeProperty("--drag-x")
+        card.style.removeProperty("--drag-y")
+        card.style.removeProperty("--drag-rotate-x")
+        card.style.removeProperty("--drag-rotate-y")
+        card.style.removeProperty("--drag-rotate-z")
+      })
+
+      const horizontal = Math.abs(drag.deltaX) > Math.abs(drag.deltaY)
+      const distanceSwipe = Math.abs(drag.deltaX) >= SWIPE_THRESHOLD
+      const quickFlick = Math.abs(drag.deltaX) >= 28 && Math.abs(drag.velocityX) >= 0.45
+      if (drag.moved && horizontal && (distanceSwipe || quickFlick)) {
+        const direction = Math.abs(drag.deltaX) >= 8 ? Math.sign(drag.deltaX) : Math.sign(drag.velocityX)
+        setActiveCard(drag.cardIndex + (direction < 0 ? 1 : -1))
       }
     }
 
@@ -169,8 +232,9 @@ export function HeroProductCarousel({
       window.removeEventListener("pointermove", handlePointerMove)
       window.removeEventListener("pointerup", finishPointer)
       window.removeEventListener("pointercancel", finishPointer)
+      if (dragFrameRef.current !== null) window.cancelAnimationFrame(dragFrameRef.current)
     }
-  }, [setActiveCard])
+  }, [applyDragTransform, setActiveCard])
 
   function startPointer(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.pointerType === "mouse" && event.button !== 0) return
@@ -193,6 +257,9 @@ export function HeroProductCarousel({
       deltaX: 0,
       deltaY: 0,
       moved: false,
+      lastX: event.clientX,
+      lastTime: event.timeStamp,
+      velocityX: 0,
     }
   }
 
@@ -245,39 +312,23 @@ export function HeroProductCarousel({
       <div aria-hidden="true" className="pointer-events-none absolute -inset-3 rounded-[2.5rem] bg-gradient-to-br from-primary/10 via-muted/30 to-background blur-xl" />
 
       <div
+        ref={carouselRef}
         role="region"
         aria-label="Карусель ювелирных изделий"
         tabIndex={0}
         onPointerDown={startPointer}
         onKeyDown={handleKeyDown}
+        onFocus={markInteracted}
         className="relative mx-auto h-[22.5rem] w-full max-w-[470px] select-none touch-pan-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-[27.5rem]"
         style={{ perspective: "1200px" }}
       >
         {items.map((product, index) => {
           const depth = (index - activeIndex + items.length) % items.length
           const layer = STACK_LAYERS[Math.min(depth, STACK_LAYERS.length - 1)]
-          const nextLayer = STACK_LAYERS[Math.max(depth - 1, 0)]
-          const dragProgress = Math.min(Math.abs(dragOffset.x) / 160, 1)
-          const rotation = depth === 0
-            ? layer.rotate + dragOffset.x * 0.045
-            : layer.rotate + (nextLayer.rotate - layer.rotate) * dragProgress
-          const translateX = depth === 0
-            ? layer.translateX + dragOffset.x
-            : layer.translateX + (nextLayer.translateX - layer.translateX) * dragProgress
-          const translateY = depth === 0
-            ? layer.translateY + dragOffset.y * 0.25
-            : layer.translateY + (nextLayer.translateY - layer.translateY) * dragProgress
-          const scale = depth === 0
-            ? layer.scale
-            : layer.scale + (nextLayer.scale - layer.scale) * dragProgress
-          const rotateY = depth === 0 ? Math.max(-14, Math.min(14, dragOffset.x * 0.07)) : 0
-          const rotateX = depth === 0 ? Math.max(-10, Math.min(10, dragOffset.y * -0.06)) : 0
           const stackNudge = depth === 1 ? hintOffset : 0
-          const opacity = depth === 0
-            ? layer.opacity
-            : layer.opacity + (nextLayer.opacity - layer.opacity) * dragProgress
           const chosenPhoto = product.id === featuredProductId ? product.images?.[featuredPhotoIndex] : null
           const image = chosenPhoto?.trim() || product.images?.find((photo) => photo.trim()) || product.image_url
+          const metalLabel = compactMetalLabel(product.metal)
           const shopKey = product.sku?.trim() ? product.shop_seq_id ?? product.shop_id : product.shop_id
           const article = product.sku?.trim().toUpperCase() || product.id
           const href = "/store/" + encodeURIComponent(String(shopKey)) + "/" + encodeURIComponent(article)
@@ -290,9 +341,9 @@ export function HeroProductCarousel({
               data-card-index={index}
               aria-label={"Открыть «" + product.name + "» в магазине " + (product.shop_name ?? "Ювелирный магазин")}
               onClick={handleCardClick}
-              className={"group absolute bottom-6 left-4 right-4 top-3 block cursor-grab rounded-[30px] bg-card p-2 shadow-[0_20px_45px_-12px_rgba(24,28,56,0.16),0_6px_16px_-4px_rgba(24,28,56,0.08)] outline-none ring-primary/50 active:cursor-grabbing focus-visible:ring-2 " + (isDragging ? "transition-none" : "transition-[transform,opacity,box-shadow] duration-700 ease-out motion-reduce:transition-none")}
+              className={"group absolute bottom-6 left-4 right-4 top-3 block cursor-grab rounded-[30px] bg-card p-2 shadow-[0_20px_45px_-12px_rgba(24,28,56,0.16),0_6px_16px_-4px_rgba(24,28,56,0.08)] outline-none ring-primary/50 active:cursor-grabbing focus-visible:ring-2 " + (isDragging ? "transition-none" : "transition-[transform,opacity,box-shadow] duration-[560ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none")}
               style={{
-                transform: "translate3d(" + (translateX + stackNudge) + "px, " + translateY + "px, 0) rotateX(" + rotateX + "deg) rotateY(" + rotateY + "deg) rotate(" + rotation + "deg) scale(" + scale + ")",
+                transform: "translate3d(calc(" + (layer.translateX + stackNudge) + "px + var(--drag-x, 0px)), calc(" + layer.translateY + "px + var(--drag-y, 0px)), 0) rotateX(var(--drag-rotate-x, 0deg)) rotateY(var(--drag-rotate-y, 0deg)) rotate(calc(" + layer.rotate + "deg + var(--drag-rotate-z, 0deg))) scale(" + layer.scale + ")",
                 opacity,
                 zIndex: layer.zIndex,
                 touchAction: "pan-y",
@@ -327,6 +378,12 @@ export function HeroProductCarousel({
                   <h2 className="line-clamp-2 font-serif text-[28px] font-medium leading-tight tracking-tight text-white drop-shadow-sm sm:text-[34px]">
                     {product.name}
                   </h2>
+                  {metalLabel && (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-sm font-medium text-white/90 drop-shadow-sm">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,0.8)]" />
+                      {metalLabel}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="pointer-events-none absolute -bottom-3 -left-3 z-40 flex max-w-[95%] items-center gap-2 rounded-full border border-border/70 bg-card/95 px-4 py-3 text-card-foreground shadow-[0_14px_32px_-6px_rgba(24,28,56,0.14),0_4px_10px_-2px_rgba(24,28,56,0.06)] backdrop-blur transition-[transform,opacity] duration-500 sm:px-5">
