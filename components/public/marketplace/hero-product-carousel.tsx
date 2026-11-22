@@ -14,7 +14,7 @@ type HeroProductCarouselProps = {
 }
 
 export function HeroProductCarousel({ products, featuredImageUrl }: HeroProductCarouselProps) {
-  const items = products.slice(0, 8)
+  const items = products
   const trackRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
 
@@ -126,7 +126,7 @@ export function HeroProductCarousel({ products, featuredImageUrl }: HeroProductC
               href="#products"
               aria-label={"Открыть каталог: " + product.name}
               className="relative -ml-10 block shrink-0 snap-center first:ml-0"
-              style={{ flex: "0 0 min(70%, 18rem)", zIndex: items.length - index }}
+              style={{ flex: "0 0 min(70%, 18rem)", zIndex: index === activeIndex ? items.length + 1 : items.length - Math.abs(index - activeIndex) }}
             >
               <article
                 className="relative aspect-[4/5] overflow-hidden rounded-[1.65rem] border-[5px] border-white/90 bg-muted shadow-[0_20px_50px_-20px_rgba(20,14,47,0.55)] ring-1 ring-black/5 transition-[filter] duration-300 hover:brightness-105 dark:border-white/70"
@@ -167,7 +167,7 @@ export function HeroProductCarousel({ products, featuredImageUrl }: HeroProductC
       </div>
 
       {items.length > 1 && (
-        <div className="relative flex justify-center gap-1.5 pb-3 pt-0.5" aria-label="Положение карусели">
+        <div role="group" className="relative flex justify-center gap-1.5 pb-3 pt-0.5" aria-label="Положение карусели">
           {items.map((product, index) => (
             <button
               key={product.id}

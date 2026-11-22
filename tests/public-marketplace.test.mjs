@@ -75,7 +75,9 @@ test("public routes show searchable products without changing CRM routes", () =>
 })
 
 test("landing hero uses real products in a swipeable card carousel", () => {
-  assert.match(homePage, /<HeroProductCarousel products={productPage\.items} featuredImageUrl={settings\.heroImageUrl} \/>/)
+  assert.match(homePage, /const heroProducts = productPage\.items\.slice\(0, 8\)/)
+  assert.match(homePage, /<HeroProductCarousel products={heroProducts} featuredImageUrl={settings\.heroImageUrl} \/>/)
+  assert.match(homePage, /heroProducts\.length/)
   assert.match(heroCarousel, /overflow-x-auto/)
   assert.match(heroCarousel, /snap-x snap-mandatory/)
   assert.match(heroCarousel, /touch-pan-x/)

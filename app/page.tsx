@@ -56,6 +56,8 @@ export default async function LandingPage() {
     getPublicMarketplaceFacets(null, settings.hideProductsWithoutPhoto),
   ])
 
+  const heroProducts = productPage.items.slice(0, 8)
+
   return (
     <main className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 px-4 backdrop-blur-xl sm:px-8">
@@ -103,12 +105,11 @@ export default async function LandingPage() {
           </div>
 
           <div className="relative mx-auto w-full max-w-[34rem]">
-            <HeroProductCarousel products={productPage.items} featuredImageUrl={settings.heroImageUrl} />
+            <HeroProductCarousel products={heroProducts} featuredImageUrl={settings.heroImageUrl} />
             <div className="absolute -bottom-4 -left-3 rounded-2xl border border-border/70 bg-card/95 px-4 py-3 shadow-lg backdrop-blur sm:-left-8">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Ассортимент</p>
-              <p className="mt-0.5 text-sm font-semibold">{productPage.items.length} изделий в подборке</p>
+              <p className="mt-0.5 text-sm font-semibold">{heroProducts.length} изделий в карусели</p>
             </div>
-
           </div>
         </div>
       </section>
