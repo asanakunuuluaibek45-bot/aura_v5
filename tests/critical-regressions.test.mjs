@@ -26,7 +26,7 @@ function loadSource(path, expression, mocks = {}) {
 test("public QR routes bypass auth, but /stores and /crm remain protected", () => {
   const config = loadSource("proxy.ts", "config")
   const matcher = new RegExp(`^${config.matcher[0]}$`)
-  for (const path of ["/q/12/AU001", "/store/shop", "/store/shop/product/AU001"]) {
+  for (const path of ["/q/12/AU001", "/store/12/AU001", "/store/shop", "/store/shop/product/AU001"]) {
     assert.equal(matcher.test(path), false, path)
   }
   for (const path of ["/stores", "/crm/pos", "/customers"]) {

@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 
-/** Публичная карточка изделия для страницы /store/[store_id]/product/[article]. */
+/** Публичная карточка изделия для плоского и подробного маршрутов витрины. */
 export type PublicProduct = {
   id: string
   shop_id: string
@@ -332,7 +332,7 @@ export async function getPublicMarketplacePage(
 }
 
 /**
- * Читает изделие по числовому seq_id магазина и SKU (новый маршрут /q/…).
+ * Читает изделие по числовому seq_id магазина и SKU (/store/[shopId]/[sku]).
  * Если shopKey — не число, автоматически fallback на UUID.
  */
 export async function getPublicProductBySeqId(

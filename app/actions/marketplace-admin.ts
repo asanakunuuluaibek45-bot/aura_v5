@@ -68,6 +68,6 @@ export async function updateMarketplaceSettings(input: {
   }
 
   revalidatePath("/")
-  revalidatePath("/store/[store_id]", "page")
+  revalidatePath("/store/[shopId]", "page")
   revalidatePath("/admin/marketplace")
 }

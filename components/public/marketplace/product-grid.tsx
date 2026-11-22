@@ -340,10 +340,9 @@ function getVisiblePageNumbers(currentPage: number, totalPages: number): Array<n
 
 function MarketplaceProductCard({ product }: { product: PublicProduct }) {
   const cover = product.images?.[0] ?? product.image_url
-  const shopKey = product.shop_seq_id ?? product.shop_id
-  const href = product.sku
-    ? `/q/${shopKey}/${encodeURIComponent(product.sku.toUpperCase())}`
-    : null
+  const shopKey = product.sku?.trim() ? product.shop_seq_id ?? product.shop_id : product.shop_id
+  const article = product.sku?.trim().toUpperCase() || product.id
+  const href = `/store/${encodeURIComponent(String(shopKey))}/${encodeURIComponent(article)}`
   const content = (
     <>
       <div className="aspect-square bg-muted">

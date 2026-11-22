@@ -62,7 +62,7 @@ async function requireShopId(
 
 /**
  * Дополняет товары коротким числовым ID магазина (shop_settings.seq_id).
- * Без него QR-ссылка теряет идентификатор магазина и превращается в /q//SKU.
+ * Без него QR-ссылка теряет идентификатор магазина и превращается в /store//SKU.
  */
 async function withShopSeqId(
   supabase: Awaited<ReturnType<typeof createClient>>,

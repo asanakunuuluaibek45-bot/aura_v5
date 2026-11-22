@@ -8,13 +8,12 @@ import { AuraMark } from "@/components/shared/brand/aura-mark"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 /**
- * /q/[shopId]/[sku] — короткий маршрут для QR-кодов на этикетках.
+ * /store/[shopId]/[sku] — плоский маршрут карточки товара и QR-кодов.
  *
  * shopId — числовой seq_id магазина (или UUID для обратной совместимости).
  * sku    — латинский артикул, например RY00042.
  *
- * Маршрут намеренно плоский (/q/…), без /product/ в пути, что сокращает
- * длину URL и делает QR-код компактным и легко читаемым сканерами.
+ * Маршрут намеренно плоский (/store/…), без /product/ в пути, чтобы QR-код оставался коротким и легко читался сканерами.
  */
 
 type Params = { shopId: string; sku: string }
@@ -36,7 +35,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   }
 }
 
-export default async function QrProductPage({ params }: { params: Promise<Params> }) {
+export default async function StoreShortProductPage({ params }: { params: Promise<Params> }) {
   const { shopId, sku } = await params
   const product = await getPublicProductBySeqId(shopId, sku)
   if (!product) notFound()

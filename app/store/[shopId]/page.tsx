@@ -12,16 +12,16 @@ import { PublicProductGrid } from "@/components/public/marketplace/product-grid"
 import { AuraMark } from "@/components/shared/brand/aura-mark"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 
-type Params = { store_id: string }
+type Params = { shopId: string }
 
 export const revalidate = 300
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
-  const { store_id } = await params
-  if (!(await isPublicShopEnabled(store_id))) {
+  const { shopId } = await params
+  if (!(await isPublicShopEnabled(shopId))) {
     return { title: "Витрина не найдена", robots: { index: false, follow: false } }
   }
-  const products = await getPublicShopProducts(store_id, 1)
+  const products = await getPublicShopProducts(shopId, 1)
   const shop = products[0]?.shop_name ?? "Ювелирный магазин"
   const title = `${shop} — витрина на GOLDUCHET`
   const description = `Изделия магазина ${shop}: золото, серебро, вес, проба и цены.`
@@ -34,19 +34,19 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 }
 
 export default async function StorePage({ params }: { params: Promise<Params> }) {
-  const { store_id } = await params
-  if (!(await isPublicShopEnabled(store_id))) notFound()
+  const { shopId } = await params
+  if (!(await isPublicShopEnabled(shopId))) notFound()
   const settings = await getPublicMarketplaceSettings()
   const [productPage, facets] = await Promise.all([
     getPublicMarketplacePage(
-      store_id,
+      shopId,
       1,
       settings.productsPerPage,
       "",
       {},
       settings.hideProductsWithoutPhoto,
     ),
-    getPublicMarketplaceFacets(store_id, settings.hideProductsWithoutPhoto),
+    getPublicMarketplaceFacets(shopId, settings.hideProductsWithoutPhoto),
   ])
   const shop = productPage.items[0]?.shop_name ?? "Ювелирный магазин"
 
@@ -76,8 +76,8 @@ export default async function StorePage({ params }: { params: Promise<Params> })
         </div>
         <div className="mt-10">
           <PublicProductGrid
-            key={store_id}
-            shopId={store_id}
+            key={shopId}
+            shopId={shopId}
             initialPage={productPage}
             facets={facets}
             pageSize={settings.productsPerPage}

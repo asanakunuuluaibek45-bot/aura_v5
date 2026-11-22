@@ -23,6 +23,7 @@ export async function updateSession(request: NextRequest) {
     path === "/site.webmanifest" ||
     path === "/robots.txt" ||
     path === "/favicon.ico"
+  // Keep the legacy QR path public so next.config redirects old labels to /store.
   const isPublicStore =
     path === "/" ||
     path === "/for-shops" ||

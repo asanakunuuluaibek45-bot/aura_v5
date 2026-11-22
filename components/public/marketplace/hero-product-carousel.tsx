@@ -212,8 +212,9 @@ export function HeroProductCarousel({
           const chosenPhoto = product.id === featuredProductId ? product.images?.[featuredPhotoIndex] : null
           const image = chosenPhoto?.trim() || product.images?.find((photo) => photo.trim()) || product.image_url
           const itemTitle = product.category?.trim() || product.name
-          const article = product.id
-          const href = "/store/" + encodeURIComponent(product.shop_id) + "/product/" + encodeURIComponent(article)
+          const shopKey = product.sku?.trim() ? product.shop_seq_id ?? product.shop_id : product.shop_id
+          const article = product.sku?.trim().toUpperCase() || product.id
+          const href = "/store/" + encodeURIComponent(String(shopKey)) + "/" + encodeURIComponent(article)
 
           return (
             <Link

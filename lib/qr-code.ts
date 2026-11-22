@@ -4,9 +4,10 @@
  * Формат QR (см. components/crm/screens/sklad/label/data/qr.ts → buildQrUrl):
  *   "{seq_id магазина}/{SKU}", например "1/RY00042" или "12/BR00007".
  *
- * Для обратной совместимости также понимаем старые полные ссылки:
- *   https://host/q/{seq_id}/{SKU}
- *   https://host/store/{uuid}/product/{SKU}
+ * Понимаем текущий плоский маршрут и старые полные ссылки:
+ *   https://host/store/{seq_id}/{SKU} (основной QR-маршрут)
+ *   https://host/q/{seq_id}/{SKU} (перенаправляется на /store)
+ *   https://host/store/{uuid}/product/{SKU} (совместимость)
  *   ...?sku=RY00042
  */
 export type ParsedQr = {
@@ -42,6 +43,15 @@ export function parseQrCode(raw: string): ParsedQr {
       return {
         shopSeqId: /^\d+$/.test(shopSeg) ? Number(shopSeg) : null,
         sku: safeDecode(segments[qIndex + 2]).toUpperCase(),
+      }
+    }
+
+    const storeIndex = segments.lastIndexOf("store")
+    if (storeIndex >= 0 && segments[storeIndex + 2] && segments[storeIndex + 2] !== "product") {
+      const shopSegment = segments[storeIndex + 1]
+      return {
+        shopSeqId: /^\d+$/.test(shopSegment) ? Number(shopSegment) : null,
+        sku: safeDecode(segments[storeIndex + 2]).toUpperCase(),
       }
     }
 
