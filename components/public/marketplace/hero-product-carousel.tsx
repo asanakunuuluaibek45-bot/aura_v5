@@ -2,9 +2,8 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react"
-import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react"
+import { ArrowUpRight, ChevronLeft, ChevronRight, Sparkles } from "lucide-react"
 import type { PublicProduct } from "@/app/actions/store"
-import { formatSom, formatWeight } from "@/lib/format"
 
 type StackLayer = {
   rotate: number
@@ -35,6 +34,7 @@ const STACK_LAYERS: StackLayer[] = [
 
 const MAX_CARDS = 5
 const SWIPE_THRESHOLD = 75
+const INTRO_STORAGE_KEY = "golduchet-marketplace-carousel-intro-v1"
 
 type HeroProductCarouselProps = {
   products: PublicProduct[]
@@ -52,9 +52,14 @@ export function HeroProductCarousel({
   const items = products.slice(0, MAX_CARDS)
   const [activeIndex, setActiveIndex] = useState(0)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [showSwipeHint, setShowSwipeHint] = useState(true)
+  const [hintOffset, setHintOffset] = useState(0)
   const activeIndexRef = useRef(0)
   const dragRef = useRef<DragState | null>(null)
   const suppressClickRef = useRef(false)
+  const interactionStartedRef = useRef(false)
+  const introTimersRef = useRef<number[]>([])
 
   const setActiveCard = useCallback((index: number) => {
     if (items.length === 0) {
@@ -73,6 +78,59 @@ export function HeroProductCarousel({
     }
   }, [items.length, setActiveCard])
 
+  const markInteracted = useCallback(() => {
+    if (!interactionStartedRef.current) {
+      interactionStartedRef.current = true
+      introTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+      introTimersRef.current = []
+      try {
+        window.localStorage.setItem(INTRO_STORAGE_KEY, "1")
+      } catch {
+        // Storage may be disabled; the interaction still stops this page's motion.
+      }
+    }
+    setHintOffset(0)
+    setShowSwipeHint(false)
+  }, [])
+
+  useEffect(() => {
+    if (items.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+
+    try {
+      if (window.localStorage.getItem(INTRO_STORAGE_KEY) === "1") return
+    } catch {
+      // Continue with a one-page intro if storage is unavailable.
+    }
+
+    introTimersRef.current = []
+    const schedule = (callback: () => void, delay: number) => {
+      const timer = window.setTimeout(callback, delay)
+      introTimersRef.current.push(timer)
+    }
+
+    schedule(() => {
+      if (interactionStartedRef.current) return
+      try {
+        window.localStorage.setItem(INTRO_STORAGE_KEY, "1")
+      } catch {
+        // The intro remains limited to this mount if storage is unavailable.
+      }
+      setActiveCard(activeIndexRef.current + 1)
+      schedule(() => {
+        if (interactionStartedRef.current) return
+        setHintOffset(-6)
+        schedule(() => setHintOffset(5), 180)
+        schedule(() => setHintOffset(-3), 360)
+        schedule(() => setHintOffset(0), 540)
+      }, 900)
+    }, 1100)
+
+    return () => {
+      introTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+      introTimersRef.current = []
+    }
+  }, [items.length, setActiveCard])
+
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
       const drag = dragRef.current
@@ -82,7 +140,7 @@ export function HeroProductCarousel({
       drag.deltaY = event.clientY - drag.startY
       if (Math.abs(drag.deltaX) > 6 || Math.abs(drag.deltaY) > 6) drag.moved = true
 
-      if (Math.abs(drag.deltaX) > Math.abs(drag.deltaY) * 1.15) {
+      if (event.pointerType === "mouse" || Math.abs(drag.deltaX) > Math.abs(drag.deltaY) * 1.15) {
         setDragOffset({ x: drag.deltaX, y: drag.deltaY })
       }
     }
@@ -92,6 +150,7 @@ export function HeroProductCarousel({
       if (!drag || event.pointerId !== drag.pointerId) return
 
       dragRef.current = null
+      setIsDragging(false)
       setDragOffset({ x: 0, y: 0 })
       suppressClickRef.current = drag.moved
       window.setTimeout(() => {
@@ -122,6 +181,8 @@ export function HeroProductCarousel({
     const cardIndex = Number(card.dataset.cardIndex)
     if (!Number.isInteger(cardIndex) || cardIndex < 0 || cardIndex >= items.length) return
 
+    markInteracted()
+    setIsDragging(true)
     suppressClickRef.current = false
     if (cardIndex !== activeIndexRef.current) setActiveCard(cardIndex)
     dragRef.current = {
@@ -136,6 +197,7 @@ export function HeroProductCarousel({
   }
 
   function handleCardClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+    markInteracted()
     if (!suppressClickRef.current) return
     event.preventDefault()
     suppressClickRef.current = false
@@ -145,9 +207,11 @@ export function HeroProductCarousel({
     if (items.length < 2) return
     if (event.key === "ArrowRight") {
       event.preventDefault()
+      markInteracted()
       setActiveCard(activeIndex + 1)
     } else if (event.key === "ArrowLeft") {
       event.preventDefault()
+      markInteracted()
       setActiveCard(activeIndex - 1)
     }
   }
@@ -206,12 +270,14 @@ export function HeroProductCarousel({
           const scale = depth === 0
             ? layer.scale
             : layer.scale + (nextLayer.scale - layer.scale) * dragProgress
+          const rotateY = depth === 0 ? Math.max(-14, Math.min(14, dragOffset.x * 0.07)) : 0
+          const rotateX = depth === 0 ? Math.max(-10, Math.min(10, dragOffset.y * -0.06)) : 0
+          const stackNudge = depth === 1 ? hintOffset : 0
           const opacity = depth === 0
             ? layer.opacity
             : layer.opacity + (nextLayer.opacity - layer.opacity) * dragProgress
           const chosenPhoto = product.id === featuredProductId ? product.images?.[featuredPhotoIndex] : null
           const image = chosenPhoto?.trim() || product.images?.find((photo) => photo.trim()) || product.image_url
-          const itemTitle = product.category?.trim() || product.name
           const shopKey = product.sku?.trim() ? product.shop_seq_id ?? product.shop_id : product.shop_id
           const article = product.sku?.trim().toUpperCase() || product.id
           const href = "/store/" + encodeURIComponent(String(shopKey)) + "/" + encodeURIComponent(article)
@@ -224,12 +290,14 @@ export function HeroProductCarousel({
               data-card-index={index}
               aria-label={"Открыть «" + product.name + "» в магазине " + (product.shop_name ?? "Ювелирный магазин")}
               onClick={handleCardClick}
-              className="group absolute bottom-6 left-4 right-4 top-3 block rounded-[30px] bg-card p-2 shadow-[0_20px_45px_-12px_rgba(24,28,56,0.16),0_6px_16px_-4px_rgba(24,28,56,0.08)] outline-none ring-primary/50 transition-[transform,opacity,box-shadow] duration-500 focus-visible:ring-2"
+              className={"group absolute bottom-6 left-4 right-4 top-3 block cursor-grab rounded-[30px] bg-card p-2 shadow-[0_20px_45px_-12px_rgba(24,28,56,0.16),0_6px_16px_-4px_rgba(24,28,56,0.08)] outline-none ring-primary/50 active:cursor-grabbing focus-visible:ring-2 " + (isDragging ? "transition-none" : "transition-[transform,opacity,box-shadow] duration-700 ease-out motion-reduce:transition-none")}
               style={{
-                transform: "translate3d(" + translateX + "px, " + translateY + "px, 0) rotate(" + rotation + "deg) scale(" + scale + ")",
+                transform: "translate3d(" + (translateX + stackNudge) + "px, " + translateY + "px, 0) rotateX(" + rotateX + "deg) rotateY(" + rotateY + "deg) rotate(" + rotation + "deg) scale(" + scale + ")",
                 opacity,
                 zIndex: layer.zIndex,
                 touchAction: "pan-y",
+                transformStyle: "preserve-3d",
+                willChange: "transform",
                 pointerEvents: depth >= 4 ? "none" : "auto",
               }}
             >
@@ -256,22 +324,14 @@ export function HeroProductCarousel({
                   <span className="mb-2 inline-block max-w-[90%] truncate rounded-full border border-white/20 bg-black/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-white/95 backdrop-blur-md sm:text-[11px]">
                     {product.shop_name ?? "Ювелирный магазин"}
                   </span>
-                  <h2 className="line-clamp-1 font-serif text-[28px] font-medium leading-tight tracking-tight text-white drop-shadow-sm sm:text-[34px]">
-                    {itemTitle}
+                  <h2 className="line-clamp-2 font-serif text-[28px] font-medium leading-tight tracking-tight text-white drop-shadow-sm sm:text-[34px]">
+                    {product.name}
                   </h2>
-                  <p className="mt-1 line-clamp-1 max-w-full text-sm text-white/80">{product.name}</p>
-                  <div className="mt-1 flex max-w-full items-center gap-2 text-xs text-white/75">
-                    {product.metal && <span className="truncate">{product.metal}</span>}
-                    {product.metal && product.weight > 0 && <span aria-hidden="true">·</span>}
-                    {product.weight > 0 && <span className="truncate">{formatWeight(product.weight)}</span>}
-                    {(product.metal || product.weight > 0) && <span aria-hidden="true">·</span>}
-                    <span className="shrink-0 font-mono font-semibold text-white">{formatSom(product.sale_price)}</span>
-                  </div>
                 </div>
               </div>
-              <div className="pointer-events-none absolute -bottom-3 -left-3 z-40 rounded-[18px] border border-border/70 bg-card/95 px-4 py-2.5 shadow-[0_14px_32px_-6px_rgba(24,28,56,0.14),0_4px_10px_-2px_rgba(24,28,56,0.06)] backdrop-blur transition-[transform,opacity] duration-500 sm:px-5 sm:py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Ассортимент</p>
-                <p className="mt-0.5 text-sm font-bold tracking-tight text-card-foreground">{items.length} изделий в подборке</p>
+              <div className="pointer-events-none absolute -bottom-3 -left-3 z-40 flex max-w-[95%] items-center gap-2 rounded-full border border-border/70 bg-card/95 px-4 py-3 text-card-foreground shadow-[0_14px_32px_-6px_rgba(24,28,56,0.14),0_4px_10px_-2px_rgba(24,28,56,0.06)] backdrop-blur transition-[transform,opacity] duration-500 sm:px-5">
+                <span className="whitespace-nowrap text-[9px] font-bold uppercase tracking-[0.08em] sm:text-[10px]">СМОТРЕТЬ ИЗДЕЛИЕ · В НАЛИЧИИ</span>
+                <ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0 text-primary" />
               </div>
             </Link>
           )
@@ -283,7 +343,7 @@ export function HeroProductCarousel({
           type="button"
           data-carousel-control="true"
           aria-label="Предыдущее изделие"
-          onClick={() => setActiveCard(activeIndex - 1)}
+          onClick={() => { markInteracted(); setActiveCard(activeIndex - 1) }}
           disabled={items.length < 2}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:border-primary/40 hover:text-primary active:scale-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -297,7 +357,7 @@ export function HeroProductCarousel({
               data-carousel-control="true"
               aria-label={"Показать изделие " + (index + 1) + " из " + items.length}
               aria-pressed={activeIndex === index}
-              onClick={() => setActiveCard(index)}
+              onClick={() => { markInteracted(); setActiveCard(index) }}
               className={"h-2 rounded-full transition-all duration-300 " + (index === activeIndex ? "w-[22px] bg-primary" : "w-[7px] bg-border hover:bg-primary/50")}
             />
           ))}
@@ -306,7 +366,7 @@ export function HeroProductCarousel({
           type="button"
           data-carousel-control="true"
           aria-label="Следующее изделие"
-          onClick={() => setActiveCard(activeIndex + 1)}
+          onClick={() => { markInteracted(); setActiveCard(activeIndex + 1) }}
           disabled={items.length < 2}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:border-primary/40 hover:text-primary active:scale-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -314,15 +374,15 @@ export function HeroProductCarousel({
         </button>
       </div>
 
-      {items.length > 1 && (
-        <p className="relative z-20 mt-2.5 flex items-center justify-center gap-1.5 text-[11px] tracking-wide text-muted-foreground opacity-75">
+      {items.length > 1 && showSwipeHint && (
+        <p className="relative z-20 mt-2.5 flex items-center justify-center gap-1.5 text-[11px] tracking-wide text-muted-foreground opacity-75 transition-opacity duration-300">
           <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" />
             <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2" />
             <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8" />
             <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
           </svg>
-          Смахните карточку влево или вправо
+          Перетащите или смахните, чтобы листать
         </p>
       )}
     </div>
