@@ -49,7 +49,7 @@ export function AdminMarketplaceSettings({
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">GOLDUCHET · Платформа</p>
         <h1 className="font-serif text-3xl tracking-tight sm:text-4xl">Маркетплейс</h1>
         <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Настройте главную фотографию, видимость карточек и размер страницы каталога.
+          Настройте фоновое фото карусели, видимость карточек и размер страницы каталога.
         </p>
       </header>
 
@@ -66,9 +66,9 @@ export function AdminMarketplaceSettings({
               <ImageIcon className="h-5 w-5" aria-hidden="true" />
             </span>
             <div>
-              <h2 className="font-semibold">Главное фото</h2>
+              <h2 className="font-semibold">Фоновое фото карусели</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Это изображение показывается в верхнем блоке главной страницы. Оставьте поле пустым, чтобы использовать фото первого товара.
+                Это фото отображается мягким размытым фоном за карточками товаров в верхнем блоке главной страницы.
               </p>
             </div>
           </div>
@@ -88,7 +88,7 @@ export function AdminMarketplaceSettings({
             <div className="mt-4 flex items-start gap-4">
               <div className="h-28 w-28 shrink-0 overflow-hidden rounded-xl border border-border bg-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={heroImageUrl} alt="Предпросмотр главного фото" className="h-full w-full object-cover" />
+                <img src={heroImageUrl} alt="Предпросмотр фонового фото" className="h-full w-full object-cover" />
               </div>
               <Button
                 type="button"
@@ -99,11 +99,11 @@ export function AdminMarketplaceSettings({
                 onClick={() => setHeroImageUrl("")}
               >
                 <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
-                Фото товара по умолчанию
+                Убрать фоновое фото
               </Button>
             </div>
           ) : (
-            <p className="mt-3 text-xs text-muted-foreground">Сейчас используется фотография первого товара каталога.</p>
+            <p className="mt-3 text-xs text-muted-foreground">Сейчас используется фирменный градиент.</p>
           )}
         </section>
 

@@ -11,6 +11,7 @@ const action = read("../app/actions/store.ts")
 const sessionProxy = read("../lib/supabase/proxy.ts")
 const nativeContract = read("../lib/native-action-contract.mjs")
 const homePage = read("../app/page.tsx")
+const heroCarousel = read("../components/public/marketplace/hero-product-carousel.tsx")
 const storePage = read("../app/store/[store_id]/page.tsx")
 const productGrid = read("../components/public/marketplace/product-grid.tsx")
 const appHeader = read("../components/crm/app-header.tsx")
@@ -73,6 +74,15 @@ test("public routes show searchable products without changing CRM routes", () =>
   assert.match(shopMarketingPage, /href="\/crm"/)
 })
 
+test("landing hero uses real products in a swipeable card carousel", () => {
+  assert.match(homePage, /<HeroProductCarousel products={productPage\.items} featuredImageUrl={settings\.heroImageUrl} \/>/)
+  assert.match(heroCarousel, /overflow-x-auto/)
+  assert.match(heroCarousel, /snap-x snap-mandatory/)
+  assert.match(heroCarousel, /touch-pan-x/)
+  assert.match(heroCarousel, /CARD_ROTATIONS = \[-6, 6, -8, 8, -5\.5, 7\]/)
+  assert.match(heroCarousel, /formatSom\(product\.sale_price\)/)
+})
+
 test("marketplace entry is in the showcase screen, not the CRM header", () => {
   assert.match(sessionProxy, /const isLoginRoute = path === "\/auth\/login" \|\| path === "\/auth\/login\/"/)
   assert.match(sessionProxy, /if \(user && isLoginRoute\)/)
@@ -96,7 +106,7 @@ test("admin marketplace controls are guarded and stored with a public read-only 
   assert.match(adminNav, /Маркетплейс/)
   assert.match(marketplaceAdminAction, /requireSuperAdminContext/)
   assert.match(marketplaceAdminAction, /superadmin_update_marketplace_settings/)
-  assert.match(adminMarketplaceSettings, /Главное фото/)
+  assert.match(adminMarketplaceSettings, /Фоновое фото карусели/)
   assert.match(adminMarketplaceSettings, /Карточки без фото/)
   assert.match(adminMarketplaceSettings, /Карточек на странице/)
   assert.match(controlsMigration, /CREATE TABLE public\.marketplace_settings/)
