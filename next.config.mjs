@@ -38,11 +38,12 @@ const nextConfig = {
     ]
   },
 
-  // async redirects() {
-  //   return [
-  //     { source: '/', destination: '/crm', permanent: false },
-  //   ]
-  // },
+  // Keep old printed QR labels working while the flat /store route is canonical.
+  async redirects() {
+    return [
+      { source: '/q/:shopId/:sku', destination: '/store/:shopId/:sku', permanent: true },
+    ]
+  },
 }
 
 export default nextConfig

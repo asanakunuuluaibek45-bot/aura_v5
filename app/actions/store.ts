@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 
-/** Публичная карточка изделия для страницы /store/[store_id]/product/[article]. */
+/** Публичная карточка изделия для плоского и подробного маршрутов витрины. */
 export type PublicProduct = {
   id: string
   shop_id: string
@@ -48,6 +48,9 @@ export type PublicMarketplaceFacets = {
 
 export type PublicMarketplaceSettings = {
   heroImageUrl: string | null
+  heroShopId: string | null
+  heroProductId: string | null
+  heroPhotoIndex: number
   hideProductsWithoutPhoto: boolean
   productsPerPage: number
   available: boolean
@@ -70,6 +73,9 @@ const ALLOWED_MARKETPLACE_PAGE_SIZES = [8, 12, 16, 24]
 export async function getPublicMarketplaceSettings(): Promise<PublicMarketplaceSettings> {
   const fallback: PublicMarketplaceSettings = {
     heroImageUrl: null,
+    heroShopId: null,
+    heroProductId: null,
+    heroPhotoIndex: 0,
     hideProductsWithoutPhoto: false,
     productsPerPage: DEFAULT_MARKETPLACE_PAGE_SIZE,
     available: false,
@@ -87,17 +93,24 @@ export async function getPublicMarketplaceSettings(): Promise<PublicMarketplaceS
     }
     const row = (Array.isArray(data) ? data[0] : data) as {
       hero_image_url?: unknown
+      hero_shop_id?: unknown
+      hero_product_id?: unknown
+      hero_photo_index?: unknown
       hide_products_without_photo?: unknown
       products_per_page?: unknown
     } | null
     const pageSize = Number(row?.products_per_page)
+    const photoIndex = Number(row?.hero_photo_index)
     return {
       heroImageUrl: typeof row?.hero_image_url === "string" ? row.hero_image_url : null,
+      heroShopId: typeof row?.hero_shop_id === "string" ? row.hero_shop_id : null,
+      heroProductId: typeof row?.hero_product_id === "string" ? row.hero_product_id : null,
+      heroPhotoIndex: Number.isSafeInteger(photoIndex) && photoIndex >= 0 ? photoIndex : 0,
       hideProductsWithoutPhoto: row?.hide_products_without_photo === true,
       productsPerPage: ALLOWED_MARKETPLACE_PAGE_SIZES.includes(pageSize)
         ? pageSize
         : DEFAULT_MARKETPLACE_PAGE_SIZE,
-      available: Boolean(row),
+      available: Boolean(row && row.hero_shop_id !== undefined && row.hero_product_id !== undefined),
     }
   } catch (error) {
     console.error("[store] public_marketplace_settings failed:", error)
@@ -319,7 +332,7 @@ export async function getPublicMarketplacePage(
 }
 
 /**
- * Читает изделие по числовому seq_id магазина и SKU (новый маршрут /q/…).
+ * Читает изделие по числовому seq_id магазина и SKU (/store/[shopId]/[sku]).
  * Если shopKey — не число, автоматически fallback на UUID.
  */
 export async function getPublicProductBySeqId(

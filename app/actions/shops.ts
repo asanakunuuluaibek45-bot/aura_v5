@@ -97,9 +97,9 @@ export async function setOwnShopPublicEnabled(enabled: boolean): Promise<void> {
 
   revalidatePath("/crm/showcase")
   revalidatePath("/")
-  revalidatePath("/store/[store_id]", "page")
-  revalidatePath("/store/[store_id]/product/[article]", "page")
-  revalidatePath("/q/[shopId]/[sku]", "page")
+  revalidatePath("/store/[shopId]", "page")
+  revalidatePath("/store/[shopId]/[sku]", "page")
+  revalidatePath("/store/[shopId]/product/[article]", "page")
 }
 
 /** Проверяет, доступна ли публичная витрина для посетителя. */

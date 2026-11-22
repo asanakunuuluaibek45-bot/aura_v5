@@ -5,10 +5,12 @@ import {
   getPublicMarketplaceFacets,
   getPublicMarketplacePage,
   getPublicMarketplaceSettings,
+  getPublicProduct,
 } from "@/app/actions/store"
 import { createClient } from "@/lib/supabase/server"
 import { GoldUchetLogo } from "@/components/shared/brand/golduchet-logo"
 import { PublicProductGrid } from "@/components/public/marketplace/product-grid"
+import { HeroProductCarousel } from "@/components/public/marketplace/hero-product-carousel"
 import { ShopDirectory } from "@/components/public/marketplace/shop-directory"
 import { Button } from "@/components/shared/ui/button"
 import { ArrowRight, ArrowDown, Sparkles } from "lucide-react"
@@ -43,7 +45,7 @@ export default async function LandingPage() {
       }
     })(),
   ])
-  const [productPage, facets] = await Promise.all([
+  const [productPage, facets, heroCarouselPage, selectedHeroProduct] = await Promise.all([
     getPublicMarketplacePage(
       null,
       1,
@@ -53,9 +55,21 @@ export default async function LandingPage() {
       settings.hideProductsWithoutPhoto,
     ),
     getPublicMarketplaceFacets(null, settings.hideProductsWithoutPhoto),
+    getPublicMarketplacePage(settings.heroShopId, 1, 24, "", {}, true),
+    settings.heroShopId && settings.heroProductId
+      ? getPublicProduct(settings.heroShopId, settings.heroProductId)
+      : Promise.resolve(null),
   ])
-  const heroProduct = productPage.items[0]
-  const heroImage = settings.heroImageUrl ?? heroProduct?.images?.[0] ?? heroProduct?.image_url
+
+  const featuredProduct = selectedHeroProduct?.status === "in_stock"
+    && Boolean(selectedHeroProduct.images?.some((image) => image.trim()) || selectedHeroProduct.image_url?.trim())
+    ? selectedHeroProduct
+    : null
+  const carouselProducts = heroCarouselPage.items
+  const heroProducts = [
+    ...(featuredProduct ? [featuredProduct] : []),
+    ...carouselProducts.filter((product) => product.id !== featuredProduct?.id),
+  ].slice(0, 5)
 
   return (
     <main className="min-h-screen bg-background">
@@ -104,37 +118,12 @@ export default async function LandingPage() {
           </div>
 
           <div className="relative mx-auto w-full max-w-[34rem]">
-            <div aria-hidden="true" className="absolute -inset-4 rounded-[2.5rem] bg-primary/10 blur-2xl" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card p-2 shadow-2xl shadow-primary/10">
-              <div className="relative aspect-[5/4] overflow-hidden rounded-[1.5rem] bg-[linear-gradient(145deg,#e9dfca,#c6b397_52%,#71614c)]">
-                {heroImage ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={heroImage} alt={heroProduct?.name ?? "Украшение из каталога"} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex h-44 w-44 items-center justify-center rounded-full border border-white/60 bg-white/15 text-white shadow-xl backdrop-blur-sm">
-                      <span className="font-serif text-6xl">Au</span>
-                    </div>
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-7">
-                  <span className="inline-flex rounded-full border border-white/30 bg-black/20 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] backdrop-blur">
-                    {heroProduct ? "Из открытой витрины" : "Украшения местных магазинов"}
-                  </span>
-                  <p className="mt-3 font-serif text-2xl sm:text-3xl">
-                    {heroProduct?.name ?? "Выберите свою историю"}
-                  </p>
-                  <p className="mt-1 text-sm text-white/80">
-                    {heroProduct?.shop_name ?? "Каталоги магазинов GOLDUCHET"}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="absolute -bottom-4 -left-3 rounded-2xl border border-border/70 bg-card/95 px-4 py-3 shadow-lg backdrop-blur sm:-left-8">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Ассортимент</p>
-              <p className="mt-0.5 text-sm font-semibold">{productPage.items.length} изделий в подборке</p>
-            </div>
+            <HeroProductCarousel
+              products={heroProducts}
+              featuredImageUrl={settings.heroImageUrl}
+              featuredProductId={featuredProduct?.id ?? null}
+              featuredPhotoIndex={settings.heroPhotoIndex}
+            />
           </div>
         </div>
       </section>

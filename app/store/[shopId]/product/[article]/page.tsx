@@ -7,11 +7,11 @@ import { purityFromMetal } from "@/lib/purity"
 import { AuraMark } from "@/components/shared/brand/aura-mark"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 
-type Params = { store_id: string; article: string }
+type Params = { shopId: string; article: string }
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
-  const { store_id, article } = await params
-  const product = await getPublicProduct(store_id, article)
+  const { shopId, article } = await params
+  const product = await getPublicProduct(shopId, article)
   return {
     title: product ? `${product.name} — GOLDUCHET` : "Изделие — GOLDUCHET",
     description: product?.description ?? "Карточка ювелирного изделия",
@@ -19,8 +19,8 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 }
 
 export default async function ProductPage({ params }: { params: Promise<Params> }) {
-  const { store_id, article } = await params
-  const product = await getPublicProduct(store_id, article)
+  const { shopId, article } = await params
+  const product = await getPublicProduct(shopId, article)
   if (!product) notFound()
 
   const cover = product.images?.[0] ?? product.image_url
@@ -28,13 +28,13 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
   return (
     <main className="min-h-screen bg-background">
       <header className="flex items-center justify-between border-b border-border px-5 py-4">
-        <Link href={`/store/${store_id}`} className="flex items-center gap-2">
+        <Link href={`/store/${shopId}`} className="flex items-center gap-2">
           <AuraMark className="h-7 w-7" />
           <span className="font-serif text-lg">GOLDUCHET</span>
         </Link>
         <div className="flex items-center gap-3">
           <ThemeToggle />
-          <Link href={`/store/${store_id}`} className="text-sm text-muted-foreground hover:text-foreground">
+          <Link href={`/store/${shopId}`} className="text-sm text-muted-foreground hover:text-foreground">
             Назад к витрине
           </Link>
         </div>
