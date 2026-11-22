@@ -10,7 +10,7 @@ export function cropPrintArea(
   sizeDef: LabelSizeDef,
   outputDpi = 203,
 ): HTMLCanvasElement {
-  // Сохраняем 2× supersampling для сглаживания и дополнительно увеличиваем
+  // Сохраняем 2× supersampling и дополнительно увеличиваем
   // буфер до нативной плотности печатающей головки выбранной модели.
   const scale = PRINT_SCALE * outputDpi / 203
   const origVT = canvas.viewportTransform
@@ -37,8 +37,7 @@ export function cropPrintArea(
   if (ctx) {
     ctx.fillStyle = "#ffffff"
     ctx.fillRect(0, 0, out.width, out.height)
-    ctx.imageSmoothingEnabled = true
-    ctx.imageSmoothingQuality = "high"
+    ctx.imageSmoothingEnabled = false
     ctx.drawImage(source, 0, 0, out.width, out.height)
   }
   return out

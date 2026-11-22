@@ -91,7 +91,7 @@ export async function compressToWebp(file: Blob, options: { monochrome?: boolean
     src.draw(ctx, w, h)
     if (options.monochrome) {
       const pixels = ctx.getImageData(0, 0, w, h)
-      convertRgbaToMonochrome(pixels.data, w, h)
+      convertRgbaToMonochrome(pixels.data, w, h, { mode: "dither" })
       ctx.putImageData(pixels, 0, 0)
     }
 

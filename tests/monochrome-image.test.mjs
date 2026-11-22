@@ -10,9 +10,9 @@ test("black and white input stays black and white", () => {
   assert.deepEqual([...pixels], [0,0,0,255,255,255,255,255])
 })
 
-test("mid-tone photo detail dithers into both black and white instead of a solid black block", () => {
+test("mid-tone photo detail dithers when requested", () => {
   const pixels = rgba(Array.from({ length: 64 }, () => [128,128,128]))
-  convertRgbaToMonochrome(pixels, 8, 8)
+  convertRgbaToMonochrome(pixels, 8, 8, { mode: "dither" })
   const levels = new Set(Array.from({ length: 64 }, (_, i) => pixels[i * 4]))
   assert.deepEqual([...levels].sort((a,b) => a-b), [0,255])
   for (let i = 0; i < pixels.length; i += 4) {
@@ -20,6 +20,27 @@ test("mid-tone photo detail dithers into both black and white instead of a solid
     assert.equal(pixels[i], pixels[i + 2])
     assert.equal(pixels[i + 3], 255)
   }
+})
+
+test("threshold mode keeps edge pixels strictly black or white without diffusing error", () => {
+  const pixels = rgba([[127,127,127],[128,128,128],[126,126,126],[129,129,129]])
+  convertRgbaToMonochrome(pixels, 4, 1, { mode: "threshold" })
+  assert.deepEqual([...pixels], [
+    0,0,0,255,
+    255,255,255,255,
+    0,0,0,255,
+    255,255,255,255,
+  ])
+})
+
+test("threshold mode uses a custom threshold and treats alpha below one half as white", () => {
+  const pixels = rgba([[200,200,200],[0,0,0,127],[0,0,0,128]])
+  convertRgbaToMonochrome(pixels, 3, 1, { threshold: 201 })
+  assert.deepEqual([...pixels], [
+    0,0,0,255,
+    255,255,255,255,
+    0,0,0,255,
+  ])
 })
 
 test("transparent photo pixels become white for thermal printing", () => {

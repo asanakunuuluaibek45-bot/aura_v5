@@ -39,7 +39,7 @@ test("photo picker accepts common image formats and keeps SVG import", () => {
   assert.ok(template.includes("item.src = src"))
   assert.ok(template.includes("applyTemplateImages"))
   const image = read("lib/image.ts")
-  assert.ok(image.includes("convertRgbaToMonochrome(pixels.data, w, h)"))
+  assert.ok(image.includes('convertRgbaToMonochrome(pixels.data, w, h, { mode: "dither" })'))
 })
 
 test("template confirmation dialogs fit mobile without internal scrolling", () => {
