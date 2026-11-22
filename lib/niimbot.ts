@@ -717,6 +717,7 @@ export function canvasToLabelDataUrl(
   out.height = targetH
   const outCtx = out.getContext("2d", { willReadFrequently: true })
   if (!outCtx) throw new Error("Не удалось подготовить буфер масштабирования")
+  outCtx.imageSmoothingEnabled = false
 
   // Заполнение белым фоном для исключения прозрачных пикселей
   outCtx.fillStyle = "#ffffff"
@@ -765,6 +766,7 @@ export async function printCanvas(
     buffer.height = height
     const context = buffer.getContext("2d", { willReadFrequently: true })
     if (!context) throw new Error("Не удалось подготовить растр Dejen")
+    context.imageSmoothingEnabled = false
     context.fillStyle = "#fff"
     context.fillRect(0, 0, width, height)
     // Horizontal labels stay at the left edge; all other formats are centered on the head.

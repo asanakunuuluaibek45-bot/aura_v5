@@ -12,6 +12,7 @@
     "start": "node scripts/run-next.mjs start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "test:critical": "node --test tests/critical-regressions.test.mjs",
     "test:ios-optimizations": "node --test tests/ios-optimizations.test.mjs",
     "test:offline-startup": "node --test tests/offline-startup.test.mjs",
