@@ -87,6 +87,19 @@ test("branch switching verifies server membership and refreshes only after succe
   assert.match(control, /await setActiveBusinessBranch\(shopId\)[\s\S]*?router\.refresh\(\)/)
 })
 
+
+test("shop visibility follows the server-authorized active branch after branch creation", () => {
+  const actions = read("../app/actions/shops.ts")
+  const start = actions.indexOf("async function requireOwnShopAdminContext()")
+  const end = actions.indexOf("/** Читает состояние публичности", start)
+  const guard = actions.slice(start, end)
+
+  assert.match(guard, /branchContext\.activeShopId/)
+  assert.match(guard, /branchContext\.branches\.find/)
+  assert.match(guard, /branch\.businessId === branchContext\.businessId/)
+  assert.doesNotMatch(guard, /profile\.shop_id/)
+})
+
 test("direct CRM URLs are blocked server-side with a safe route to the POS", () => {
   const screen = read("../app/crm/crm-screen.tsx")
   const notice = read("../components/crm/branch-feature-notice.tsx")

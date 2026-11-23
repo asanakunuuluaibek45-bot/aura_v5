@@ -123,15 +123,22 @@ export async function setActiveBusinessBranch(shopId: string): Promise<void> {
 }
 
 async function requireOwnShopAdminContext() {
-  const { supabase, user, profile, shopId } = await getRequestCrmContext()
+  const { supabase, user, profile, branchContext } = await getRequestCrmContext()
   if (!user) throw new Error("Требуется вход в систему")
   if (!profile || profile.status !== "approved" || profile.role !== "admin") {
     throw new Error("Только администратор магазина может менять публичность витрины")
   }
-  if (!profile.shop_id || shopId !== profile.shop_id) {
-    throw new Error("Не удалось подтвердить ваш магазин")
-  }
-  return { supabase, shopId: profile.shop_id }
+
+  // The profile's shop_id is its home/QR branch; after a switch, use only the
+  // active branch returned by the server-authorized branch context.
+  const activeBranch = branchContext.branches.find(
+    (branch) =>
+      branch.shopId === branchContext.activeShopId &&
+      branch.businessId === branchContext.businessId &&
+      branch.isActive,
+  )
+  if (!activeBranch) throw new Error("Не удалось подтвердить активный филиал")
+  return { supabase, shopId: activeBranch.shopId }
 }
 
 /** Читает состояние публичности только собственного магазина администратора. */
