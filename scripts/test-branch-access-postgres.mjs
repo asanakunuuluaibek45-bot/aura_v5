@@ -162,6 +162,11 @@ try {
   )
   const branchRequestId = branchRequestOutput.split(/\r?\n/).at(-1)
   assert.match(branchRequestId, /^[0-9a-f-]{36}$/i)
+  const legacyShopAddresses = await psql(
+    [],
+    `SELECT count(*) || ':' || count(*) FILTER (WHERE shop_address IS NULL) FROM public.shop_settings;`,
+  )
+  assert.equal(legacyShopAddresses, "2:2", "existing shops are preserved without address backfill")
   await scopedSql(
     adminA,
     `SELECT public.save_active_shop_admin_profile('Аибек админ', '+996 555 000 111', 'Каракол, Бугу базар, 23-й бутик');`,

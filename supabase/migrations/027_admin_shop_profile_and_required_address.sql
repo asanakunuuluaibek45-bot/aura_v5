@@ -1,6 +1,7 @@
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
+-- Nullable and without a backfill: existing shops remain usable with no address.
 ALTER TABLE public.shop_settings
   ADD COLUMN IF NOT EXISTS shop_address text;
 
@@ -61,7 +62,7 @@ $$;
 
 -- Replace the prior four-argument RPC so it cannot bypass the address rule.
 DROP FUNCTION IF EXISTS public.complete_google_registration(text, text, text, text);
-CREATE FUNCTION public.complete_google_registration(
+CREATE OR REPLACE FUNCTION public.complete_google_registration(
   _full_name text,
   _shop_name text,
   _shop_address text,

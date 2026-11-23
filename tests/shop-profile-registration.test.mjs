@@ -13,6 +13,8 @@ test("email and Google registration both require a shop address", () => {
   assert.match(email, /shop_address:\s*shopAddress\.trim\(\)/)
   assert.match(google, /id="googleShopAddress"[\s\S]*?required/)
   assert.match(google, /_shop_address:\s*shopAddress\.trim\(\)/)
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS shop_address text;/)
+  assert.doesNotMatch(migration, /ALTER COLUMN shop_address SET NOT NULL/i)
   assert.match(migration, /v_shop_address IS NULL OR length\(v_shop_address\) > 240/)
   assert.match(migration, /DROP FUNCTION IF EXISTS public\.complete_google_registration\(text, text, text, text\)/)
 })
