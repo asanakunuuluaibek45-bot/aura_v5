@@ -4,11 +4,12 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Building2, Check, ChevronDown, Pencil, Plus, Store } from "lucide-react"
 import {
-  createBusinessBranch,
+  requestBusinessBranch,
   renameActiveBusinessBranch,
   setActiveBusinessBranch,
 } from "@/app/actions/shops"
 import type { BranchContext } from "@/lib/supabase/current-shop"
+import type { BranchCreationRequest } from "@/app/actions/shops"
 import { Button } from "@/components/shared/ui/button"
 import {
   Dialog,
@@ -20,16 +21,18 @@ import {
 } from "@/components/shared/ui/dialog"
 import { toast } from "sonner"
 
-type EditorMode = "manage" | "create" | "rename"
+type EditorMode = "manage" | "request" | "rename"
 
 export function BranchControl({
   context,
   businessName,
+  branchRequest,
   canManage,
   online,
 }: {
   context: BranchContext
   businessName: string | null
+  branchRequest: BranchCreationRequest | null
   canManage: boolean
   online: boolean
 }) {
@@ -80,15 +83,17 @@ export function BranchControl({
     setError(null)
     startTransition(async () => {
       try {
-        if (mode === "create") {
-          await createBusinessBranch(name)
-          toast.success("Филиал создан")
+        if (mode === "request") {
+          await requestBusinessBranch(name)
+          toast.success("Запрос отправлен супер-администратору")
+          setMode("manage")
+          setName("")
         } else {
           await renameActiveBusinessBranch(name)
           toast.success("Название филиала изменено")
+          setOpen(false)
+          resetEditor()
         }
-        setOpen(false)
-        resetEditor()
         router.refresh()
       } catch (actionError) {
         setError(actionError instanceof Error ? actionError.message : "Не удалось сохранить изменения")
@@ -104,12 +109,7 @@ export function BranchControl({
       className="flex min-w-0 max-w-[190px] items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5 text-left transition-colors hover:bg-primary/10 disabled:opacity-60 sm:max-w-64 sm:px-3 sm:py-2"
     >
       <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-      <span className="min-w-0 leading-tight">
-        <span className="block truncate text-[10px] text-muted-foreground sm:text-[11px]">
-          {businessName?.trim() || "Бизнес"}
-        </span>
-        <span className="block truncate text-xs font-semibold sm:text-sm">{activeName}</span>
-      </span>
+      <span className="min-w-0 flex-1 truncate text-xs font-semibold sm:text-sm">{activeName}</span>
       {canOpen && <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
     </button>
   )
@@ -117,16 +117,11 @@ export function BranchControl({
   if (!canOpen) {
     return (
       <div
-        aria-label={`${businessName?.trim() || "Бизнес"} — ${activeName}`}
+        aria-label={activeName}
         className="flex min-w-0 max-w-[190px] items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5 text-left sm:max-w-64 sm:px-3 sm:py-2"
       >
         <Building2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-        <span className="min-w-0 leading-tight">
-          <span className="block truncate text-[10px] text-muted-foreground sm:text-[11px]">
-            {businessName?.trim() || "Бизнес"}
-          </span>
-          <span className="block truncate text-xs font-semibold sm:text-sm">{activeName}</span>
-        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold sm:text-sm">{activeName}</span>
       </div>
     )
   }
@@ -188,20 +183,36 @@ export function BranchControl({
                 </p>
               )}
             </div>
+            {canManage && branchRequest?.status === "pending" && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm" role="status">
+                Запрос «{branchRequest.requested_shop_name}» ожидает одобрения супер-администратора.
+                До решения вы останетесь в текущем магазине.
+              </div>
+            )}
+            {canManage && branchRequest?.status === "rejected" && (
+              <p className="rounded-xl border border-border p-3 text-sm text-muted-foreground" role="status">
+                Последний запрос отклонён. Вы можете отправить новый запрос.
+              </p>
+            )}
+            {canManage && branchRequest?.status === "approved" && (
+              <p className="rounded-xl border border-border p-3 text-sm text-muted-foreground" role="status">
+                Точка одобрена. Вы остались в текущем магазине; выберите новую точку в списке, когда будете готовы.
+              </p>
+            )}
             {canManage && (
               <Button
                 type="button"
                 variant="outline"
                 className="w-full"
-                disabled={!online || pending}
+                disabled={!online || pending || branchRequest?.status === "pending"}
                 onClick={() => {
                   setName("")
-                  setMode("create")
+                  setMode("request")
                   setError(null)
                 }}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Создать филиал
+                Запросить новую точку
               </Button>
             )}
             {!online && (
@@ -212,9 +223,11 @@ export function BranchControl({
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle>{mode === "create" ? "Новый филиал" : "Название филиала"}</DialogTitle>
+              <DialogTitle>{mode === "request" ? "Запрос новой точки" : "Название филиала"}</DialogTitle>
               <DialogDescription>
-                Название длиной до 200 символов. Оно будет видно пользователям бизнеса.
+                {mode === "request"
+                  ? "После одобрения супер-администратором точка появится в списке. До этого вы останетесь в текущем магазине."
+                  : "Название активного филиала будет видно пользователям бизнеса."}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSave} className="space-y-4">
@@ -242,7 +255,7 @@ export function BranchControl({
                   Отмена
                 </Button>
                 <Button type="submit" disabled={!online || pending || !name.trim()}>
-                  {pending ? "Сохраняем…" : "Сохранить"}
+                  {pending ? "Отправляем…" : mode === "request" ? "Отправить на одобрение" : "Сохранить"}
                 </Button>
               </div>
             </form>

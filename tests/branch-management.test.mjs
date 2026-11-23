@@ -74,8 +74,9 @@ test("a failed or cancelled create cannot grant branch access or unlock screens"
 
   const action = read("../app/actions/shops.ts")
   const control = read("../components/crm/branch-control.tsx")
-  assert.match(action, /if \(error \|\| typeof data !== "string"\)[\s\S]*?Не удалось создать филиал/)
-  assert.match(control, /await createBusinessBranch\(name\)[\s\S]*?router\.refresh\(\)/)
+  assert.match(action, /rpc\("request_business_branch"/)
+  assert.doesNotMatch(action, /rpc\("create_business_branch"/)
+  assert.match(control, /await requestBusinessBranch\(name\)[\s\S]*?router\.refresh\(\)/)
   assert.match(control, /catch \(actionError\)[\s\S]*?setError/)
 })
 
@@ -113,6 +114,7 @@ test("the branch entry point remains available to admins with only one branch", 
   const control = read("../components/crm/branch-control.tsx")
   const header = read("../components/crm/app-header.tsx")
   assert.match(control, /const canOpen = canManage \|\| hasSwitcher/)
-  assert.match(control, /Создать филиал/)
+  assert.match(control, /Запросить новую точку/)
+  assert.match(control, /branchRequest\?\.status === "pending"/)
   assert.match(header, /canManage=\{profile\.role === "admin"/)
 })

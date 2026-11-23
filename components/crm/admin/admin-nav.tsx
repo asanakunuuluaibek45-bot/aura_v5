@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ArrowLeft, Bell, LayoutDashboard, Megaphone, ShieldCheck, ShoppingBag, Store, Users } from "lucide-react"
+import { ArrowLeft, Bell, LayoutDashboard, MapPin, Megaphone, ShieldCheck, ShoppingBag, Store, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function AdminNav() {
   const pathname = usePathname()
   const onOverview = pathname === "/admin"
   const onShops = pathname.startsWith("/admin/shops")
+  const onBranchRequests = pathname.startsWith("/admin/branch-requests")
   const onUsers = pathname.startsWith("/admin/users")
   const onAnnouncements = pathname.startsWith("/admin/announcements")
   const onNotifications = pathname.startsWith("/admin/notifications")
@@ -52,6 +53,19 @@ export function AdminNav() {
         >
           <Store className="h-4 w-4" aria-hidden="true" />
           Магазины
+        </Link>
+        <Link
+          href="/admin/branch-requests"
+          aria-current={onBranchRequests ? "page" : undefined}
+          className={cn(
+            "inline-flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
+            onBranchRequests
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <MapPin className="h-4 w-4" aria-hidden="true" />
+          Запросы точек
         </Link>
         <Link
           href="/admin/marketplace"

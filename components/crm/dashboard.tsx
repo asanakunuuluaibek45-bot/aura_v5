@@ -16,6 +16,7 @@ import type { CabinetData } from "@/app/actions/cabinet"
 import type { MetalRate } from "@/lib/types"
 import type { CashData } from "@/app/actions/cash"
 import type { ShopBillingRow } from "@/app/actions/superadmin"
+import type { BranchCreationRequest } from "@/app/actions/shops"
 import type { BranchContext } from "@/lib/supabase/current-shop"
 import {
   getSupplierDebtData,
@@ -128,6 +129,7 @@ export function Dashboard({
   clients = [],
   superAdminShops,
   publicStorefrontState = { enabled: true, canToggle: false },
+  branchCreationRequest = null,
 }: {
   /** Текущий экран определяется URL-роутом, а не внутренним состоянием. */
   screen: ScreenId
@@ -146,6 +148,7 @@ export function Dashboard({
   clients?: Customer[]
   superAdminShops?: ShopBillingRow[]
   publicStorefrontState?: { enabled: boolean; canToggle: boolean }
+  branchCreationRequest?: BranchCreationRequest | null
 }) {
   const router = useRouter()
   const [activeScreen, setActiveScreen] = useState<ScreenId>(screen)
@@ -421,6 +424,7 @@ export function Dashboard({
         profile={profile}
         branchContext={branchContext}
         businessName={businessName}
+        branchCreationRequest={branchCreationRequest}
         viewRole={viewRole}
         onChangeViewRole={setViewRole}
         onOpenCabinet={() => handleScreenChange("kabinet")}

@@ -34,6 +34,21 @@ export type UpdateShopBillingInput = {
   notes?:              string | null
 }
 
+export type BranchCreationRequestSummary = {
+  id: string
+  business_id: string
+  business_name: string
+  requested_by: string
+  requester_name: string | null
+  requested_shop_name: string
+  source_shop_name: string
+  status: "pending" | "approved" | "rejected"
+  requested_at: string
+  reviewed_at: string | null
+  reviewer_name: string | null
+  created_shop_id: string | null
+}
+
 export type AdminUserRow = {
   user_id: string
   full_name: string | null
@@ -137,6 +152,33 @@ export async function getPlatformUsers(): Promise<AdminUserRow[]> {
   const { data, error } = await supabase.rpc("superadmin_list_users")
   if (error) throw new Error(`Не удалось загрузить список пользователей: ${error.message}`)
   return (data ?? []) as AdminUserRow[]
+}
+
+
+export async function getBranchCreationRequests(): Promise<BranchCreationRequestSummary[]> {
+  const { supabase } = await requireSuperAdmin()
+  const { data, error } = await supabase.rpc("superadmin_list_branch_creation_requests")
+  if (error) throw new Error(`Не удалось загрузить запросы на открытие точек: ${error.message}`)
+  return (data ?? []) as BranchCreationRequestSummary[]
+}
+
+export async function reviewBranchCreationRequest(requestId: string, approve: boolean): Promise<void> {
+  if (typeof requestId !== "string" || !/^[0-9a-f-]{36}$/i.test(requestId)) {
+    throw new Error("Некорректный запрос на открытие точки")
+  }
+  if (typeof approve !== "boolean") throw new Error("Выберите решение по заявке")
+  const { supabase } = await requireSuperAdmin()
+  const { data, error } = await supabase.rpc("superadmin_review_branch_creation_request", {
+    _request_id: requestId,
+    _approve: approve,
+  })
+  if (error) throw new Error(`Не удалось ${approve ? "одобрить" : "отклонить"} запрос: ${error.message}`)
+  if (approve && typeof data !== "string") throw new Error("Точка не была создана после одобрения")
+  if (!approve && data !== null) throw new Error("Запрос отклонён, но сервер вернул неожиданный результат")
+  revalidatePath("/admin/branch-requests")
+  revalidatePath("/admin/shops")
+  revalidatePath("/crm/pos")
+  revalidatePath("/crm/reports")
 }
 
 export async function updatePlatformUser(input: UpdateAdminUserInput): Promise<void> {

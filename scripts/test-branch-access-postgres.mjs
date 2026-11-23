@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url"
 
 const root = new URL("../", import.meta.url)
 const adminA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+const superAdmin = "abababab-abab-4bab-8bab-abababababab"
 const sellerA = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 const shopA = "11111111-1111-4111-8111-111111111111"
 const shopB = "22222222-2222-4222-8222-222222222222"
@@ -125,6 +126,7 @@ try {
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/023_branch_transfer_partial_receipt_and_cancel.sql", root))])
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/024_branch_transfer_scan_access.sql", root))])
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/025_reload_postgrest_schema_cache.sql", root))])
+  await psql(["-f", fileURLToPath(new URL("supabase/migrations/026_branch_creation_approval.sql", root))])
 
   const preserved = await psql([], `
     SELECT count(*) || ':' || count(*) FILTER (WHERE current_location_shop_id = shop_id)
@@ -145,12 +147,77 @@ try {
       ('${productReceiptRaceB}', '${shopA}', '${shopA}', '${shopA}', '${adminA}', 'Receipt race B', 'AA1008');
   `)
 
-  const branchOutput = await scopedSql(
+  const deniedSellerRequest = await run("psql", psqlArgs, {
+    input: `SET ROLE authenticated;
+      SELECT set_config('request.jwt.claim.sub', '${sellerA}', false);
+      SELECT public.request_business_branch('Seller request');`,
+  })
+  assert.notEqual(deniedSellerRequest.code, 0, "sellers cannot request another point")
+  assert.match(deniedSellerRequest.stderr, /Только подтверждённый администратор/)
+
+  const branchRequestOutput = await scopedSql(
     adminA,
-    `SELECT public.create_business_branch('${shopA}', 'Второй филиал');`,
+    `SELECT public.request_business_branch('Второй филиал');`,
+  )
+  const branchRequestId = branchRequestOutput.split(/\r?\n/).at(-1)
+  assert.match(branchRequestId, /^[0-9a-f-]{36}$/i)
+  const pendingBranchCount = await psql([], `SELECT count(*) FROM public.shop_settings WHERE shop_name = 'Второй филиал';`)
+  assert.equal(pendingBranchCount, "0", "a request does not create a branch before approval")
+  const pendingCurrentShop = await scopedSql(adminA, `SELECT public.current_shop_id();`)
+  assert.equal(pendingCurrentShop.split(/\r?\n/).at(-1), shopA, "a request leaves the current shop active")
+  const ownRequestStatus = await scopedSql(
+    adminA,
+    `SELECT status FROM public.get_my_branch_creation_request() WHERE id = '${branchRequestId}';`,
+  )
+  assert.equal(ownRequestStatus.split(/\r?\n/).at(-1), "pending")
+  const listedRequest = await scopedSql(
+    superAdmin,
+    `SELECT count(*) FROM public.superadmin_list_branch_creation_requests() WHERE id = '${branchRequestId}';`,
+  )
+  assert.equal(listedRequest.split(/\r?\n/).at(-1), "1")
+  await scopedFailure(
+    adminA,
+    `SELECT public.create_business_branch('${shopA}', 'Обход запроса');`,
+    /permission denied for function create_business_branch/
+  )
+  await scopedFailure(
+    adminA,
+    `SELECT public.request_business_branch('Повторный запрос');`,
+    /Для бизнеса уже есть запрос/
+  )
+
+  const branchOutput = await scopedSql(
+    superAdmin,
+    `SELECT public.superadmin_review_branch_creation_request('${branchRequestId}', true);`,
   )
   const branch2 = branchOutput.split(/\r?\n/).at(-1)
   assert.match(branch2, /^[0-9a-f-]{36}$/i)
+  const afterApproval = await scopedSql(
+    adminA,
+    `SELECT public.current_shop_id()::text || ':' || public.has_branch_access('${branch2}')::text;`,
+  )
+  assert.equal(afterApproval.split(/\r?\n/).at(-1), `${shopA}:true`,
+    "approval grants access but leaves the existing shop active")
+
+  const rejectedRequestOutput = await scopedSql(
+    adminA,
+    `SELECT public.request_business_branch('Отклонённая точка');`,
+  )
+  const rejectedRequestId = rejectedRequestOutput.split(/\r?\n/).at(-1)
+  await scopedSql(
+    superAdmin,
+    `SELECT public.superadmin_review_branch_creation_request('${rejectedRequestId}', false);`,
+  )
+  const rejectedState = await scopedSql(
+    adminA,
+    `SELECT status || ':' || coalesce(created_shop_id::text, 'none')
+     FROM public.branch_creation_requests WHERE id = '${rejectedRequestId}';`,
+  )
+  assert.equal(rejectedState.split(/\r?\n/).at(-1), "rejected:none")
+  const rejectedShopCount = await psql([], `SELECT count(*) FROM public.shop_settings WHERE shop_name = 'Отклонённая точка';`)
+  assert.equal(rejectedShopCount, "0")
+  const activeAfterRejection = await scopedSql(adminA, `SELECT public.current_shop_id();`)
+  assert.equal(activeAfterRejection.split(/\r?\n/).at(-1), shopA)
   await psql([], `UPDATE public.shop_settings SET seq_id = 2 WHERE shop_id = '${branch2}';`)
   await scopedSql(
     adminA,
@@ -658,7 +725,7 @@ try {
     /duplicate key value violates unique constraint|branch_transfer_items_one_active_transfer_idx/,
   )
 
-  console.log("PASS: branch RLS, product locations, partial/full receipt, retries, scanned cancellation, audit, tenant isolation, and concurrent transfers")
+  console.log("PASS: branch approval, branch RLS, product locations, transfer retries/receipts/cancellation, audit, tenant isolation, and concurrency")
 } finally {
   if (serverStarted) {
     await run("pg_ctl", ["-D", dataDir, "-m", "immediate", "-w", "stop"])

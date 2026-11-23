@@ -35,6 +35,14 @@ export async function getPublicShops(limit = 100): Promise<PublicShop[]> {
   }
 }
 
+export type BranchCreationRequest = {
+  id: string
+  requested_shop_name: string
+  status: "pending" | "approved" | "rejected"
+  requested_at: string
+  created_shop_id: string | null
+}
+
 export type OwnShopPublicState = { enabled: boolean; canToggle: boolean }
 
 async function requireBusinessAdminBranchContext() {
@@ -49,25 +57,41 @@ async function requireBusinessAdminBranchContext() {
   return { supabase, branchContext }
 }
 
-/** Creates a branch for the authenticated admin's business. */
-export async function createBusinessBranch(shopName: string): Promise<string> {
+/** Ask a super-admin to open a new point; the current shop stays active until approval. */
+export async function requestBusinessBranch(shopName: string): Promise<string> {
   const name = typeof shopName === "string" ? shopName.trim() : ""
   if (!name || name.length > 200) {
     throw new Error("Укажите название филиала длиной от 1 до 200 символов")
   }
 
   const { supabase, branchContext } = await requireBusinessAdminBranchContext()
-  const { data, error } = await supabase.rpc("create_business_branch", {
-    _business_id: branchContext.businessId,
+  const { data, error } = await supabase.rpc("request_business_branch", {
     _shop_name: name,
   })
   if (error || typeof data !== "string") {
-    throw new Error("Не удалось создать филиал" + (error ? `: ${error.message}` : ""))
+    throw new Error("Не удалось отправить запрос на открытие точки" + (error ? `: ${error.message}` : ""))
   }
 
   revalidatePath("/crm/pos")
   revalidatePath("/crm/reports")
   return data
+}
+
+
+/** Latest branch request for the current business, visible to its approved admin. */
+export async function getMyBranchCreationRequest(): Promise<BranchCreationRequest | null> {
+  const { supabase, user, profile } = await getRequestCrmContext()
+  if (!user || !profile || profile.status !== "approved" || profile.role !== "admin") return null
+
+  const { data, error } = await supabase.rpc("get_my_branch_creation_request")
+  if (error) {
+    if (["PGRST202", "42883"].includes(error.code ?? "")) {
+      console.warn("[shops] Branch approval migration is not applied yet")
+      return null
+    }
+    throw new Error("Не удалось загрузить запрос на открытие точки: " + error.message)
+  }
+  return (Array.isArray(data) ? data[0] : null) as BranchCreationRequest | null
 }
 
 /** Rename only the active accessible branch; database policies remain authoritative. */

@@ -5,6 +5,7 @@ import { useOnline } from "@/hooks/use-online"
 import type { Profile, Role } from "@/lib/types"
 import type { ScreenId } from "@/components/crm/app-nav"
 import type { BranchContext } from "@/lib/supabase/current-shop"
+import type { BranchCreationRequest } from "@/app/actions/shops"
 import { BranchControl } from "@/components/crm/branch-control"
 import { Button } from "@/components/shared/ui/button"
 import { Badge } from "@/components/shared/ui/badge"
@@ -35,6 +36,7 @@ export function AppHeader({
   profile,
   branchContext,
   businessName,
+  branchCreationRequest = null,
   onlineOnly = false,
   viewRole,
   onChangeViewRole,
@@ -46,6 +48,7 @@ export function AppHeader({
   profile: Profile
   branchContext: BranchContext
   businessName: string | null
+  branchCreationRequest?: BranchCreationRequest | null
   onlineOnly?: boolean
   viewRole: Role
   onChangeViewRole: (role: Role) => void
@@ -65,6 +68,7 @@ export function AppHeader({
     <BranchControl
       context={branchContext}
       businessName={businessName}
+      branchRequest={branchCreationRequest}
       canManage={profile.role === "admin" && process.env.NEXT_PUBLIC_BUILD_TARGET !== "native"}
       online={online}
     />

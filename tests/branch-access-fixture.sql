@@ -14,6 +14,7 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
 
 CREATE TABLE public.profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name text,
   shop_id uuid,
   shop_name text,
   status text NOT NULL,
@@ -131,14 +132,16 @@ $$;
 INSERT INTO auth.users (id) VALUES
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+  ('abababab-abab-4bab-8bab-abababababab');
 INSERT INTO public.shop_settings (shop_id, shop_name, seq_id) VALUES
   ('11111111-1111-4111-8111-111111111111', 'Аура', 1),
   ('22222222-2222-4222-8222-222222222222', 'Другой бизнес', 99);
 INSERT INTO public.profiles (id, shop_id, shop_name, status, role) VALUES
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', 'Аура', 'approved', 'admin'),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111', 'Аура', 'approved', 'seller'),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', '22222222-2222-4222-8222-222222222222', 'Другой бизнес', 'approved', 'admin');
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', '22222222-2222-4222-8222-222222222222', 'Другой бизнес', 'approved', 'admin'),
+  ('abababab-abab-4bab-8bab-abababababab', NULL, NULL, 'approved', 'super_admin');
 INSERT INTO public.products (id, shop_id, created_by) VALUES
   ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
   ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '11111111-1111-4111-8111-111111111111', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
