@@ -6,9 +6,9 @@ import { roleLabel } from "@/lib/format"
 import { useOnline } from "@/hooks/use-online"
 import { isOfflineSection } from "@/lib/offline-sections"
 import { shouldHideSuperAdminCrmNavItem } from "@/lib/admin/crm-nav-policy"
+import { hasMultiBranchAccess } from "@/lib/branches/ui-policy"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
-import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { useRouter } from "next/navigation"
 import { AuraMark } from "@/components/shared/brand/aura-mark"
 import { Avatar, AvatarFallback } from "@/components/shared/ui/avatar"
@@ -86,6 +86,7 @@ type NavItem = {
   shopRequired?: boolean
   group: NavGroup
   description: string
+  multiBranchOnly?: boolean
 }
 
 const ITEMS: NavItem[] = [
@@ -96,7 +97,7 @@ const ITEMS: NavItem[] = [
   { id: "revisions", label: "Ревизии", icon: PackageCheck, group: "work", description: "Проверка изделий по складским остаткам" },
   { id: "clients", label: "Клиенты", icon: Users, group: "work", description: "Карточки клиентов и история покупок" },
   { id: "suppliers", label: "Поставщики", icon: Truck, adminOnly: true, group: "management", description: "Поставщики, долги и расчёты" },
-  { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, group: "analytics", description: "Показатели и аналитика магазина" },
+  { id: "otchety", label: "Отчёты", icon: BarChart3, adminOnly: true, multiBranchOnly: true, group: "analytics", description: "Сводки по филиалам" },
   { id: "shops", label: "Магазины", icon: Store, superAdminOnly: true, group: "system", description: "Управление магазинами" },
   { id: "notifications", label: "Уведомления", icon: Bell, group: "system", description: "Сообщения и уведомления магазина" },
   { id: "kabinet", label: "Кабинет", icon: UserRound, group: "system", description: "Профиль, команда и настройки" },
@@ -125,6 +126,7 @@ interface AppNavProps {
   onlineOnly?: boolean
   collapsed?: boolean
   onToggleCollapsed?: () => void
+  branchContext?: import("@/lib/supabase/current-shop").BranchContext
 }
 
 export function AppNav({
@@ -142,6 +144,7 @@ export function AppNav({
   collapsed = false,
   onlineOnly = false,
   onToggleCollapsed,
+  branchContext,
 }: AppNavProps) {
   const online = useOnline()
   const router = useRouter()
@@ -167,10 +170,11 @@ export function AppNav({
         ) return false
         if (item.superAdminOnly) return isSuperAdmin
         if (item.adminOnly) return isAdmin
+        if (item.multiBranchOnly && !hasMultiBranchAccess(branchContext)) return false
         if (item.shopRequired && !activeShopId) return false
         return true
       }),
-    [activeShopId, isAdmin, isSuperAdmin]
+    [activeShopId, branchContext, isAdmin, isSuperAdmin]
   )
 
   const handleNavigate = (id: ScreenId) => {
@@ -226,14 +230,13 @@ export function AppNav({
         >
           <button
             type="button"
-            onClick={() => handleNavigate("kabinet")}
-            aria-label="Открыть кабинет GOLDUCHET"
+            onClick={() => handleNavigate("kassa")}
+            aria-label="Перейти на главный экран GOLDUCHET"
             className={cn(
               "flex items-center rounded-lg transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               collapsed ? "p-1.5" : "gap-2 px-1.5 py-1"
             )}
           >
-              {/* <ThemeToggle /> */}
                    <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-lg bg-primary/15">
                     <AuraMark className="h-7 w-7 shrink-0" />
                   </div>
@@ -241,7 +244,6 @@ export function AppNav({
               GOLDUCHET
             </span>
           </button>
-             <ThemeToggle />
           {/* Desktop collapse toggle */}
           <button
             type="button"

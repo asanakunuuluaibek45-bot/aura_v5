@@ -5097,3 +5097,10 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.superadmin_update_marketplace_settings(text, uuid, uuid, integer, boolean, integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.superadmin_update_marketplace_settings(text, uuid, uuid, integer, boolean, integer) TO authenticated;
+
+-- Keep the consolidated psql schema in sync with the branch migration.
+\ir migrations/021_branch_access_and_transfers.sql
+\ir migrations/022_branch_aware_products_and_sales.sql
+\ir migrations/023_branch_transfer_partial_receipt_and_cancel.sql
+\ir migrations/024_branch_transfer_scan_access.sql
+\ir migrations/025_reload_postgrest_schema_cache.sql

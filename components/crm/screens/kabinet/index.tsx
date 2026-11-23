@@ -41,6 +41,7 @@ import { syncEngine } from "@/lib/sync/sync-engine"
 import { ActionHistory } from "./action-history"
 import { InstallAppButton } from "@/components/crm/install-app-button"
 import { CabinetProfileCard } from "./profile-card"
+import { AdminShopProfileForm } from "./shop-profile-form"
 import { AccountDeletionControl } from "@/components/crm/account-deletion-control"
 import type { UndoActionResult } from "@/lib/action-history"
 import type { UndoLocalBaseline } from "@/lib/local-db/undo-cache"
@@ -191,6 +192,9 @@ export function KabinetScreen({
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-5 px-1 sm:px-2">
       <CabinetProfileCard profile={profile} email={email} />
+      {profile.role === "admin" && usageShopId && (
+        <AdminShopProfileForm key={usageShopId} profile={profile} shopAddress={data.shopAddress} />
+      )}
 
       <div className="min-w-0 space-y-5">
         <section className="min-w-0 space-y-5" aria-label="Основная информация">

@@ -1,11 +1,11 @@
 import { cache } from "react"
-import { getActiveShopId } from "@/lib/supabase/current-shop"
+import { getBranchContext } from "@/lib/supabase/current-shop"
 import { createClient } from "@/lib/supabase/server"
 
 /**
  * Reuse authentication/profile lookups during one server render. CRM pages call
  * several server actions in parallel; without request-scoped memoization each
- * action repeated auth.getUser(), the profile query, and current_shop_id().
+ * action repeated auth.getUser(), the profile query, and branch authorization.
  *
  * React cache is scoped to a server request, so this never shares a session
  * between different users or requests.
@@ -17,7 +17,13 @@ export const getRequestCrmContext = cache(async () => {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    return { supabase, user: null, profile: null, shopId: null }
+    return {
+      supabase,
+      user: null,
+      profile: null,
+      shopId: null,
+      branchContext: { businessId: null, activeShopId: null, branches: [] },
+    }
   }
 
   const { data: profile } = await supabase
@@ -27,12 +33,24 @@ export const getRequestCrmContext = cache(async () => {
     .maybeSingle()
 
   if (!profile) {
-    return { supabase, user, profile: null, shopId: null }
+    return {
+      supabase,
+      user,
+      profile: null,
+      shopId: null,
+      branchContext: { businessId: null, activeShopId: null, branches: [] },
+    }
   }
 
-  const shopId = await getActiveShopId(supabase, profile.shop_id ?? null)
+  const branchContext = await getBranchContext(supabase)
 
-  return { supabase, user, profile, shopId }
+  return {
+    supabase,
+    user,
+    profile,
+    shopId: branchContext.activeShopId,
+    branchContext,
+  }
 })
 
 /* -------------------------------------------------------------------------- */

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { getRequestCrmContext } from "@/lib/supabase/request-context"
 import { revalidatePath } from "next/cache"
+import type { AccessibleBranch } from "@/lib/supabase/current-shop"
 
 export type PublicShop = {
   shop_id: string
@@ -34,18 +35,134 @@ export async function getPublicShops(limit = 100): Promise<PublicShop[]> {
   }
 }
 
+export type BranchCreationRequest = {
+  id: string
+  requested_shop_name: string
+  status: "pending" | "approved" | "rejected"
+  requested_at: string
+  created_shop_id: string | null
+}
+
 export type OwnShopPublicState = { enabled: boolean; canToggle: boolean }
 
+async function requireBusinessAdminBranchContext() {
+  const { supabase, user, profile, branchContext } = await getRequestCrmContext()
+  if (!user) throw new Error("Требуется вход в систему")
+  if (!profile || profile.status !== "approved" || profile.role !== "admin") {
+    throw new Error("Только владелец бизнеса может управлять филиалами")
+  }
+  if (!branchContext.businessId || !branchContext.activeShopId) {
+    throw new Error("Не удалось подтвердить бизнес и активный филиал")
+  }
+  return { supabase, branchContext }
+}
+
+/** Ask a super-admin to open a new point; the current shop stays active until approval. */
+export async function requestBusinessBranch(shopName: string): Promise<string> {
+  const name = typeof shopName === "string" ? shopName.trim() : ""
+  if (!name || name.length > 200) {
+    throw new Error("Укажите название филиала длиной от 1 до 200 символов")
+  }
+
+  const { supabase, branchContext } = await requireBusinessAdminBranchContext()
+  const { data, error } = await supabase.rpc("request_business_branch", {
+    _shop_name: name,
+  })
+  if (error || typeof data !== "string") {
+    throw new Error("Не удалось отправить запрос на открытие точки" + (error ? `: ${error.message}` : ""))
+  }
+
+  revalidatePath("/crm/pos")
+  revalidatePath("/crm/reports")
+  return data
+}
+
+
+/** Latest branch request for the current business, visible to its approved admin. */
+export async function getMyBranchCreationRequest(): Promise<BranchCreationRequest | null> {
+  const { supabase, user, profile } = await getRequestCrmContext()
+  if (!user || !profile || profile.status !== "approved" || profile.role !== "admin") return null
+
+  const { data, error } = await supabase.rpc("get_my_branch_creation_request")
+  if (error) {
+    if (["PGRST202", "42883"].includes(error.code ?? "")) {
+      console.warn("[shops] Branch approval migration is not applied yet")
+      return null
+    }
+    throw new Error("Не удалось загрузить запрос на открытие точки: " + error.message)
+  }
+  return (Array.isArray(data) ? data[0] : null) as BranchCreationRequest | null
+}
+
+/** Rename only the active accessible branch; database policies remain authoritative. */
+export async function renameActiveBusinessBranch(shopName: string): Promise<void> {
+  const name = typeof shopName === "string" ? shopName.trim() : ""
+  if (!name || name.length > 200) {
+    throw new Error("Укажите название филиала длиной от 1 до 200 символов")
+  }
+
+  const { supabase, branchContext } = await requireBusinessAdminBranchContext()
+  const activeBranch = branchContext.branches.find(
+    (branch: AccessibleBranch) => branch.shopId === branchContext.activeShopId,
+  )
+  if (!activeBranch || activeBranch.businessId !== branchContext.businessId) {
+    throw new Error("Нет доступа к выбранному филиалу")
+  }
+
+  const { data, error } = await supabase
+    .from("shop_settings")
+    .update({ shop_name: name, updated_at: new Date().toISOString() })
+    .eq("shop_id", activeBranch.shopId)
+    .select("shop_id, shop_name")
+    .maybeSingle()
+  if (error || data?.shop_id !== activeBranch.shopId || data.shop_name !== name) {
+    throw new Error("Не удалось переименовать филиал" + (error ? `: ${error.message}` : ""))
+  }
+
+  revalidatePath("/crm/pos")
+  revalidatePath("/crm/reports")
+}
+
+/** Select an active branch only from the authenticated server-provided allowlist. */
+export async function setActiveBusinessBranch(shopId: string): Promise<void> {
+  if (typeof shopId !== "string" || !shopId.trim()) {
+    throw new Error("Выберите филиал")
+  }
+  const { supabase, user, profile, branchContext } = await getRequestCrmContext()
+  if (!user) throw new Error("Требуется вход в систему")
+  if (!profile || profile.status !== "approved") throw new Error("Аккаунт не подтверждён")
+
+  const branch = branchContext.branches.find((item) => item.shopId === shopId)
+  if (!branch || branch.businessId !== branchContext.businessId) {
+    throw new Error("У вас нет доступа к выбранному филиалу")
+  }
+
+  const { data, error } = await supabase.rpc("set_active_shop", { _shop_id: shopId })
+  if (error || data !== shopId) {
+    throw new Error("Не удалось переключить филиал" + (error ? `: ${error.message}` : ""))
+  }
+
+  revalidatePath("/crm/pos")
+  revalidatePath("/crm/reports")
+}
+
 async function requireOwnShopAdminContext() {
-  const { supabase, user, profile, shopId } = await getRequestCrmContext()
+  const { supabase, user, profile, branchContext } = await getRequestCrmContext()
   if (!user) throw new Error("Требуется вход в систему")
   if (!profile || profile.status !== "approved" || profile.role !== "admin") {
     throw new Error("Только администратор магазина может менять публичность витрины")
   }
-  if (!profile.shop_id || shopId !== profile.shop_id) {
-    throw new Error("Не удалось подтвердить ваш магазин")
-  }
-  return { supabase, shopId: profile.shop_id }
+
+  // The profile's shop_id is its home/QR branch; after a switch, use only the
+  // active branch returned by the server-authorized branch context.
+  const activeBranch = branchContext.branches.find(
+    (branch) =>
+      branch.shopId === branchContext.activeShopId &&
+      branch.businessId === branchContext.businessId &&
+      branch.isActive,
+  )
+  if (!activeBranch) throw new Error("Не удалось подтвердить активный филиал")
+  return { supabase, shopId: activeBranch.shopId }
 }
 
 /** Читает состояние публичности только собственного магазина администратора. */

@@ -36,6 +36,9 @@ import { VirtualizedSkladTable } from "./virtualized-sklad-table"
 import { usePrinterConnection } from "./use-printer-connection"
 import { PrinterStatusIndicator } from "./printer-status-indicator"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
+import { BranchTransferDialog } from "@/components/crm/screens/sklad/branch-transfer-dialog"
+import { hasMultiBranchAccess } from "@/lib/branches/ui-policy"
+import type { BranchContext } from "@/lib/supabase/current-shop"
 
 // Загружаем LabelEditor строго на клиенте и начинаем подкачку при нажатии на печать.
 let labelEditorPreload: Promise<typeof import("./label/label-editor")> | null = null
@@ -73,6 +76,7 @@ const isConnectivityError = (error: unknown) => {
 
 export function SkladScreen({
   products,
+  branchContext,
   sales = [],
   canSeePurchasePrice,
   isAdmin,
@@ -88,6 +92,7 @@ export function SkladScreen({
   onFocusProductHandled,
 }: {
   products: Product[]
+  branchContext: BranchContext
   sales?: Sale[]
   canSeePurchasePrice: boolean
   isAdmin: boolean
@@ -454,12 +459,15 @@ export function SkladScreen({
           </div>
           <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
-        {showAdd && (
-          <Button disabled={!online} onClick={onAdd} className="gap-1.5 w-full sm:w-auto disabled:grayscale">
-            <Plus className="h-4 w-4" />
-            Добавить товар
-          </Button>
-        )}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          {hasMultiBranchAccess(branchContext) && <BranchTransferDialog context={branchContext} />}
+          {showAdd && (
+            <Button disabled={!online} onClick={onAdd} className="gap-1.5 w-full sm:w-auto disabled:grayscale">
+              <Plus className="h-4 w-4" />
+              Добавить товар
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Блок аналитики */}

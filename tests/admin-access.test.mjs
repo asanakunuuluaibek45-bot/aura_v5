@@ -25,11 +25,12 @@ test("admin dashboard does not import store cash or inventory operations", () =>
   assert.doesNotMatch(page, /getCashData|cash-operation|KassaScreen|Inventory|SkladScreen/i);
 });
 
-test("only super_admin gets the admin link; other roles keep the shop control", () => {
+test("only super_admin gets the admin link; CRM users get their authorized branch control", () => {
   const header = readFileSync(new URL("../components/crm/app-header.tsx", import.meta.url), "utf8");
   assert.match(header, /profile\.role === "super_admin" \?/);
   assert.match(header, /href="\/admin"/);
-  assert.match(header, /fullShopName/);
+  assert.match(header, /<BranchControl/);
+  assert.match(header, /context=\{branchContext\}/);
 });
 
 test("approved web super_admin lands in Admin while native and ordinary CRM entry stays unchanged", () => {

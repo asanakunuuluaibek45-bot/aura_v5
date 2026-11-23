@@ -526,8 +526,19 @@ export async function checkout(input: CheckoutInput) {
     throw new Error(`Не удалось провести продажу: ${error.message}`)
   }
   if (result?.accepted === false) {
-    const product = result.product_name ? ` «${result.product_name}»` : ""
-    throw new Error(`Конфликт остатков: товар${product} уже продан или недоступен. Обновите склад и проверьте чек.`)
+    const branchError = typeof result.message === "string" ? result.message : null
+    const messageByCode: Record<string, string> = {
+      awaiting_receipt: "Сначала подтвердите получение товара в этом филиале.",
+      in_transit: "Товар уже отправлен и находится в пути.",
+      wrong_branch: "Товар числится в другом филиале.",
+      foreign_business: "QR-код не найден в вашем бизнесе. Проверьте товар.",
+      receipt_missing: "В базе нет подтверждения получения товара этим филиалом.",
+    }
+    const message = branchError ?? messageByCode[String(result.code ?? "")] ??
+      (result.product_name
+        ? `Конфликт остатков: товар «${result.product_name}» уже продан или недоступен. Обновите склад и проверьте чек.`
+        : "Конфликт остатков: товар уже продан или недоступен. Обновите склад и проверьте чек.")
+    throw new Error(message)
   }
   if (result?.accepted !== true || !result.sale_id) {
     throw new Error("Не удалось подтвердить продажу. Повторите отправку с тем же идентификатором операции.")

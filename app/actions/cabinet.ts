@@ -31,6 +31,7 @@ export type CabinetData = {
   defaultBonusRate: number
   /** Тип чека по умолчанию в кассе (миграция 007). */
   defaultReceiptType: ReceiptTypeSetting
+  shopAddress: string
 }
 
 /**
@@ -58,7 +59,7 @@ export async function getCabinetData(): Promise<CabinetData> {
   const defaultReceiptType = await readDefaultReceiptType(supabase, shopId)
 
   if (profile.role === "seller") {
-    return { team: [], requests: [], defaultBonusRate: profile.bonus_rate ?? 2, defaultReceiptType }
+    return { team: [], requests: [], defaultBonusRate: profile.bonus_rate ?? 2, defaultReceiptType, shopAddress: "" }
   }
 
   const isSuper = profile.role === "super_admin"
@@ -77,7 +78,7 @@ export async function getCabinetData(): Promise<CabinetData> {
   const { data: settings } = shopId
     ? await supabase
         .from("shop_settings")
-        .select("default_bonus_rate")
+        .select("default_bonus_rate, shop_address")
         .eq("shop_id", shopId)
         .maybeSingle()
     : { data: null }
@@ -107,7 +108,36 @@ export async function getCabinetData(): Promise<CabinetData> {
     requests,
     defaultBonusRate: Number(settings?.default_bonus_rate ?? 2),
     defaultReceiptType,
+    shopAddress: typeof settings?.shop_address === "string" ? settings.shop_address : "",
   }
+}
+
+/** Update an admin's own contact details and the currently authorized branch address. */
+export async function updateAdminShopProfile(input: { fullName: string; phone: string; shopAddress: string }) {
+  const { supabase, profile, shopId } = await requireAdmin()
+  if (profile.role !== "admin") throw new Error("Недостаточно прав")
+  if (!shopId) throw new Error("Сначала выберите магазин")
+
+  const fullName = typeof input?.fullName === "string" ? input.fullName.trim() : ""
+  const phone = typeof input?.phone === "string" ? input.phone.trim() : ""
+  const shopAddress = typeof input?.shopAddress === "string" ? input.shopAddress.trim() : ""
+  if (!fullName || fullName.length > 160) throw new Error("Укажите имя длиной до 160 символов")
+  if (phone.length > 50) throw new Error("Телефон не должен превышать 50 символов")
+  if (!shopAddress || shopAddress.length > 240) throw new Error("Укажите адрес магазина длиной до 240 символов")
+
+  const { error } = await supabase.rpc("save_active_shop_admin_profile", {
+    _full_name: fullName,
+    _phone: phone || null,
+    _shop_address: shopAddress,
+  })
+  if (error) {
+    if (["PGRST202", "42883"].includes(error.code ?? "")) {
+      throw new Error("Сначала примените SQL-миграцию 027_admin_shop_profile_and_required_address.sql")
+    }
+    throw new Error("Не удалось сохранить данные: " + error.message)
+  }
+  revalidatePath("/crm")
+  revalidatePath("/crm/pos")
 }
 
 /** Тип чека по умолчанию для кассы — администратор магазина или супер-админ. */

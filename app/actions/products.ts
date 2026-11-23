@@ -1,7 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { requireApprovedContext } from "@/lib/supabase/request-context"
+import { getRequestCrmContext, requireApprovedContext } from "@/lib/supabase/request-context"
 import { revalidatePath } from "next/cache"
 import type { Product } from "@/lib/types"
 
@@ -42,11 +42,20 @@ const PRODUCT_COLUMNS = [
 
 const requireProfile = requireApprovedContext
 
+async function requireProductBranch() {
+  const context = await requireProfile()
+  const { branchContext } = await getRequestCrmContext()
+  const shopId = await requireShopId(context.supabase, context.profile, context.shopId)
+  if (!branchContext.businessId || branchContext.activeShopId !== shopId) {
+    throw new Error("Не удалось подтвердить активный филиал. Обновите страницу и попробуйте ещё раз.")
+  }
+  return { ...context, shopId, businessId: branchContext.businessId }
+}
+
 /**
  * Возвращает АКТИВНЫЙ shop_id так, как его видят RLS-политики.
  *
- * RLS проверяет `shop_id = public.current_shop_id()`, который теперь
- * возвращает только profiles.shop_id. У суперадмина это назначенный global shop.
+ * Активный филиал определяется серверным branch context, а не данными клиента.
  */
 async function requireShopId(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -132,7 +141,7 @@ export async function getProductsPage(
   const { data, error } = await supabase
     .from("products")
     .select(PRODUCT_COLUMNS)
-    .eq("shop_id", shopId)
+    .eq("current_location_shop_id", shopId)
     .is("deleted_at", null)
     // Проданные товары не отправляем в каталог: они не нужны кассе/складу
     // и только раздувают локальную базу на слабых устройствах.
@@ -161,7 +170,7 @@ export async function findProductBySku(rawSku: string): Promise<Product | null> 
   const { data, error } = await supabase
     .from("products")
     .select(PRODUCT_COLUMNS)
-    .eq("shop_id", shopId)
+    .eq("current_location_shop_id", shopId)
     .ilike("sku", sku)
     .is("deleted_at", null)
     .limit(1)
@@ -244,11 +253,8 @@ function extractPrefix(value: string | null | undefined): string {
  * попадал в QR-код.
  */
 export async function createProduct(input: ProductInput): Promise<Product> {
-  const { supabase, user, profile, shopId: resolvedShopId } = await requireProfile()
+  const { supabase, user, shopId, businessId } = await requireProductBranch()
   validate(input)
-
-  // shop_id берём из того же источника, что и RLS-политика (см. requireShopId).
-  const shopId = await requireShopId(supabase, profile, resolvedShopId)
 
   const prefix = extractPrefix(input.sku)
 
@@ -266,6 +272,8 @@ export async function createProduct(input: ProductInput): Promise<Product> {
       article_prefix: art.prefix,
       article_seq: art.seq,
       shop_id: shopId,
+      business_id: businessId,
+      current_location_shop_id: shopId,
       created_by: user.id,
       status: "in_stock",
     })
@@ -290,12 +298,16 @@ export async function updateProduct(
   id: string,
   input: Partial<ProductInput> & { is_hidden?: boolean; is_secondary?: never },
 ): Promise<Product> {
-  const { supabase } = await requireProfile()
-  const { data: current } = await supabase
+  const { supabase, shopId } = await requireProfile()
+  if (!shopId) throw new Error("Сначала выберите активный филиал")
+  const { data: current, error: currentError } = await supabase
     .from("products")
     .select("consignment_operation_id, purchase_price, supplier_name, supplier_phone")
     .eq("id", id)
-    .single()
+    .eq("current_location_shop_id", shopId)
+    .maybeSingle()
+  if (currentError) throw new Error(`Не удалось проверить товар: ${currentError.message}`)
+  if (!current) throw new Error("Товар не найден в активном филиале")
   const restrictedChanged = current?.consignment_operation_id && (
     (input.purchase_price !== undefined && Number(input.purchase_price) !== Number(current.purchase_price)) ||
     (input.supplier_name !== undefined && (input.supplier_name ?? null) !== (current.supplier_name ?? null)) ||
@@ -323,6 +335,7 @@ export async function updateProduct(
     .from("products")
     .update(patch)
     .eq("id", id)
+    .eq("current_location_shop_id", shopId)
     .select("*")
     .single()
   if (error) throw new Error(`Не удалось обновить товар: ${error.message}`)

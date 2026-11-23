@@ -77,6 +77,7 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
 export type ShopSettings = {
   shop_id: string
   shop_name: string | null
+  shop_address?: string | null
   default_bonus_rate: number
   public_enabled: boolean
   updated_at: string
@@ -91,7 +92,12 @@ export type ShopSettings = {
 /** Профиль с полем имперсонации (только для super_admin). */
 export type Product = {
   id: string
+  /** Business tenant that owns the product. */
+  business_id?: string | null
+  /** Original branch identity used by legacy QR codes. */
   shop_id: string
+  /** Physical branch that currently holds the product. */
+  current_location_shop_id?: string | null
   /** Короткий числовой ID магазина для QR-ссылок (seq_id из shop_settings). */
   shop_seq_id?: number | null
   created_by: string

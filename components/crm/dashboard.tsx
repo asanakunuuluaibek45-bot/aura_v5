@@ -16,6 +16,8 @@ import type { CabinetData } from "@/app/actions/cabinet"
 import type { MetalRate } from "@/lib/types"
 import type { CashData } from "@/app/actions/cash"
 import type { ShopBillingRow } from "@/app/actions/superadmin"
+import type { BranchCreationRequest } from "@/app/actions/shops"
+import type { BranchContext } from "@/lib/supabase/current-shop"
 import {
   getSupplierDebtData,
   type SupplierDebtData,
@@ -114,6 +116,8 @@ function ExitConfirmModal({
 export function Dashboard({
   screen,
   profile,
+  branchContext,
+  businessName,
   products,
   sales,
   returns = [],
@@ -125,10 +129,13 @@ export function Dashboard({
   clients = [],
   superAdminShops,
   publicStorefrontState = { enabled: true, canToggle: false },
+  branchCreationRequest = null,
 }: {
   /** Текущий экран определяется URL-роутом, а не внутренним состоянием. */
   screen: ScreenId
   profile: Profile
+  branchContext: BranchContext
+  businessName: string | null
   products: Product[]
   sales: Sale[]
   /** Возвраты товара — уменьшают кассу, выручку и прибыль. */
@@ -141,6 +148,7 @@ export function Dashboard({
   clients?: Customer[]
   superAdminShops?: ShopBillingRow[]
   publicStorefrontState?: { enabled: boolean; canToggle: boolean }
+  branchCreationRequest?: BranchCreationRequest | null
 }) {
   const router = useRouter()
   const [activeScreen, setActiveScreen] = useState<ScreenId>(screen)
@@ -244,10 +252,18 @@ export function Dashboard({
     }
   }, [activeScreen, isAdmin, supplierDebtLoaded, supplierDebtLoadError])
 
-  // Local-first data uses the profile's assigned shop, including Super Admin's global shop.
+  // Local-first data is scoped to the server-selected branch; profile.shop_id remains
+  // the original assignment and must not override the active branch.
+  const localShopId = branchContext.activeShopId ?? profile.shop_id
+  const localProfile = useMemo(
+    () => localShopId ? { ...profile, shop_id: localShopId } : profile,
+    [profile, localShopId],
+  )
   const localCrm = useLocalCrm({
-    profile,
-    enabled: Boolean(profile.shop_id),
+    profile: localProfile,
+    shopId: localShopId,
+    businessId: branchContext.businessId,
+    enabled: Boolean(localShopId),
     products,
     sales,
     returns,
@@ -262,11 +278,11 @@ export function Dashboard({
       saveUserSession({
         userId: profile.id,
         email: email || profile.email || undefined,
-        profile,
-        shopId: profile.shop_id || undefined,
+        profile: localProfile,
+        shopId: localShopId || undefined,
       }).catch((err) => console.warn("Failed to persist offline session:", err))
     }
-  }, [profile, email])
+  }, [profile, localProfile, localShopId, email])
 
   const currentProducts = localCrm.isReady ? localCrm.products : products
   const currentSales = localCrm.isReady ? localCrm.sales : sales
@@ -406,7 +422,9 @@ export function Dashboard({
 
       <AppHeader
         profile={profile}
-        currentShopName={profile.shop_name}
+        branchContext={branchContext}
+        businessName={businessName}
+        branchCreationRequest={branchCreationRequest}
         viewRole={viewRole}
         onChangeViewRole={setViewRole}
         onOpenCabinet={() => handleScreenChange("kabinet")}
@@ -429,6 +447,7 @@ export function Dashboard({
   onChangeViewRole={setViewRole}  
   isSuperAdmin={isSuperAdmin}
   activeShopId={activeShopId}
+  branchContext={branchContext}
   onNavigate={handleScreenChange}
   onOpenCabinet={() => handleScreenChange("kabinet")} 
   onOpenHelp={openSiteHelp}
@@ -479,6 +498,7 @@ export function Dashboard({
         {activeScreen === "sklad" && (
           <SkladScreen
             products={currentProducts}
+            branchContext={branchContext}
             sales={confirmedSales}
             canSeePurchasePrice={canSeePurchasePrice}
             isAdmin={isAdmin}

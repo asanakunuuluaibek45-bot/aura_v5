@@ -25,6 +25,7 @@ function signUpErrorMessage(error: unknown): string {
 export default function SignUpPage() {
   const [fullName, setFullName] = useState("")
   const [shopName, setShopName] = useState("")
+  const [shopAddress, setShopAddress] = useState("")
   const [phone, setPhone] = useState("")
   const [requestedRole, setRequestedRole] = useState("seller")
   const [email, setEmail] = useState("")
@@ -55,6 +56,7 @@ export default function SignUpPage() {
           data: {
             full_name: fullName,
             shop_name: shopName,
+            shop_address: shopAddress.trim(),
             phone,
             requested_role: requestedRole,
           },
@@ -89,6 +91,19 @@ export default function SignUpPage() {
             value={shopName}
             onChange={(e) => setShopName(e.target.value)}
           />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="shopAddress">Адрес магазина</Label>
+          <Input
+            id="shopAddress"
+            required
+            maxLength={240}
+            autoComplete="street-address"
+            placeholder="Например: Каракол, Бугу базар, 23-й бутик"
+            value={shopAddress}
+            onChange={(e) => setShopAddress(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Укажите город, рынок или улицу, номер и бутик.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-2">

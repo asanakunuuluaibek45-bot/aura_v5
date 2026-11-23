@@ -37,7 +37,7 @@ export function validateOfflineProduct(input: Partial<Product>, current?: Produc
 
 /** Product and delivery queue commit together, including on storage failures. */
 export async function persistOfflineProduct(input: {
-  profile: Profile; product: Partial<Product>; remove?: boolean
+  profile: Profile; businessId?: string | null; product: Partial<Product>; remove?: boolean
 }): Promise<Product> {
   requireStockConnection(typeof navigator !== 'undefined' && navigator.onLine)
   const { profile, remove = false } = input
@@ -56,7 +56,10 @@ export async function persistOfflineProduct(input: {
     const id = input.product.id || createLocalId()
     const current = await store.get(id) as Product | undefined
     if (input.product.id && !current) throw new Error('Товар не найден в локальном каталоге')
-    if (current && (current.shop_id !== profile.shop_id || current.deleted_at || current.status === 'sold')) {
+    if (current && (
+      (current.current_location_shop_id ?? current.shop_id) !== profile.shop_id ||
+      current.deleted_at || current.status === 'sold'
+    )) {
       throw new Error('Товар продан, удалён или принадлежит другому магазину')
     }
     if (!remove) validateOfflineProduct(input.product, current)
@@ -69,7 +72,11 @@ export async function persistOfflineProduct(input: {
     const merge = last?.status === 'pending' && last.retries === 0 && !last.attempted_at ? last : undefined
     const operationId = merge?.client_op_id || createLocalId()
     const product: Product = {
-      id, shop_id: profile.shop_id, created_by: profile.id,
+      id,
+      shop_id: current?.shop_id ?? profile.shop_id,
+      business_id: current?.business_id ?? input.businessId ?? null,
+      current_location_shop_id: current?.current_location_shop_id ?? profile.shop_id,
+      created_by: current?.created_by ?? profile.id,
       name: '', category: null, metal: null, metal_color: null, weight: 0,
       size: null, sku: input.product.sku?.trim() || `OFF-${id}`,
       is_hidden: false, purchase_price: 0, purchase_price_visible: null,

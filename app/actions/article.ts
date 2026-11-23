@@ -1,7 +1,7 @@
 "use server"
 
 import type { createClient } from "@/lib/supabase/server"
-import { requireApprovedContext } from "@/lib/supabase/request-context"
+import { getRequestCrmContext, requireApprovedContext } from "@/lib/supabase/request-context"
 import type { GeneratedArticle } from "@/lib/article"
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>
@@ -47,6 +47,10 @@ export async function createProduct(formData: {
 }) {
   const { supabase, user, shopId } = await requireProfile()
   if (!shopId) throw new Error("Сначала выберите магазин")
+  const { branchContext } = await getRequestCrmContext()
+  if (!branchContext.businessId || branchContext.activeShopId !== shopId) {
+    throw new Error("Не удалось подтвердить активный филиал. Обновите страницу и попробуйте ещё раз.")
+  }
 
   // 1. Свежий артикул непосредственно перед сохранением.
   const generated = await nextArticle(supabase, formData.prefix)
@@ -66,6 +70,8 @@ export async function createProduct(formData: {
       images,
       image_url: images[0] ?? null,
       shop_id: shopId,
+      business_id: branchContext.businessId,
+      current_location_shop_id: shopId,
       status: "in_stock",
       created_by: user.id,
     })

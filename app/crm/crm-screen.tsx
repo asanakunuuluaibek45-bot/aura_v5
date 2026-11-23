@@ -14,7 +14,10 @@ import { getClients } from "@/app/actions/clients"
 import { getSuperAdminShops } from "@/app/actions/superadmin"
 import type { ShopBillingRow } from "@/app/actions/superadmin"
 import { getSupplierDebtData } from "@/app/actions/suppliers"
-import { getOwnShopPublicState } from "@/app/actions/shops"
+import { getMyBranchCreationRequest, getOwnShopPublicState } from "@/app/actions/shops"
+import type { BranchCreationRequest } from "@/app/actions/shops"
+import { BranchFeatureNotice } from "@/components/crm/branch-feature-notice"
+import { shouldBlockMultiBranchScreen } from "@/lib/branches/ui-policy"
 
 /**
  * Общий серверный экран CRM. Каждый раздел имеет собственный URL
@@ -23,7 +26,7 @@ import { getOwnShopPublicState } from "@/app/actions/shops"
  * со своим значением `screen`.
  */
 export async function CrmScreen({ screen }: { screen: ScreenId }) {
-  const { supabase, user, profile, shopId: activeShopId } = await getRequestCrmContext()
+  const { supabase, user, profile, shopId: activeShopId, branchContext } = await getRequestCrmContext()
   if (!user) redirect("/auth/login")
 
   // Любой пользователь (включая основателя магазина) должен быть подтверждён суперадмином.
@@ -35,6 +38,20 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
     return <PendingScreen profile={typed} email={user.email ?? ""} />
   }
 
+  if (shouldBlockMultiBranchScreen(screen, branchContext)) {
+    return <BranchFeatureNotice />
+  }
+
+  const { data: businessRow } = branchContext.businessId
+    ? await supabase
+        .from("businesses")
+        .select("business_name")
+        .eq("id", branchContext.businessId)
+        .maybeSingle()
+    : { data: null }
+  const businessName =
+    typeof businessRow?.business_name === "string" ? businessRow.business_name : null
+
   const isSuperAdmin = typed.role === "super_admin"
   // A global super admin without a selected store should land on the store
   // selector instead of trying to initialize store-specific CRM data.
@@ -45,10 +62,12 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
       <Dashboard
         screen={screen}
         profile={typed}
+        branchContext={branchContext}
+        businessName={businessName}
         products={[]}
         sales={[]}
         returns={[]}
-        cabinet={{ team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask" }}
+        cabinet={{ team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask", shopAddress: "" }}
         cash={{ operations: [], presets: [] }}
         supplierDebts={{ operations: [], suppliers: [], profiles: [] }}
         rates={[]}
@@ -62,9 +81,9 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
   // История долга поставщиков не ограничена по размеру. Загружаем её только
   // при первом открытии соответствующего раздела, а не при старте кассы.
   // Оборачиваем в try/catch: если сессия устарела или профиль изменился между запросами — редиректим.
-  let products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, publicStorefrontState
+  let products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, publicStorefrontState, branchCreationRequest
   try {
-    ;[products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, publicStorefrontState] =
+    ;[products, sales, returns, cabinet, cash, rates, clients, supplierDebts, superAdminShops, publicStorefrontState, branchCreationRequest] =
       await Promise.all([
         getProducts(),
         getSales(),
@@ -78,6 +97,7 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
           : Promise.resolve({ operations: [], suppliers: [], profiles: [] }),
         isSuperAdmin ? getSuperAdminShops() : Promise.resolve([] as ShopBillingRow[]),
         typed.role === "admin" ? getOwnShopPublicState() : Promise.resolve({ enabled: true, canToggle: false }),
+        typed.role === "admin" ? getMyBranchCreationRequest() : Promise.resolve(null),
       ])
   } catch (err) {
     const msg = err instanceof Error ? err.message : ""
@@ -97,6 +117,8 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
     <Dashboard
       screen={screen}
       profile={typed}
+      branchContext={branchContext}
+      businessName={businessName}
       products={products!}
       sales={sales!}
       returns={returns!}
@@ -108,6 +130,7 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
       clients={clients!}
       superAdminShops={isSuperAdmin ? superAdminShops : undefined}
       publicStorefrontState={publicStorefrontState}
+      branchCreationRequest={branchCreationRequest as BranchCreationRequest | null}
     />
   )
 }
