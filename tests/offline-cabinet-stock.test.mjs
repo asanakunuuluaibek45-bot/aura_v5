@@ -51,10 +51,13 @@ test('offline allowed sections include cabinet and inventory, not reports', () =
   for (const section of ['otchety', 'shops', 'suppliers']) assert.equal(allowed(section), false)
 })
 
-test('online device product commits its shop, author and stable queue atomically', async () => {
+test('online device product commits its branch, author and stable queue atomically', async () => {
   const db = productDb(), subject = stock(db)
-  const product = await subject.persistOfflineProduct({ profile, product: { name: 'Кольцо', weight: 3.25, sale_price: 15500 } })
+  const product = await subject.persistOfflineProduct({
+    profile, businessId: 'business-a', product: { name: 'Кольцо', weight: 3.25, sale_price: 15500 },
+  })
   assert.equal(product.shop_id, 'shop-a'); assert.equal(product.created_by, 'user-a')
+  assert.equal(product.current_location_shop_id, 'shop-a'); assert.equal(product.business_id, 'business-a')
   assert.equal(db.products()[0].sale_price, 15500)
   assert.equal(db.outbox()[0].payload.id, product.id)
   assert.equal(db.outbox()[0].client_op_id, product.client_op_id)
@@ -84,6 +87,24 @@ test('offline edit cannot restore sold stock, cross shops, or bypass logged-out 
     assert.equal(db.outbox().length, 0)
   }
   await assert.rejects(stock(productDb({ session: { ...profile, id: 'user-b' } })).persistOfflineProduct({ profile, product: { name: 'Кольцо' } }))
+})
+
+test('a received product remains editable at its active branch without changing QR source', async () => {
+  const branchProfile = { ...profile, shop_id: 'shop-b' }
+  const original = {
+    id: 'p', shop_id: 'shop-a', current_location_shop_id: 'shop-b',
+    business_id: 'business-a', name: 'Кольцо', status: 'in_stock', sale_price: 100,
+  }
+  const db = productDb({ rows: [original], session: branchProfile })
+  const saved = await stock(db).persistOfflineProduct({
+    profile: branchProfile,
+    businessId: 'business-a',
+    product: { id: 'p', sale_price: 125 },
+  })
+  assert.equal(saved.shop_id, 'shop-a')
+  assert.equal(saved.current_location_shop_id, 'shop-b')
+  assert.equal(saved.sale_price, 125)
+  assert.equal(db.outbox()[0].shop_id, 'shop-b')
 })
 
 test('editable product payload cannot change stock, SKU, owner or QR derived field', () => {
@@ -201,7 +222,7 @@ test('stock updates require exact shop and original timestamp and never restore 
   await subject.engine.pushItem(subject.client, item)
   const update = subject.calls.find(call => call.update)
   assert.equal('status' in update.update, false)
-  assert.ok(update.filters.some(([kind,key,value]) => kind === 'eq' && key === 'shop_id' && value === 'shop-a'))
+  assert.ok(update.filters.some(([kind,key,value]) => kind === 'eq' && key === 'current_location_shop_id' && value === 'shop-a'))
   assert.ok(update.filters.some(([kind,key,value]) => kind === 'eq' && key === 'updated_at' && value === '2026-11-19T00:00:00Z'))
   assert.ok(update.filters.some(([kind,key,value]) => kind === 'neq' && key === 'status' && value === 'sold'))
 })

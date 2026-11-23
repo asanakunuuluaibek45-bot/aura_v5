@@ -161,6 +161,19 @@ export function NativeCrm() {
       key={profile.id}
       screen={screen}
       profile={profile}
+      branchContext={{
+        businessId: profile.shop_id,
+        activeShopId: profile.shop_id,
+        branches: profile.shop_id
+          ? [{
+              businessId: profile.shop_id,
+              shopId: profile.shop_id,
+              shopName: profile.shop_name,
+              isActive: true,
+            }]
+          : [],
+      }}
+      businessName={profile.shop_name}
       email={email}
       products={[]}
       sales={[]}

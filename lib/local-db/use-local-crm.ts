@@ -38,7 +38,9 @@ async function seedMissingLocalRows<T extends { id?: string; shop_id?: string }>
   const db = await getLocalDB()
   const tx = db.transaction(table, 'readonly')
   const store = tx.objectStore(table)
-  const existing = store.indexNames.contains('shop_id')
+  const allExisting = table === 'products'
+    ? await store.getAll()
+    : store.indexNames.contains('shop_id')
     ? await store.index('shop_id').getAll(shopId)
     : await store.getAll()
   await tx.done
@@ -46,8 +48,10 @@ async function seedMissingLocalRows<T extends { id?: string; shop_id?: string }>
   // Include soft-deleted rows in this key set. A stale cached server page must not
   // bring a locally deleted record back to life.
   const knownKeys = new Set<string>(
-    existing
-      .filter((row: any) => !row.shop_id || row.shop_id === shopId)
+    allExisting
+      .filter((row: any) => table !== 'products'
+        ? (!row.shop_id || row.shop_id === shopId)
+        : (row.current_location_shop_id ?? row.shop_id) === shopId)
       .map((row: any) => String(row.id ?? row.shop_id ?? ''))
       .filter(Boolean),
   )
@@ -65,12 +69,18 @@ async function seedMissingLocalRows<T extends { id?: string; shop_id?: string }>
  * получают данные о проданном с сервера.
  */
 async function readCatalogProducts(shopId: string): Promise<Product[]> {
-  const rows = await getShopRecords<Product>('products', shopId)
-  return rows.filter((product) => product.status !== 'sold')
+  const db = await getLocalDB()
+  const tx = db.transaction('products', 'readonly')
+  const rows = await tx.objectStore('products').getAll() as Product[]
+  await tx.done
+  return rows.filter((product) =>
+    (product.current_location_shop_id ?? product.shop_id) === shopId && product.status !== 'sold')
 }
 
 export function useLocalCrm(initialData: {
   profile: Profile
+  shopId?: string | null
+  businessId?: string | null
   enabled?: boolean
   products?: Product[]
   sales?: Sale[]
@@ -80,7 +90,7 @@ export function useLocalCrm(initialData: {
   clients?: Customer[]
   supplierDebts?: SupplierDebtData
 }) {
-  const shopId = initialData.profile.shop_id || 'default_shop'
+  const shopId = initialData.shopId || initialData.profile.shop_id || 'default_shop'
   const enabled = initialData.enabled ?? true
   const [products, setProducts] = useState<Product[]>(initialData.products || [])
   const [sales, setSales] = useState<Sale[]>(initialData.sales || [])
@@ -123,11 +133,14 @@ export function useLocalCrm(initialData: {
         }
 
         // Seed new server records without replacing the local source of truth.
-        const ofShop = <T extends { shop_id?: string }>(rows?: T[]) =>
-          (rows || []).filter((row) => !row.shop_id || row.shop_id === shopId)
+        const ofShop = <T extends { shop_id?: string; current_location_shop_id?: string | null }>(
+          rows?: T[], usePhysicalLocation = false,
+        ) => (rows || []).filter((row) => usePhysicalLocation
+          ? (row.current_location_shop_id ?? row.shop_id) === shopId
+          : (!row.shop_id || row.shop_id === shopId))
 
         if (initialData.products && initialData.products.length > 0) {
-          await seedMissingLocalRows('products', ofShop(initialData.products), shopId)
+          await seedMissingLocalRows('products', ofShop(initialData.products, true), shopId)
         }
         if (initialData.sales && initialData.sales.length > 0) {
           await seedMissingLocalRows('sales', ofShop(initialData.sales), shopId)
@@ -515,7 +528,11 @@ export function useLocalCrm(initialData: {
   // 4. Offline-first Product Management
   const localSaveProduct = useCallback(
     async (productData: Partial<Product>) => {
-      const fullProduct = await persistOfflineProduct({ profile: initialData.profile, product: productData })
+      const fullProduct = await persistOfflineProduct({
+        profile: initialData.profile,
+        businessId: initialData.businessId,
+        product: productData,
+      })
       const productId = fullProduct.id
 
       setProducts((prev) => {
@@ -528,7 +545,7 @@ export function useLocalCrm(initialData: {
 
       return fullProduct
     },
-    [initialData.profile]
+    [initialData.profile, initialData.businessId]
   )
 
   // Cache a product already saved by the server without queuing a duplicate
@@ -605,11 +622,16 @@ export function useLocalCrm(initialData: {
   const localDeleteProduct = useCallback(
     async (productOrId: Product | string) => {
       const productId = typeof productOrId === 'string' ? productOrId : productOrId.id
-      await persistOfflineProduct({ profile: initialData.profile, product: { id: productId }, remove: true })
+      await persistOfflineProduct({
+        profile: initialData.profile,
+        businessId: initialData.businessId,
+        product: { id: productId },
+        remove: true,
+      })
 
       setProducts((prev) => prev.filter((p) => p.id !== productId))
     },
-    [initialData.profile]
+    [initialData.profile, initialData.businessId]
   )
 
   /** Убирает товар после серверного удаления, не ставя операцию в очередь повторно. */

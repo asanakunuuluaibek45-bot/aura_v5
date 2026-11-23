@@ -21,6 +21,7 @@
     "test:search-loading": "node --test tests/search-loading.test.mjs",
     "test:atomic": "node --test scripts/test-atomic-actions.mjs",
     "test:atomic:postgres": "node scripts/test-atomic-postgres.mjs",
+    "test:branches": "node scripts/test-branch-access-postgres.mjs && node --experimental-strip-types --test tests/branch-access.test.mjs",
     "test:history:postgres": "node scripts/test-action-history-postgres.mjs",
     "test:product-units": "node --max-old-space-size=64 scripts/check-product-unit-usage.mjs",
     "test:inventory-revision": "node --experimental-strip-types --test tests/inventory-revision.test.mjs tests/qr-code.test.mjs tests/revision-label-scan.test.mjs tests/revision-routing.test.mjs tests/scanner-overlay.test.mjs",

@@ -403,6 +403,7 @@ class SyncEngine {
     if (!shopId) return { fetched: 0, deleted: 0 }
 
     const supabase = createSupabaseClient()
+    const shopColumn = spec.table === 'products' ? 'current_location_shop_id' : 'shop_id'
     const batchSize = this.getBatchSize()
     const since = options.incremental ? await this.getCursor(spec.table) : null
 
@@ -420,7 +421,7 @@ class SyncEngine {
         let query = supabase
           .from(spec.table)
           .select('*')
-          .eq('shop_id', shopId)
+          .eq(shopColumn, shopId)
           .order('updated_at', { ascending: true })
           .order(pkCol, { ascending: true })
           .limit(batchSize)
@@ -445,7 +446,7 @@ class SyncEngine {
             let fallbackQuery = supabase
               .from(spec.table)
               .select('*')
-              .eq('shop_id', shopId)
+              .eq(shopColumn, shopId)
               .order('created_at', { ascending: true })
               .limit(batchSize)
               .abortSignal(signal)
@@ -1174,10 +1175,15 @@ class SyncEngine {
       const { original_updated_at, shop_seq_id, ...cleanPayload } = item.payload
       // Insert-once, never upsert over a remotely sold/edited product on retry.
       await this.run(supabase, (client, signal) => client.from('products')
-        .upsert({ ...cleanPayload, shop_id: item.shop_id, updated_at: nowIso },
+        .upsert({
+          ...cleanPayload,
+          shop_id: item.shop_id,
+          current_location_shop_id: item.shop_id,
+          updated_at: nowIso,
+        },
           { onConflict: 'id', ignoreDuplicates: true }).abortSignal(signal))
       const confirmed = await this.run(supabase, (client, signal) => client.from('products')
-        .select('*').eq('shop_id', item.shop_id).eq('id', item.payload.id).abortSignal(signal).single())
+        .select('*').eq('current_location_shop_id', item.shop_id).eq('id', item.payload.id).abortSignal(signal).single())
       if (confirmed.client_op_id !== item.client_op_id) {
         throw Object.assign(new Error('Идентификатор товара занят другой операцией'), { status: 422 })
       }
@@ -1188,7 +1194,7 @@ class SyncEngine {
     if (item.op_type === 'product_update' || item.op_type === 'stock_change') {
       const { id: prodId, original_updated_at } = item.payload
       const current = await this.run(supabase, (client, signal) => client.from('products')
-        .select('*').eq('shop_id', item.shop_id).eq('id', prodId).abortSignal(signal).single())
+        .select('*').eq('current_location_shop_id', item.shop_id).eq('id', prodId).abortSignal(signal).single())
       if (current.client_op_id === item.client_op_id) {
         await this.cacheConfirmedProduct(item, current)
         return
@@ -1197,7 +1203,7 @@ class SyncEngine {
       const confirmed = await this.run(supabase, (client, signal) => {
         let query = client.from('products').update({ ...editableProductPatch(item.payload),
           updated_at: nowIso, client_op_id: item.client_op_id })
-          .eq('id', prodId).eq('shop_id', item.shop_id).is('deleted_at', null).neq('status', 'sold')
+          .eq('id', prodId).eq('current_location_shop_id', item.shop_id).is('deleted_at', null).neq('status', 'sold')
         if (original_updated_at) query = query.eq('updated_at', original_updated_at)
         return query.select('*').abortSignal(signal).single()
       })
@@ -1224,11 +1230,12 @@ class SyncEngine {
 
     if (item.op_type === 'product_delete') {
       const current = await this.run(supabase, (client, signal) => client.from('products')
-        .select('*').eq('shop_id', item.shop_id).eq('id', item.payload.id).abortSignal(signal).maybeSingle())
+        .select('*').eq('current_location_shop_id', item.shop_id).eq('id', item.payload.id).abortSignal(signal).maybeSingle())
       if (!current || current.deleted_at) return
       const confirmed = await this.run(supabase, (client, signal) => {
         let query = client.from('products').update({ deleted_at: nowIso, updated_at: nowIso,
-          client_op_id: item.client_op_id }).eq('shop_id', item.shop_id).eq('id', item.payload.id).neq('status', 'sold')
+          client_op_id: item.client_op_id })
+          .eq('current_location_shop_id', item.shop_id).eq('id', item.payload.id).neq('status', 'sold')
         if (item.payload.original_updated_at) query = query.eq('updated_at', item.payload.original_updated_at)
         return query.select('*').abortSignal(signal).single()
       })
