@@ -127,6 +127,7 @@ try {
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/024_branch_transfer_scan_access.sql", root))])
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/025_reload_postgrest_schema_cache.sql", root))])
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/026_branch_creation_approval.sql", root))])
+  await psql(["-f", fileURLToPath(new URL("supabase/migrations/027_admin_shop_profile_and_required_address.sql", root))])
 
   const preserved = await psql([], `
     SELECT count(*) || ':' || count(*) FILTER (WHERE current_location_shop_id = shop_id)
@@ -161,6 +162,26 @@ try {
   )
   const branchRequestId = branchRequestOutput.split(/\r?\n/).at(-1)
   assert.match(branchRequestId, /^[0-9a-f-]{36}$/i)
+  await scopedSql(
+    adminA,
+    `SELECT public.save_active_shop_admin_profile('Аибек админ', '+996 555 000 111', 'Каракол, Бугу базар, 23-й бутик');`,
+  )
+  const savedAdminFields = await psql([], `
+    SELECT full_name || ':' || phone FROM public.profiles WHERE id = '${adminA}';
+    SELECT shop_address FROM public.shop_settings WHERE shop_id = '${shopA}';
+  `)
+  assert.match(savedAdminFields, /Аибек админ:\+996 555 000 111/)
+  assert.match(savedAdminFields, /Каракол, Бугу базар, 23-й бутик/)
+  await scopedFailure(
+    sellerA,
+    `SELECT public.save_active_shop_admin_profile('Продавец', '+996 555 000 000', 'Каракол');`,
+    /Только одобренный администратор бизнеса/
+  )
+  await scopedFailure(
+    adminA,
+    `SELECT public.save_active_shop_admin_profile('Аибек админ', NULL, '   ');`,
+    /Укажите адрес магазина/
+  )
   const pendingBranchCount = await psql([], `SELECT count(*) FROM public.shop_settings WHERE shop_name = 'Второй филиал';`)
   assert.equal(pendingBranchCount, "0", "a request does not create a branch before approval")
   const pendingCurrentShop = await scopedSql(adminA, `SELECT public.current_shop_id();`)

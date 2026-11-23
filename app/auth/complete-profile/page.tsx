@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client"
 export default function CompleteGoogleProfilePage() {
   const [fullName, setFullName] = useState("")
   const [shopName, setShopName] = useState("")
+  const [shopAddress, setShopAddress] = useState("")
   const [phone, setPhone] = useState("")
   const [requestedRole, setRequestedRole] = useState("seller")
   const [isLoading, setIsLoading] = useState(true)
@@ -47,6 +48,7 @@ export default function CompleteGoogleProfilePage() {
       const { error: rpcError } = await createClient().rpc("complete_google_registration", {
         _full_name: fullName,
         _shop_name: shopName,
+        _shop_address: shopAddress.trim(),
         _phone: phone || null,
         _requested_role: requestedRole,
       })
@@ -107,6 +109,19 @@ export default function CompleteGoogleProfilePage() {
             value={shopName}
             onChange={(event) => setShopName(event.target.value)}
           />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="googleShopAddress">Адрес магазина</Label>
+          <Input
+            id="googleShopAddress"
+            required
+            maxLength={240}
+            autoComplete="street-address"
+            placeholder="Например: Каракол, Бугу базар, 23-й бутик"
+            value={shopAddress}
+            onChange={(event) => setShopAddress(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Укажите город, рынок или улицу, номер и бутик.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-2">

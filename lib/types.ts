@@ -77,6 +77,7 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
 export type ShopSettings = {
   shop_id: string
   shop_name: string | null
+  shop_address?: string | null
   default_bonus_rate: number
   public_enabled: boolean
   updated_at: string

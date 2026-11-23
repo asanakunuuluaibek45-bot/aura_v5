@@ -17,6 +17,7 @@ CREATE TABLE public.profiles (
   full_name text,
   shop_id uuid,
   shop_name text,
+  phone text,
   status text NOT NULL,
   role text,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -24,7 +25,8 @@ CREATE TABLE public.profiles (
 CREATE TABLE public.shop_settings (
   shop_id uuid PRIMARY KEY,
   shop_name text,
-  seq_id integer
+  seq_id integer,
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE public.products (
   id uuid PRIMARY KEY,
