@@ -67,7 +67,7 @@ export async function CrmScreen({ screen }: { screen: ScreenId }) {
         products={[]}
         sales={[]}
         returns={[]}
-        cabinet={{ team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask" }}
+        cabinet={{ team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask", shopAddress: "" }}
         cash={{ operations: [], presets: [] }}
         supplierDebts={{ operations: [], suppliers: [], profiles: [] }}
         rates={[]}

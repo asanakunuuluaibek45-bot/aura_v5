@@ -22,7 +22,7 @@ type WebMetadata = {
   superAdminShops?: Awaited<ReturnType<typeof getSuperAdminShops>>
 }
 const defaults: WebMetadata = {
-  cabinet: { team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask" },
+  cabinet: { team: [], requests: [], defaultBonusRate: 2, defaultReceiptType: "ask", shopAddress: "" },
   publicStorefrontState: { enabled: true, canToggle: false },
 }
 
