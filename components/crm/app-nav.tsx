@@ -9,7 +9,6 @@ import { shouldHideSuperAdminCrmNavItem } from "@/lib/admin/crm-nav-policy"
 import { hasMultiBranchAccess } from "@/lib/branches/ui-policy"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
-import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { useRouter } from "next/navigation"
 import { AuraMark } from "@/components/shared/brand/aura-mark"
 import { Avatar, AvatarFallback } from "@/components/shared/ui/avatar"
@@ -231,14 +230,13 @@ export function AppNav({
         >
           <button
             type="button"
-            onClick={() => handleNavigate("kabinet")}
-            aria-label="Открыть кабинет GOLDUCHET"
+            onClick={() => handleNavigate("kassa")}
+            aria-label="Перейти на главный экран GOLDUCHET"
             className={cn(
               "flex items-center rounded-lg transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               collapsed ? "p-1.5" : "gap-2 px-1.5 py-1"
             )}
           >
-              {/* <ThemeToggle /> */}
                    <div className="flex min-w-0 shrink-0 items-center gap-2 rounded-lg bg-primary/15">
                     <AuraMark className="h-7 w-7 shrink-0" />
                   </div>
@@ -246,7 +244,6 @@ export function AppNav({
               GOLDUCHET
             </span>
           </button>
-             <ThemeToggle />
           {/* Desktop collapse toggle */}
           <button
             type="button"
