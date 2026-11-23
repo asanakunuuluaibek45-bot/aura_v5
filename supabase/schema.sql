@@ -5103,3 +5103,4 @@ GRANT EXECUTE ON FUNCTION public.superadmin_update_marketplace_settings(text, uu
 \ir migrations/022_branch_aware_products_and_sales.sql
 \ir migrations/023_branch_transfer_partial_receipt_and_cancel.sql
 \ir migrations/024_branch_transfer_scan_access.sql
+\ir migrations/025_reload_postgrest_schema_cache.sql
