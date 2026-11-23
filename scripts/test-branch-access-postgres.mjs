@@ -124,6 +124,7 @@ try {
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/022_branch_aware_products_and_sales.sql", root))])
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/023_branch_transfer_partial_receipt_and_cancel.sql", root))])
   await psql(["-f", fileURLToPath(new URL("supabase/migrations/024_branch_transfer_scan_access.sql", root))])
+  await psql(["-f", fileURLToPath(new URL("supabase/migrations/025_reload_postgrest_schema_cache.sql", root))])
 
   const preserved = await psql([], `
     SELECT count(*) || ':' || count(*) FILTER (WHERE current_location_shop_id = shop_id)
