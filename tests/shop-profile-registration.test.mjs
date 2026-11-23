@@ -36,5 +36,6 @@ test("admin profile updates are limited to own contact and active authorized bra
   assert.match(fn, /public\.is_business_admin\(v_business_id\)/)
   assert.match(fn, /UPDATE public\.profiles SET full_name = v_full_name, phone = v_phone WHERE id = v_user_id/)
   assert.match(fn, /WHERE shop_id = v_shop_id AND business_id = v_business_id/)
-  assert.doesNotMatch(fn, /_shop_id uuid/)
+  const signature = fn.slice(fn.indexOf("save_active_shop_admin_profile("), fn.indexOf(") RETURNS"))
+  assert.doesNotMatch(signature, /_shop_id uuid/)
 })
